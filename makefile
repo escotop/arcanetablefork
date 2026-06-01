@@ -25,11 +25,11 @@ build:
 		-t $(docker_container):beta \
 		-t $(docker_container):staging
 		
-	$(make) -C yjs-signaling-server build
-	$(make) -C websocket-server build
-	$(make) -C scry-server-mtg build
-	$(make) -C scry-server-yugioh build
-	$(make) -C scry-server-pokemon build
+	$(MAKE) -C yjs-signaling-server build
+	$(MAKE) -C websocket-server build
+	$(MAKE) -C scry-server-mtg build
+	$(MAKE) -C scry-server-yugioh build
+	$(MAKE) -C scry-server-pokemon build
 	
 push: build
 	docker push $(docker_container):latest
@@ -38,16 +38,16 @@ push: build
 	docker push $(docker_container):beta
 	docker push $(docker_container):staging
 
-	$(make) -C yjs-signaling-server push
-	$(make) -C websocket-server push
-	$(make) -C scry-server-mtg push
-	$(make) -C scry-server-yugioh push
-	$(make) -C scry-server-pokemon push
+	$(MAKE) -C yjs-signaling-server push
+	$(MAKE) -C websocket-server push
+	$(MAKE) -C scry-server-mtg push
+	$(MAKE) -C scry-server-yugioh push
+	$(MAKE) -C scry-server-pokemon push
 
 deploy: build push
-	$(make) -C scry-server-mtg apply
-	$(make) -C scry-server-yugioh apply
-	$(make) -C scry-server-pokemon apply
+	$(MAKE) -C scry-server-mtg apply
+	$(MAKE) -C scry-server-yugioh apply
+	$(MAKE) -C scry-server-pokemon apply
 	kubectl apply -f secrets.yml -f deployment.yml -f staging.yaml
 	kubectl rollout restart deployment -n arcanetable
 	
