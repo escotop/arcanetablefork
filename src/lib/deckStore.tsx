@@ -1,11 +1,10 @@
 import { createStore, SetStoreFunction, unwrap } from 'solid-js/store';
 import { nanoid } from 'nanoid';
 import { createContext, onMount, ParentProps, useContext } from 'solid-js';
-import { CardEntry, Deck, DetailedCardEntry } from './constants';
+import { CardEntry, Deck, DetailedCardEntry, CardSystem } from './constants';
 import { loadCardList, fetchCardInfo } from './deck';
 import { getCardArtImage } from './card';
 import {
-  CardSystem,
   DEFAULT_CARD_SYSTEM_URI,
   setCardSystem as setGlobaCardSystem,
 } from './globals';
@@ -144,7 +143,7 @@ function getCardSystemStore() {
   let state = JSON.parse(stateString);
   for (const [name, system] of Object.entries(state.systems)) {
     if (!system) {
-      delete state.systems[name] 
+      delete state.systems[name]
     }
   }
   return state;

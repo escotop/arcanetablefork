@@ -1,5 +1,4 @@
 import { EulerTuple, Mesh, Object3D, Vector2, Vector3, Vector3Tuple } from 'three';
-import { CardSystem } from './globals';
 
 export const CARD_WIDTH = 63 / 4;
 export const CARD_HEIGHT = 88 / 4;
@@ -99,6 +98,20 @@ export interface Deck {
   cardList?: string;
   coverImage?: string;
   counters?: Counter[];
+}
+
+export interface CardSystem {
+  id: string;
+  cardDetailEndpoint: string;
+  cardSearchEndpoint: string;
+  fallbackImage?: string;
+  uri?: string;
+  name: string;
+  cardBack: string;
+  searchField: unknown;
+  popularity: string;
+  imageUriFormat: 'standard' | 'scryfall';
+  types: string[];
 }
 
 export interface LoadSettings {

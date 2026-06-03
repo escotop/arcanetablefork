@@ -4,7 +4,7 @@ import { splitProps } from 'solid-js';
 import * as ComboboxPrimitive from '@kobalte/core/combobox';
 import type { PolymorphicProps } from '@kobalte/core/polymorphic';
 
-import { cn } from '~/lib/utils';
+import { cn } from '~/lib/cnUtil';
 import ChevronDownIcon from 'lucide-solid/icons/chevron-down';
 
 const Combobox = ComboboxPrimitive.Root;

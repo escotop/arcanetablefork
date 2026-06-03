@@ -38,6 +38,8 @@
     "@solid-primitives/deep": "^0.3.5",
     "@solidjs/meta": "^0.29.4",
     "@solidjs/router": "^0.15.4",
+    "@solidjs/start": "2.0.0-alpha.2",
+    "@solidjs/vite-plugin-nitro-2": "^0.1.0",
     "@types/lodash-es": "^4.17.12",
     "@types/three": "^0.182.0",
     "analytics": "^0.8.19",

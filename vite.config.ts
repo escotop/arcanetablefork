@@ -1,22 +1,26 @@
-import { defineConfig } from 'vite';
-import solidPlugin from 'vite-plugin-solid';
+import { solidStart } from "@solidjs/start/config";
+import { defineConfig } from "vite";
+import { nitroV2Plugin } from "@solidjs/vite-plugin-nitro-2";
 import solidSvg from 'vite-plugin-solid-svg';
-import path from 'path';
 import { compression } from 'vite-plugin-compression2';
+import path from 'path';
 
 export default defineConfig({
-  plugins: [solidPlugin(), solidSvg(), compression(), compression({ algorithm: 'brotliCompress' })],
+  plugins: [
+    solidStart(),
+    nitroV2Plugin({
+      preset: "static",
+      prerender: {
+        routes: ['/']
+      }
+    }),
+    solidSvg(),
+    compression(),
+    compression({ algorithm: 'brotliCompress' }),
+  ],
   resolve: {
-    alias: {
-      '~': path.resolve(__dirname, './src'),
-    },
+    alias: { '~': path.resolve(__dirname, './src') },
   },
-  server: {
-    port: 3000,
-    allowedHosts: true
-  },
-
-  build: {
-    target: 'esnext',
-  },
+  server: { port: 3000 },
+  build: { target: 'esnext' },
 });

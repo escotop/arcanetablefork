@@ -35,9 +35,9 @@ import {
   TextFieldLabel,
 } from '~/components/ui/text-field';
 import { getCardArtImage, getCardImage } from '../card';
-import { CardEntry, CardEntryDetail, DetailedCardEntry, Deck, FORMATS } from '../constants';
+import { CardEntry, CardEntryDetail, DetailedCardEntry, Deck, FORMATS, CardSystem } from '../constants';
 import { fetchCardInfo, loadCardList, populateCardInfo } from '../deck';
-import { CardSystem, cardSystem, colorHashDark } from '../globals';
+import {  cardSystem, colorHashDark } from '../globals';
 import CircleInfoIcon from 'lucide-solid/icons/info';
 import CloseIcon from 'lucide-solid/icons/x';
 import { cn } from '../utils';

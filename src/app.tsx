@@ -1,14 +1,16 @@
 import { Route, Router } from '@solidjs/router';
-import { Component, Suspense } from 'solid-js';
+import { Component, lazy, Suspense } from 'solid-js';
 import IndexPage from './routes/page';
-import GamePage from './routes/game/[id]';
 import { ColorModeProvider, ColorModeScript, createLocalStorageManager } from '@kobalte/core';
 import { AnalyticsContext } from './lib/analytics';
-import { cardSystem } from './lib/globals';
 import { CardSystemProvider } from './lib/deckStore';
 import { Toaster } from './components/ui/sonner';
 import { getBuildData } from './lib/console-capture';
 import { MetaProvider } from '@solidjs/meta';
+import './app.css';
+import './index.css';
+
+const GameRoute = lazy(() => import('./routes/game/[id]'))
 
 const App: Component = () => {
   const storageManager = createLocalStorageManager('vite-ui-theme');
@@ -34,7 +36,7 @@ const App: Component = () => {
         </MetaProvider>
       )}>
       <Route path='/' component={IndexPage} />
-      <Route path='/game/:gameId' component={GamePage} />
+      <Route path='/game/:gameId' component={GameRoute} />
     </Router>
   );
 };

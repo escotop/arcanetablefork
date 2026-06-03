@@ -23,7 +23,7 @@ import { WebrtcProvider } from 'y-webrtc';
 import { WebsocketProvider } from 'y-websocket';
 import { Doc } from 'yjs';
 import { YArray } from 'yjs/dist/src/internals';
-import { Card, CARD_WIDTH, CardZone, HoverSignal } from './constants';
+import { Card, CARD_WIDTH, CardSystem, CardZone, HoverSignal } from './constants';
 import type { PlayArea } from './playArea';
 import TextureLoaderWorker from './textureLoaderWorker?worker';
 import { type TextureLoaderWorkerType } from './textureLoaderWorker';
@@ -78,19 +78,7 @@ export let [capturedErrors, setCapturedErrors] = createSignal([]);
 export let cardLoadingTexture: THREE.Texture;
 export let cardBackTexture: THREE.Texture;
 
-export interface CardSystem {
-  id: string;
-  cardDetailEndpoint: string;
-  cardSearchEndpoint: string;
-  fallbackImage?: string;
-  uri?: string;
-  name: string;
-  cardBack: string;
-  searchField: unknown;
-  popularity: string;
-  imageUriFormat: 'standard' | 'scryfall';
-  types: string[];
-}
+
 
 export let [cardSystem, setCardSystem] = createStore<CardSystem>({} as CardSystem);
 
