@@ -1,7 +1,13 @@
 import { Component } from 'solid-js';
 import { Show } from 'solid-js/web';
-import { MenubarContent, MenubarItem, MenubarMenu, MenubarTrigger } from '~/components/ui/menubar';
-import { Card, CardZone } from '../constants';
+import {
+  MenubarContent,
+  MenubarItem,
+  MenubarMenu,
+  MenubarShortcut,
+  MenubarTrigger,
+} from '~/components/ui/menubar';
+import { Card, CardZone, KEY } from '../constants';
 import { doXTimes } from '../globals';
 import { PlayArea } from '../playArea';
 import { transferCard } from '../transferCard';
@@ -12,6 +18,7 @@ interface Props {
   playArea: PlayArea;
   text: string;
   onComplete?(): void;
+  showShortcuts?: boolean;
 }
 
 const MoveMenu: Component<Props> = props => {
@@ -40,11 +47,20 @@ const MoveMenu: Component<Props> = props => {
         <Show when={props.fromZone !== props.playArea.hand}>
           <MenubarItem onClick={() => moveTo(props.playArea.hand)}>Hand</MenubarItem>
         </Show>
-        <MenubarItem onClick={() => moveTo(props.playArea.graveyardZone)}>Discard</MenubarItem>
-        <MenubarItem onClick={() => moveTo(props.playArea.exileZone)}>Exile</MenubarItem>
-        <MenubarItem onClick={() => moveTo(props.playArea.deck)}>Top of Deck</MenubarItem>
+        <MenubarItem onClick={() => props.cards.forEach(card => props.playArea.reveal(card))}>
+          Reveal
+        </MenubarItem>
+        <MenubarItem onClick={() => moveTo(props.playArea.graveyardZone)}>
+          Discard {props.showShortcuts && <MenubarShortcut>{KEY.Mod} d</MenubarShortcut>}
+        </MenubarItem>
+        <MenubarItem onClick={() => moveTo(props.playArea.exileZone)}>
+          Exile {props.showShortcuts && <MenubarShortcut>{KEY.Mod} e</MenubarShortcut>}
+        </MenubarItem>
+        <MenubarItem onClick={() => moveTo(props.playArea.deck)}>
+          Top of Deck {props.showShortcuts && <MenubarShortcut>{KEY.Shift} T</MenubarShortcut>}
+        </MenubarItem>
         <MenubarItem onClick={() => moveTo(props.playArea.deck, { location: 'bottom' })}>
-          Bottom of Deck
+          Bottom of Deck {props.showShortcuts && <MenubarShortcut>{KEY.Shift} B</MenubarShortcut>}
         </MenubarItem>
         <Show when={props.fromZone !== props.playArea.battlefieldZone}>
           <MenubarItem onClick={() => moveTo(props.playArea.battlefieldZone)}>

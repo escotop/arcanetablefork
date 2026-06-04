@@ -7,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from '~/components/ui/table';
+import { KEY } from '../constants';
 
 const HotkeysTable: Component = props => {
   return (
@@ -62,30 +63,38 @@ const ShortcutTable: Component<{ name: string; shortcuts: typeof SHORTCUTS }> = 
 };
 
 export const SHORTCUTS = [
-  { shortcuts: [['shift', 'U']], action: 'Untap all cards' },
+  { shortcuts: [['shift', 'R']], action: 'Untap all cards' },
   { shortcuts: [['D']], action: 'Draw a card' },
   {
     shortcuts: [
       ['ctrl', 'space'],
-      ['ctrl', 'K'],
-      ['⌘', 'K'],
+      [KEY.Mod, 'K'],
     ],
     action: 'Open Command Palette',
   },
   {
-    shortcuts: [
-      ['ctrl', 'D'],
-      ['⌘', 'D'],
-    ],
-    action: 'destroy selected cards',
+    shortcuts: [[KEY.Mod, 'D']],
+    action: 'discard selected cards',
   },
   {
-    shortcuts: [['E']],
+    shortcuts: [[KEY.Mod, 'E']],
     action: 'remove selected cards from the game',
   },
   {
-    shortcuts: [['B']],
-    action: 'transfer to battlefield',
+    shortcuts: [[KEY.Mod, 'F']],
+    action: 'transfer to field',
+  },
+  {
+    shortcuts: [[KEY.Shift, 'T']],
+    action: 'transfer to top of deck',
+  },
+  {
+    shortcuts: [[KEY.Shift, 'B']],
+    action: 'transfer to bottom of deck',
+  },
+  {
+    shortcuts: [[KEY.Shift, 'C']],
+    action: 'clone card',
   },
   {
     shortcuts: [['S']],

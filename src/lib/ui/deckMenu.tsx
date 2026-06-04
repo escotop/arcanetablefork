@@ -5,6 +5,7 @@ import {
   MenubarItem,
   MenubarMenu,
   MenubarSeparator,
+  MenubarShortcut,
   MenubarSub,
   MenubarSubContent,
   MenubarSubTrigger,
@@ -36,7 +37,7 @@ const DeckMenu: Component<{ playArea: PlayArea }> = props => {
           <MenubarItem onClick={() => searchDeck(props.playArea)}>Search</MenubarItem>
           <MenubarSub overlap>
             <MenubarSubTrigger openDelay={50} onClick={() => props.playArea.draw()}>
-              Draw
+              Draw <MenubarShortcut>d</MenubarShortcut>
             </MenubarSubTrigger>
             <MenubarSubContent>
               <div class='py-1.5 px-2'>Draw</div>

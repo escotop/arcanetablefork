@@ -204,7 +204,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
       this.mesh.remove(cardMesh);
       this.setObservable('cardCount', this.cards.length);
     } else {
-      console.error(`didn't find card`, { cardMesh, cards: this.cards });
+      console.error(`didn't find card`, { cardMesh, cards: this.cards, meshId: cardMesh.userData.id });
     }
     if (this.isTopPublic && !this.cards[0]?.mesh.userData.isPublic) {
       this.flipTop();

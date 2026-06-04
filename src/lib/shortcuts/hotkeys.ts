@@ -22,7 +22,7 @@ export function HotKeys() {
   });
 
   onMount(() => {
-    hotkeys('shift+u', function () {
+    hotkeys('shift+r', function () {
       untapAll(playArea);
     });
 
@@ -39,7 +39,14 @@ export function HotKeys() {
       selection.clearSelection();
     });
 
-    hotkeys('e', function (e) {
+    hotkeys('ctrl+c,command+c', function (e) {
+      e.preventDefault();
+      cards().map(card => {
+        playArea.clone(card.id);
+      });
+    });
+
+    hotkeys('ctrl+e,command+e', function (e) {
       e.preventDefault();
       cards().map(card => {
         const previousZone = zonesById.get(card.mesh.userData.zoneId);
@@ -48,11 +55,29 @@ export function HotKeys() {
       selection.clearSelection();
     });
 
-    hotkeys('b', function (e) {
+    hotkeys('ctrl+f,command+f', function (e) {
       e.preventDefault();
       cards().map(card => {
         const previousZone = zonesById.get(card.mesh.userData.zoneId);
         transferCard(card, previousZone, playArea.battlefieldZone);
+      });
+    });
+
+    hotkeys('shift+t', function (e) {
+      e.preventDefault();
+      cards().forEach(card => {
+        const previousZone = zonesById.get(card.mesh.userData.zoneId);
+        transferCard(card, previousZone, playArea.deck);
+      });
+    });
+
+    hotkeys('shift+b', function (e) {
+      e.preventDefault();
+
+      cards().forEach(card => {
+        console.log({ card });
+        const previousZone = zonesById.get(card.mesh.userData.zoneId);
+        transferCard(card, previousZone, playArea.deck, { addOptions: { location: 'bottom' } });
       });
     });
 

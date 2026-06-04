@@ -27,7 +27,7 @@ interface Grouped {
 }
 
 export default function CardList(props: Props) {
-  const lowerTypes = createMemo(() => cardSystem.types.map(type => type.toLowerCase()));
+  const lowerTypes = createMemo(() => (cardSystem.types ?? []).map(type => type.toLowerCase()));
 
   const grouped = createMemo(() => {
     const types = lowerTypes().map(t => [t, { items: [], name: capitalize(t), count: 0 }]);

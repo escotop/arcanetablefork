@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTrigger,
 } from '~/components/ui/dialog';
-import { Menubar, MenubarItem, MenubarMenu } from '../../components/ui/menubar';
+import { Menubar, MenubarItem, MenubarMenu, MenubarShortcut } from '../../components/ui/menubar';
 import {
   cardsById,
   focusRenderer,
@@ -46,6 +46,7 @@ import RevealMenu from './revealMenu';
 import TokenSearchMenu from './tokenMenu';
 import CardOverlay from './cardOverlay';
 import { Mesh } from 'three';
+import { KEY } from '../constants';
 
 const Overlay: Component = () => {
   let userData = () => hoverSignal()?.mesh?.userData;
@@ -136,7 +137,7 @@ const Overlay: Component = () => {
           <MenubarMenu>
             <Show when={!isSpectating()}>
               <MenubarItem class='w-full flex' onClick={() => untapAll(playArea)}>
-                Untap All
+                Untap All <MenubarShortcut>{KEY.Shift}R</MenubarShortcut>
               </MenubarItem>
               <MenubarItem class='w-full flex' onClick={() => playArea.toggleTokenMenu()}>
                 Add Tokens

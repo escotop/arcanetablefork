@@ -72,6 +72,11 @@ const PeekMenu: Component = props => {
                 />
               </MenubarMenu>
             </Menubar>
+            <Menubar>
+              <MenubarMenu>
+                <Button variant='ghost' class='whitespace-nowrap'>Top Deck</Button>
+              </MenubarMenu>
+            </Menubar>
           </div>
         </Show>
         <div class={styles.searchContainer}>

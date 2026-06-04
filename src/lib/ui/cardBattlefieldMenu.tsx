@@ -1,4 +1,4 @@
-import { Component, createMemo, createSignal, For, Show } from 'solid-js';
+import { Component, createEffect, createMemo, createSignal, For, Show } from 'solid-js';
 import { Mesh, Raycaster, Vector3 } from 'three';
 import { Button } from '~/components/ui/button';
 import {
@@ -42,6 +42,10 @@ const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = 
   let meshes = () =>
     selection.selectedItems.length > 0 ? selection.selectedItems : [props.cardMesh];
 
+  createEffect(() => {
+    setCardModifiers(props.cardMesh?.userData.modifiers ?? {});
+  })
+
   let cardText = () => {
     let count = selection.selectedItems.length;
     if (count > 1) return `${count} cards`;
@@ -79,9 +83,7 @@ const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = 
                 selection._setSelectedItems(items => {
                   let newItems = [...items];
                   let itemPositions = items.map(item => item.position.toArray());
-                  console.log(newItems);
                   const newOrder = shuffleItems(newItems);
-                  console.log(newOrder);
                   newItems.forEach((item, i) => {
                     item.position.fromArray(itemPositions[i]);
                   });
@@ -175,10 +177,11 @@ const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = 
           cards={meshes().map(mesh => cardsById.get(mesh?.userData.id))}
           fromZone={props.playArea.battlefieldZone}
           playArea={props.playArea}
+          showShortcuts
         />
       </Menubar>
       <div>
-        <CounterRow
+          <CounterRow
           onChangeCounter={(counterId, fn) => {
             updateCardModifiers(modifiers => ({
               ...modifiers,

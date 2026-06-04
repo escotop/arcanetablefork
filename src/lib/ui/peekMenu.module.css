@@ -3,9 +3,11 @@
   top: var(--y);
   left: var(--x);
   position: fixed;
-  display: flex;
+  /*display: flex;*/
+  flex-direction: column;
   gap: 0.5rem;
-  transform: translateY(-100%);
+  transform: translateY(-50%);
+
 }
 
 .searchContainer {
