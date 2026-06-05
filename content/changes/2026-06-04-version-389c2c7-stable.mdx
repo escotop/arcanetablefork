@@ -1,0 +1,44 @@
+---
+target: stable
+title: "Keyboard Shortcut Overhaul, Reveal Action, and Counter Fix"
+keywords:
+  - keyboard shortcuts
+  - hotkeys
+  - reveal
+  - counters
+  - move menu
+description: "Revised keyboard shortcuts with platform-aware modifier keys, shortcuts displayed in menus, a new Reveal action, top-of-deck shortcut from peek, and a counter display fix."
+version: 389c2c7
+changeCount:
+  bugfixes: 2
+  features: 5
+commitRange: https://github.com/odama626/arcanetable/compare/71a8dd6...389c2c7
+---
+
+## ⚠️ Shortcut Changes
+
+Several keyboard shortcuts have changed. If you have muscle memory from before, here's what moved:
+
+| Action | Old | New |
+|---|---|---|
+| Untap all | `Shift+U` | `Shift+R` |
+| Clone | — | `Ctrl/⌘+C` |
+| Discard | `Ctrl/⌘+D` | `Ctrl/⌘+D` *(renamed from Destroy)* |
+| Exile / Remove from game | `E` | `Ctrl/⌘+E` |
+| Transfer to field | `B` | `Ctrl/⌘+F` |
+| Top of deck | — | `Shift+T` |
+| Bottom of deck | — | `Shift+B` |
+
+Modifier keys now display correctly per platform — `⌘` on macOS, `Ctrl` elsewhere.
+
+## Features
+
+- **Shortcuts in menus** — keyboard shortcuts are now shown next to their actions in the move menu and deck menu, so you can learn them in context.
+- **Reveal** — new Reveal action added to the move menu.
+- **Top Deck from peek** — a "Top Deck" button is now available directly in the peek menu.
+- **Platform-aware modifier keys** — shortcut labels use `⌘` on macOS and `Ctrl` on Windows/Linux throughout the UI.
+
+## Fixes
+
+- **Counter display** — counters in the field menu now update correctly when switching between selected cards.
+- **Card list crash** — fixed a crash when a card system doesn't define any card types.
