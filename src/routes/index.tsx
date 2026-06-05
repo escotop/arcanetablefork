@@ -4,10 +4,12 @@ import { createSignal, For, onMount } from 'solid-js';
 import GithubIcon from '~/lib/icons/github.svg';
 import PatreonIcon from '~/lib/icons/patreon.svg';
 import DiscordIcon from '~/lib/icons/discord-brands-solid.svg';
-import MetaTags from '~/lib/meta-tags';
+import MetaTags, { JsonLd } from '~/lib/meta-tags';
 import { SHORTCUTS, BATTLEFIELD_SHORTCUTS, OVERLAY_SHORTCUTS } from '~/lib/shortcuts/hotkeys-table';
 import { Button } from '~/components/ui/button';
-import { useCardSystemContext } from '~/lib/deckStore';
+import { useClientCardSystemContext } from '~/lib/cardSystemProviderClient';
+import softwareLd from '~/lib/json-ld/software.json';
+import faqLd from '~/lib/json-ld/faq.json';
 
 export default function Page(props) {
   const [startUrl, setStartUrl] = createSignal(`/game/${nanoid()}`);
@@ -19,6 +21,27 @@ export default function Page(props) {
   return (
     <div class='bg-gray-900 text-white font-sans'>
       <MetaTags />
+      <JsonLd id='software' content={softwareLd} />
+      <JsonLd id='faq' content={faqLd} />
+      <JsonLd
+        id='video-object'
+        content={{
+          '@context': 'https://schema.org',
+          '@type': 'VideoObject',
+          name: 'Getting Started with Arcanetable',
+          description:
+            'Watch the getting started guide and be up and running in minutes. Arcanetable is a free 3D TCG playtesting sandbox in your browser — no download, no account required.',
+          thumbnailUrl: 'https://img.youtube.com/vi/W-MgOhw-4vU/maxresdefault.jpg',
+          uploadDate: '2024-11-26T00:00:00+00:00',
+          embedUrl: 'https://www.youtube.com/embed/W-MgOhw-4vU',
+          url: 'https://www.youtube.com/watch?v=W-MgOhw-4vU',
+          publisher: {
+            '@type': 'Organization',
+            name: 'Sparkstone',
+            url: 'https://sparkstonepdx.com',
+          },
+        }}
+      />
       <div class='mx-auto flex flex-col'>
         <Hero startUrl={startUrl()} />
         <CardSystems startUrl={startUrl()} />
@@ -55,13 +78,13 @@ function Hero(props: { startUrl: string }) {
           <span class='text-xl font-bold text-white'>Arcanetable</span>
         </div>
         <nav class='space-x-4 flex'>
-          <a href='https://discord.gg/wzdj2W9vvf' target='__blank' aria-label='Discord'>
+          <a href='https://discord.gg/wzdj2W9vvf' target='_blank' aria-label='Discord'>
             <DiscordIcon style='fill: currentColor;' class='h-8 w-8' />
           </a>
-          <a href='https://github.com/odama626/arcanetable/' target='__blank' aria-label='GitHub'>
+          <a href='https://github.com/odama626/arcanetable/' target='_blank' aria-label='GitHub'>
             <GithubIcon style='fill: currentColor;' class='h-8 w-8' />
           </a>
-          <a href='https://patreon.com/arcanetable' target='__blank' aria-label='Patreon'>
+          <a href='https://patreon.com/arcanetable' target='_blank' aria-label='Patreon'>
             <PatreonIcon style='fill: currentColor' class='h-8 w-8' />
           </a>
         </nav>
@@ -82,12 +105,12 @@ function Hero(props: { startUrl: string }) {
 }
 
 function CardSystems(props: { startUrl: string }) {
-  const [_, { initCardSystem }] = useCardSystemContext();
+  const [_, { initCardSystem } = {}] = useClientCardSystemContext() ?? [];
   const navigate = useNavigate();
   const games = [
     {
       name: 'Magic: The Gathering',
-      systemUri: `https://scr-server-mtg.arcanetable.app`,
+      systemUri: `https://scry-server-mtg.arcanetable.app`,
       image: '/mtg.jpeg',
       label: 'Play MTG',
     },
@@ -119,7 +142,7 @@ function CardSystems(props: { startUrl: string }) {
             {game => (
               <button
                 onClick={() => {
-                  initCardSystem(game.systemUri);
+                  initCardSystem?.(game.systemUri);
                   navigate(props.startUrl);
                 }}
                 class='group relative rounded-xl overflow-hidden flex flex-col justify-end cursor-pointer'
@@ -535,6 +558,12 @@ function Footer() {
           join the Discord
         </a>
         .
+      </p>
+      <p class='text-gray-400 mb-4'>
+        See what's new in the{' '}
+        <A class='text-indigo-400 hover:text-indigo-300 underline' href='/changes'>
+          Changelog
+        </A>
       </p>
       <p class='text-gray-500 text-sm'>
         Built by{' '}

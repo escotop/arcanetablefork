@@ -6,9 +6,10 @@ import { loadCardList, fetchCardInfo } from './deck';
 import { getCardArtImage } from './card';
 import {
   DEFAULT_CARD_SYSTEM_URI,
-  setCardSystem as setGlobaCardSystem,
+  setCardSystem as setGlobalCardSystem,
 } from './globals';
 import { useSearchParams } from '@solidjs/router';
+import { CardSystemContext } from './cardSystemContext';
 
 const defaultDeckStore = {
   decks: {},
@@ -170,7 +171,7 @@ export function CardSystemProvider(props: ParentProps) {
 
     updateStore('systems', system.id, system);
     updateStore('system', system.id);
-    setGlobaCardSystem(system);
+    setGlobalCardSystem(system);
     return system;
   }
 
@@ -198,23 +199,4 @@ export function CardSystemProvider(props: ParentProps) {
       {props.children}
     </CardSystemContext.Provider>
   );
-}
-
-interface CardSystemStore {
-  systems: Record<string, CardSystem>;
-  system: string;
-}
-
-type CardSystemStoreContextType = [
-  CardSystemStore,
-  {
-    update: SetStoreFunction<CardSystemStore>;
-    setCardSystem(name: string): Promise<CardSystem>;
-    initCardSystem(uri: string): Promise<CardSystem>;
-  },
-];
-const CardSystemContext = createContext<CardSystemStoreContextType>();
-
-export function useCardSystemContext() {
-  return useContext(CardSystemContext) as CardSystemStoreContextType;
 }

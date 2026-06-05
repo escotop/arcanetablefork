@@ -48,7 +48,8 @@ import { Command, CommandInput, CommandItem, CommandList } from '~/components/ui
 import { ToggleGroup, ToggleGroupItem } from '~/components/ui/toggle-group';
 import { capitalize, create, debounce, isSafeInteger } from 'lodash-es';
 import { createStore, SetStoreFunction, unwrap } from 'solid-js/store';
-import { getCardKey, hydrateDeck, serializeDeck, useCardSystemContext } from '../deckStore';
+import { getCardKey, hydrateDeck, serializeDeck} from '../deckStore';
+import { useCardSystemContext } from '../cardSystemContext';
 import AddIcon from 'lucide-solid/icons/plus';
 import SubIcon from 'lucide-solid/icons/minus';
 import SearchIcon from 'lucide-solid/icons/search';
