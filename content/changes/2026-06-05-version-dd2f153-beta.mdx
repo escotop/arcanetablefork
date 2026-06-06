@@ -1,0 +1,30 @@
+---
+date: "2026-06-05T23:27:57-07:00"
+target: beta
+title: "Settings Menu, Camera Tilt Toggle, and Regression Fixes"
+keywords:
+  - settings
+  - camera tilt
+  - regression
+  - hand
+  - battlefield
+  - staging
+description: "Camera tilt is now opt-in via a new in-game Settings menu. Also fixes two regressions from the previous build affecting hand card overlays and battlefield card dragging."
+version: dd2f153
+changeCount:
+  bugfixes: 2
+  features: 1
+commitRange: https://github.com/odama626/arcanetable/compare/fbddbef...dd2f153
+---
+
+> **Staging release** — try it at [staging.arcanetable.app](https://staging.arcanetable.app/).
+
+## Features
+
+- **Settings menu** — there's now a Settings option in the in-game menu. Currently it houses the camera tilt toggle, with more options to come.
+- **Camera tilt is now opt-in** — the head-tilt camera effect from the previous build is off by default. Enable it in Settings if you want it.
+
+## Fixes
+
+- **Hand card overlay** — card action menus were appearing in the wrong position when hovering cards in hand. Fixed.
+- **Battlefield drag** — a regression from the previous build caused cards on the battlefield to rotate incorrectly when dragged. Fixed.
