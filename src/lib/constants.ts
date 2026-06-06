@@ -8,6 +8,12 @@ export const CARD_STACK_OFFSET = 2;
 export const ZONE_OUTLINE_COLOR = 0xffffff;
 export const CARD_ZONE_COLOR = 0x1a1533;
 
+
+// camera
+export const LOOK_STRENGTH = 0.25;
+export const LOOK_EASE = 1;
+
+
 export const KEY = {
   Shift: '⇧',
   Mod: navigator?.userAgent?.platform === 'macOS' ? '⌘' : 'Ctrl',

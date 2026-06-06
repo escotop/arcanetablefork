@@ -26,7 +26,7 @@ export class Hand implements CardZone {
     this.mesh.userData.isInteractive = true;
     this.mesh.userData.zone = 'hand';
     this.mesh.rotateX(Math.PI * 0.25);
-    this.mesh.position.set(0, -120, 40);
+    this.mesh.position.set(0, -210, 50);
     this.mesh.userData.id = id;
     this.mesh.userData.resting = this.mesh.position.clone();
     this.zone = 'hand';
@@ -199,7 +199,7 @@ function animateFocusCard(handMesh: Group, cards: Card[], index: number) {
     to: {
       position: new Vector3().addVectors(
         cards[index].mesh.userData.resting.position,
-        new Vector3(10, 13, 5),
+        new Vector3(10, 5, 5),
       ),
       rotation: cards[index].mesh.userData.resting.rotation,
     },

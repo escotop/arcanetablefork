@@ -123,7 +123,7 @@ const Overlay: Component = () => {
       <Show when={tether() && isCardOwnedByPlayer(cardMesh())}>
         <div
           class={styles.cardActions}
-          style={`--x: ${tether().x}px; --y: ${tether().y}px`}
+          style={`--x: ${tether().x}px; --y: ${tether().y}px; --offset-x: ${tether().offset?.x || 0}; --offset-y: ${tether().offset?.y ||0};`}
           onClick={e => {
             e.stopImmediatePropagation();
           }}>

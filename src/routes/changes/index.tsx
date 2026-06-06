@@ -40,9 +40,9 @@ function ChangeEntry(props: { change: any }) {
               {props.change.target}
             </span>
             <Show when={props.change.version !== 'unknown'}>
-              <code class='text-xs text-gray-500 font-mono'>{props.change.version}</code>
+              <code class='text-xs text-gray-400 font-mono'>{props.change.version}</code>
             </Show>
-            <time class='text-sm text-gray-500'>{props.change.date}</time>
+            <time class='text-sm text-gray-400'>{props.change.date}</time>
           </div>
           <h2 class='text-xl font-bold text-white'>{props.change.title}</h2>
           <p class='text-gray-400 text-sm max-w-2xl'>{props.change.description}</p>
@@ -85,7 +85,7 @@ function ChangeEntry(props: { change: any }) {
           href={props.change.commitRange}
           target='_blank'
           rel='noopener noreferrer'
-          class='text-xs text-gray-600 hover:text-gray-400 transition font-mono'>
+          class='text-xs text-gray-400 hover:text-gray-100 transition font-mono'>
           view commits →
         </a>
       </Show>

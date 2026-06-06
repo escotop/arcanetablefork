@@ -40,6 +40,7 @@ const App: Component = () => {
       <Route path='/changes' component={lazy(() => import('./routes/changes/index'))} />
       <ClientOnly>
         <Route path='/game/:gameId' component={GameRoute} />
+        <Route path='/table-view' component={lazy(() => import('./routes/table-view/index'))} />
       </ClientOnly>
       {/*<FileRoutes />*/}
     </Router>

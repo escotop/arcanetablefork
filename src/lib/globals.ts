@@ -30,6 +30,8 @@ import { type TextureLoaderWorkerType } from './textureLoaderWorker';
 import { cleanupFromNode, getFocusCameraPositionRelativeTo } from './utils';
 import { Selection } from './selection';
 import { captureConsole } from './console-capture';
+import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
+import GUI from 'lil-gui';
 
 export function expect(test: boolean, message: string, ...supplemental: any) {
   if (!test) {
@@ -71,14 +73,15 @@ export const colorHashLight = new ColorHash({ lightness: 0.7 });
 export const colorHashDark = new ColorHash({ lightness: 0.2 });
 export const [selectedDeckId, setSelectedDeckId] = createSignal<string | undefined>();
 export let textureLoaderWorker: Comlink.Remote<TextureLoaderWorkerType>;
+export let gui: GUI = null;
+export let baseCameraQuaternion: THREE.Quaternion;
+
 
 export let selection: Selection;
 export let [capturedErrors, setCapturedErrors] = createSignal([]);
 
 export let cardLoadingTexture: THREE.Texture;
 export let cardBackTexture: THREE.Texture;
-
-
 
 export let [cardSystem, setCardSystem] = createStore<CardSystem>({} as CardSystem);
 
@@ -126,14 +129,14 @@ export async function setCardBackTexture(url: string) {
     const mesh = obj as THREE.Mesh;
     if (mesh.isMesh) {
       const mat = mesh.material as THREE.MeshStandardMaterial;
-      console.log({mat})
+      console.log({ mat });
       if (Array.isArray(mat)) {
         mat.forEach((mat, i) => {
           if (mat.map === old) {
             mat.map = cardBackTexture;
             mat.needsUpdate = true;
           }
-        })
+        });
       } else if (mat?.map?.userData?.isCardBack) {
         mat.map = cardBackTexture;
         mat.needsUpdate = true;
@@ -170,11 +173,13 @@ export async function init({ gameId }) {
 
   THREE.Cache.enabled = true;
 
-  camera = new PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 2000);
+  camera = new PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 5000);
   camera.position.z = 200;
   const matrix = new THREE.Matrix4();
   matrix.makeRotationX((Math.PI / 2) * -0.4);
   camera.position.applyMatrix4(matrix);
+
+  baseCameraQuaternion = camera.quaternion.clone();
 
   renderer = new WebGLRenderer();
   renderer.shadowMap.enabled = true;
@@ -197,19 +202,96 @@ export async function init({ gameId }) {
 
   scene = new Scene();
 
+  gui = new GUI();
+  gui.hide();
+
   scene.add(arrowHelper);
+
+  camera.lookAt(scene.position);
+  baseCameraQuaternion = camera.quaternion.clone();
 
   selection = new Selection(renderer, camera, scene);
 
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  pmrem.compileEquirectangularShader();
+
+  new HDRLoader().load('/qwantani_night_puresky_4k.hdr', texture => {
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    texture.colorSpace = THREE.SRGBColorSpace;
+
+    // Skysphere — scale it to zoom in/out
+    const skyGeo = new THREE.SphereGeometry(1000, 32, 16);
+    const skyMat = new THREE.MeshBasicMaterial({
+      map: texture,
+      side: THREE.BackSide,
+      depthWrite: false,
+    });
+    const sky = new THREE.Mesh(skyGeo, skyMat);
+    sky.renderOrder = -1;
+    sky.scale.setScalar(2);
+    sky.rotation.set(0.791681348704628, -1.60221225333079, 1.25663706143592);
+    sky.position.set(77, -500, -500);
+    scene.add(sky);
+
+    scene.environmentIntensity = 0.516;
+    scene.fog = new THREE.FogExp2(0x0d0015, 0.0006);
+    scene.backgroundBlurriness = 0.308;
+    scene.backgroundIntensity = 0;
+
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const envMap = pmrem.fromEquirectangular(texture).texture;
+    scene.environmentIntensity = 0.4;
+    scene.environment = envMap;
+    pmrem.dispose();
+  });
+
   focusRayCaster = new Raycaster();
 
-  const tableGeometry = new BoxGeometry(200, 200, 5);
+  const tableGeometry = new BoxGeometry(400, 200, 5);
   const tableMaterial = new MeshStandardMaterial({ color: 0x2c1b4e });
   table = new Mesh(tableGeometry, tableMaterial);
   table.receiveShadow = true;
   table.userData.zone = 'battlefield';
-  table.rotateX(Math.PI * -0.5);
+  table.rotateX(Math.PI * -(2 / 3));
+  table.position.y = -200;
+  // table.position.z = -150;
+  // table.position.y = -75;
+  table.position.y = -100;
+  table.position.z = -25;
+
+  arrowHelper.setDirection(new Vector3(0, 1, 0).applyQuaternion(table.quaternion));
+  arrowHelper.position.copy(table.position)
+  arrowHelper.setLength(100)
+
+
+  const tableParams = {
+    rotationX: Math.PI * -0.5,
+    rotationY: 0,
+    rotationZ: 0,
+    positionX: 0,
+    positionY: -100,
+    positionZ: 0,
+  };
+
   scene.add(table);
+}
+
+export function applyPlayerTransform(group: THREE.Group, index: number) {
+  switch (index) {
+    case 0:
+      return;
+    case 1:
+      group.rotateZ(Math.PI);
+      return;
+    case 2:
+      group.rotateZ(Math.PI / 2);
+      group.position.setX(100);
+      return;
+    case 3:
+      group.rotateZ(Math.PI / 2 + Math.PI);
+      group.position.setX(-100);
+      return;
+  }
 }
 
 export function startSpectating() {
@@ -219,10 +301,8 @@ export function startSpectating() {
   orbitControls = new OrbitControls(camera, renderer.domElement);
   orbitControls.target = table.position;
 
-  let curIndex = 0;
-  Object.values(playAreas).forEach((playArea, i) => {
-    playArea.mesh.rotation.z = PLAY_AREA_ROTATIONS[curIndex];
-    curIndex++;
+  Object.values(playAreas).forEach(playArea => {
+    applyPlayerTransform(playArea.mesh, i);
   });
 }
 
@@ -246,6 +326,9 @@ export function cleanup() {
   setCapturedErrors([]);
   setIsSpectating(false);
   setIsIntitialized(false);
+
+  gui.destroy();
+  gui = null;
 
   if (!renderer) return;
 

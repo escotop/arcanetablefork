@@ -1,4 +1,4 @@
-import { Match } from 'solid-js';
+import { createEffect, Match } from 'solid-js';
 import { Switch } from 'solid-js';
 import { PlayArea } from '../playArea';
 import { Mesh } from 'three';
@@ -47,7 +47,7 @@ export default function CardOverlay(props: Props) {
           </MenubarMenu>
         </Menubar>
       </Match>
-      <Match when={userData()?.location === 'graveyard'}>
+     <Match when={userData()?.location === 'graveyard'}>
         <div
           class='flex-col bg-card px-3 py-2 rounded-sm'
           style='height: auto; margin-left: -10px;'>

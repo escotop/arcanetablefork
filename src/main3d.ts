@@ -6,9 +6,17 @@ import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { cancelAnimation, renderAnimations } from './lib/animations';
 import { cloneCard, getCardMeshTetherPoint, setCardData, updateTextureAnimation } from './lib/card';
-import { CARD_STACK_OFFSET, CARD_THICKNESS, GameOptions, LoadSettings } from './lib/constants';
+import {
+  CARD_STACK_OFFSET,
+  CARD_THICKNESS,
+  GameOptions,
+  LoadSettings,
+  LOOK_EASE,
+  LOOK_STRENGTH,
+} from './lib/constants';
 import {
   animating,
+  baseCameraQuaternion,
   camera,
   cardsById,
   clock,
@@ -110,7 +118,7 @@ export async function localInit(gameOptions: GameOptions) {
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
 
-  renderer.domElement.addEventListener('mousemove', onDocumentMouseMove, false);
+  document.addEventListener('mousemove', onDocumentMouseMove, false);
   document.addEventListener('click', onDocumentClick, false);
   document.addEventListener('dragstart', onDocumentDragStart, false);
   document.addEventListener('mouseup', onDocumentDrop, false);
@@ -269,6 +277,8 @@ function onDocumentDragStart(event: PointerEvent) {
     })
     .forEach((target, i) => {
       setCardData(target, 'isDragging', true);
+
+      console.log({target})
 
       let dragOffset = [0, 0, 0];
       if (target.userData.location !== 'hand') {
@@ -533,6 +543,7 @@ function focusOn(target: THREE.Object3D) {
 function render3d(delta: number) {
   renderAnimations(time);
   updateTextureAnimation(delta);
+  animateCameraLook();
 
   raycaster.setFromCamera(mouse, camera);
 
@@ -551,7 +562,7 @@ function render3d(delta: number) {
   }
 
   let signal = hoverSignal();
-  if (signal?.mesh && signal?.mesh.userData.location !== 'deck') {
+  if (signal?.mesh) {
     const tetherPoint = getCardMeshTetherPoint(signal.mesh);
     if (!tetherPoint.equals(signal.tether)) {
       setHoverSignal(signal => ({
@@ -561,8 +572,9 @@ function render3d(delta: number) {
     }
   }
 
-  camera.lookAt(scene.position);
+  // camera.lookAt(scene.position);
   composer.render();
+
   if (hoverSignal()?.mesh) {
     let mesh = hoverSignal().mesh as THREE.Mesh;
     updateFocusCamera(mesh);
@@ -588,4 +600,21 @@ function render3d(delta: number) {
     focusRenderer.render(scene, focusCamera);
     materials.forEach(mat => (mat.wireframe = false));
   }
+}
+
+let currentYaw = 0;
+let currentPitch = 0;
+
+function animateCameraLook() {
+  const targetYaw = LOOK_STRENGTH * -mouse.x;
+  const targetPitch = LOOK_STRENGTH * mouse.y * 0.5;
+
+  currentYaw += (targetYaw - currentYaw) * LOOK_EASE;
+  currentPitch += (targetPitch - currentPitch) * LOOK_EASE;
+
+  // Apply on top of base rotation
+  const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), currentYaw);
+  const pitchQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), currentPitch);
+
+  camera.quaternion.copy(baseCameraQuaternion).multiply(yawQ).multiply(pitchQ);
 }

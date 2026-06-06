@@ -277,12 +277,15 @@ export function initializeCardMesh(card: Card, clientId: string): Card {
 }
 
 export function getCardMeshTetherPoint(cardMesh: Mesh) {
+  let offset = { x: 0, y: 0 };
   let targetVertex = 6;
   if (cardMesh.userData.isTapped) {
     targetVertex = 15;
   }
 
-  if (['deck', 'hand'].includes(cardMesh.userData.location)) {
+  let location = cardMesh.userData.location;
+
+  if (['hand', 'deck'].includes(location)) {
     if (cardMesh.userData.isPublic) {
       targetVertex = 8;
     } else {
@@ -290,7 +293,11 @@ export function getCardMeshTetherPoint(cardMesh: Mesh) {
     }
   }
 
-  if (cardMesh.userData.location === 'battlefield') {
+  if (location === 'deck') {
+    offset.y = '-100%';
+  }
+
+  if (['battlefield'].includes(location)) {
     if (cardMesh.userData.isFlipped) {
       if (cardMesh.userData.isTapped) {
         targetVertex = 6;
@@ -311,7 +318,9 @@ export function getCardMeshTetherPoint(cardMesh: Mesh) {
   );
   cardMesh.localToWorld(vec);
   const tether = getProjectionVec(vec);
+  tether.offset = offset;
   return tether;
+
 }
 
 export function cleanupCard(card: card) {

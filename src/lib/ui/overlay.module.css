@@ -20,6 +20,7 @@
   pointer-events: initial;
   top: var(--y);
   left: var(--x);
+  transform: translate(var(--offset-x), var(--offset-y));
   position: fixed;
   display: flex;
   gap: 0.5rem;

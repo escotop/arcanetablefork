@@ -150,7 +150,7 @@ export function ArticleMetaTags(props: ArticleMetaTagsProps) {
 				url: baseURL,
 				logo: {
 					'@type': 'ImageObject',
-					url: new URL('/favicon-96x96.png', baseURL).toString(),
+					url: new URL('/favicon.png', baseURL).toString(),
 				},
 			},
 		};
