@@ -1,16 +1,14 @@
 import hotkeys from 'hotkeys-js';
 import {
   createEffect,
+  createMemo,
   createSelector,
   createSignal,
   For,
-  Match,
-  onCleanup,
-  onMount,
   Show,
-  Switch,
   type Component,
 } from 'solid-js';
+import { Mesh } from 'three';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -21,21 +19,24 @@ import {
   DialogTrigger,
 } from '~/components/ui/dialog';
 import { Menubar, MenubarItem, MenubarMenu, MenubarShortcut } from '../../components/ui/menubar';
+import { KEY } from '../constants';
 import {
   cardsById,
   focusRenderer,
   hoverSignal,
   isSpectating,
-  mouseToScreen,
   onConcede,
   playAreas,
   players,
   provider,
   selection,
+  setSettings,
+  settings,
 } from '../globals';
 import CommandPalette from '../shortcuts/command-palette';
 import { untapAll } from '../shortcuts/commands/field';
 import HotkeysTable from '../shortcuts/hotkeys-table';
+import CardOverlay from './cardOverlay';
 import CounterDialog from './counterDialog';
 import Log from './log';
 import MoveMenu from './moveMenu';
@@ -44,15 +45,20 @@ import PeekMenu from './peekMenu';
 import { LocalPlayer, NetworkPlayer } from './playerMenu';
 import RevealMenu from './revealMenu';
 import TokenSearchMenu from './tokenMenu';
-import CardOverlay from './cardOverlay';
-import { Mesh } from 'three';
-import { KEY } from '../constants';
+import { useSearchParams } from '@solidjs/router';
+import { Checkbox } from '~/components/ui/checkbox';
+import { Label } from '~/components/ui/label';
 
 const Overlay: Component = () => {
   let userData = () => hoverSignal()?.mesh?.userData;
   let [isLogVisible, setIsLogVisible] = createSignal(false);
-  const [visibleDialog, setVisibleDialog] = createSignal();
-  const isVisibleDialog = createSelector(visibleDialog);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const isDialogVisible = (dialog: string) => dialog === searchParams.dialog;
+  const setVisibleDialog = (dialog?: string) => {
+    setSearchParams({ dialog }, { replace: !dialog });
+  };
+
   const isPublic = () => userData()?.isPublic;
   const isOwner = () => userData()?.clientId === provider?.awareness?.clientID;
   const location = () => userData()?.location;
@@ -123,7 +129,7 @@ const Overlay: Component = () => {
       <Show when={tether() && isCardOwnedByPlayer(cardMesh())}>
         <div
           class={styles.cardActions}
-          style={`--x: ${tether().x}px; --y: ${tether().y}px; --offset-x: ${tether().offset?.x || 0}; --offset-y: ${tether().offset?.y ||0};`}
+          style={`--x: ${tether().x}px; --y: ${tether().y}px; --offset-x: ${tether().offset?.x || 0}; --offset-y: ${tether().offset?.y || 0};`}
           onClick={e => {
             e.stopImmediatePropagation();
           }}>
@@ -155,7 +161,7 @@ const Overlay: Component = () => {
                 fromZone={playArea.hand}
               />
               <Dialog
-                open={isVisibleDialog('concede')}
+                open={isDialogVisible('concede')}
                 onOpenChange={isOpen => setVisibleDialog(isOpen ? 'concede' : undefined)}>
                 <DialogTrigger>
                   <MenubarItem class='width-full'>Concede</MenubarItem>
@@ -178,7 +184,7 @@ const Overlay: Component = () => {
               {isLogVisible() ? 'Hide Log' : 'Show Log'}
             </MenubarItem>
             <Dialog
-              open={isVisibleDialog('shortcuts')}
+              open={isDialogVisible('shortcuts')}
               onOpenChange={isOpen => setVisibleDialog(isOpen ? 'shortcuts' : undefined)}>
               <DialogTrigger>
                 <MenubarItem class='width-full'>Shortcuts</MenubarItem>
@@ -194,7 +200,30 @@ const Overlay: Component = () => {
               </DialogContent>
             </Dialog>
             <Dialog
-              open={isVisibleDialog('donate')}
+              open={isDialogVisible('settings')}
+              onOpenChange={isOpen => setVisibleDialog(isOpen ? 'settings' : undefined)}>
+              <DialogTrigger>
+                <MenubarItem>Settings</MenubarItem>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>Settings</DialogHeader>
+                <DialogDescription>
+                  <Label class='flex items-baseline space-x-2'>
+                    <Checkbox
+                      id='camera-tilt'
+                      checked={settings.enableCameraTilt}
+                      onChange={checked => setSettings('enableCameraTilt', checked)}
+                    />
+                    <span>Enable Camera Tilt </span>
+                  </Label>
+                </DialogDescription>
+                <DialogFooter>
+                  <Button onClick={() => setVisibleDialog()}>Close</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            <Dialog
+              open={isDialogVisible('donate')}
               onOpenChange={isOpen => setVisibleDialog(isOpen ? 'donate' : undefined)}>
               <DialogTrigger>
                 <MenubarItem class='width-full'>Support Us</MenubarItem>

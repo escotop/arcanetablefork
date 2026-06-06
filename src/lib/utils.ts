@@ -134,10 +134,12 @@ export function restackItems(items: Object3D[], intersections: Intersection[]) {
   for (const target of items) {
     let pointTarget = intersection.point.clone();
 
-    let parentWorldQuat = new Quaternion();
-    target.parent?.getWorldQuaternion(parentWorldQuat);
-    const localQuat = parentWorldQuat.clone().invert().multiply(intersectionWorldQuat);
-    target.quaternion.copy(localQuat);
+    if (['hand', 'peek', 'tokenSearch'].includes(target.userData.location)) {
+      let parentWorldQuat = new Quaternion();
+      target.parent?.getWorldQuaternion(parentWorldQuat);
+      const localQuat = parentWorldQuat.clone().invert().multiply(intersectionWorldQuat);
+      target.quaternion.copy(localQuat);
+    }
 
     target.parent.worldToLocal(pointTarget);
 

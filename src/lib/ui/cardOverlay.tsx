@@ -30,7 +30,7 @@ export default function CardOverlay(props: Props) {
         <CardBattlefieldMenu playArea={props.playArea} cardMesh={props.cardMesh} />
       </Match>
       <Match when={userData()?.location === 'hand'}>
-        <Menubar class='flex-col' style='height: auto; margin-left: -10px;'>
+        <Menubar>
           <MenubarMenu>
             <MenubarItem
               onClick={() => {

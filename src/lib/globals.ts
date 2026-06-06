@@ -1,6 +1,6 @@
 import ColorHash from 'color-hash';
 import * as Comlink from 'comlink';
-import { createSignal } from 'solid-js';
+import { createEffect, createSignal } from 'solid-js';
 import { createStore } from 'solid-js/store';
 import * as THREE from 'three';
 import {
@@ -23,7 +23,7 @@ import { WebrtcProvider } from 'y-webrtc';
 import { WebsocketProvider } from 'y-websocket';
 import { Doc } from 'yjs';
 import { YArray } from 'yjs/dist/src/internals';
-import { Card, CARD_WIDTH, CardSystem, CardZone, HoverSignal } from './constants';
+import { Card, CARD_WIDTH, CardSystem, CardZone, HoverSignal, TABLE_COLOR } from './constants';
 import type { PlayArea } from './playArea';
 import TextureLoaderWorker from './textureLoaderWorker?worker';
 import { type TextureLoaderWorkerType } from './textureLoaderWorker';
@@ -72,6 +72,7 @@ export const PLAY_AREA_ROTATIONS = [0, Math.PI, Math.PI / 2, Math.PI / 2 + Math.
 export const colorHashLight = new ColorHash({ lightness: 0.7 });
 export const colorHashDark = new ColorHash({ lightness: 0.2 });
 export const [selectedDeckId, setSelectedDeckId] = createSignal<string | undefined>();
+export const [settings, setSettings] = createStore({ enableCameraTilt: false });
 export let textureLoaderWorker: Comlink.Remote<TextureLoaderWorkerType>;
 export let gui: GUI = null;
 export let baseCameraQuaternion: THREE.Quaternion;
@@ -210,6 +211,12 @@ export async function init({ gameId }) {
   camera.lookAt(scene.position);
   baseCameraQuaternion = camera.quaternion.clone();
 
+  createEffect(() => {
+    if (!settings.enableCameraTilt) {
+      camera.quaternion.copy(baseCameraQuaternion)
+    }
+  })
+
   selection = new Selection(renderer, camera, scene);
 
   const pmrem = new THREE.PMREMGenerator(renderer);
@@ -248,7 +255,7 @@ export async function init({ gameId }) {
   focusRayCaster = new Raycaster();
 
   const tableGeometry = new BoxGeometry(400, 200, 5);
-  const tableMaterial = new MeshStandardMaterial({ color: 0x2c1b4e });
+  const tableMaterial = new MeshStandardMaterial({ color: TABLE_COLOR });
   table = new Mesh(tableGeometry, tableMaterial);
   table.receiveShadow = true;
   table.userData.zone = 'battlefield';

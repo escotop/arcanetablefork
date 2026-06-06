@@ -44,6 +44,7 @@ import {
   setIsIntitialized,
   setPlayAreas,
   setPlayers,
+  settings,
   table,
   updateFocusCamera,
   zonesById,
@@ -62,6 +63,7 @@ var container;
 let composer: EffectComposer;
 let raycaster: THREE.Raycaster;
 let mouse: THREE.Vector2;
+let cameraMouse: THREE.Vector2;
 let outlinePass: OutlinePass;
 let dragTargets: THREE.Object3D[];
 let hand: Hand;
@@ -108,6 +110,7 @@ export async function localInit(gameOptions: GameOptions) {
   scene.add(directionalLight);
   raycaster = new THREE.Raycaster();
   mouse = new THREE.Vector2();
+  cameraMouse = new THREE.Vector2();
 
   gameLog.observe(processEvents);
 
@@ -118,6 +121,7 @@ export async function localInit(gameOptions: GameOptions) {
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
 
+  renderer.domElement.addEventListener('mousemove', onRendererMouseMove, false);
   document.addEventListener('mousemove', onDocumentMouseMove, false);
   document.addEventListener('click', onDocumentClick, false);
   document.addEventListener('dragstart', onDocumentDragStart, false);
@@ -391,6 +395,13 @@ function onWindowResize() {
 }
 
 function onDocumentMouseMove(event) {
+  cameraMouse.set(
+    (event.clientX / window.innerWidth) * 2 - 1,
+    -(event.clientY / window.innerHeight) * 2 + 1,
+  );
+}
+
+function onRendererMouseMove(event) {
   mouse.set(
     (event.clientX / window.innerWidth) * 2 - 1,
     -(event.clientY / window.innerHeight) * 2 + 1,
@@ -543,7 +554,10 @@ function focusOn(target: THREE.Object3D) {
 function render3d(delta: number) {
   renderAnimations(time);
   updateTextureAnimation(delta);
-  animateCameraLook();
+
+  if (settings.enableCameraTilt) {
+    animateCameraLook();
+  }
 
   raycaster.setFromCamera(mouse, camera);
 
@@ -606,8 +620,8 @@ let currentYaw = 0;
 let currentPitch = 0;
 
 function animateCameraLook() {
-  const targetYaw = LOOK_STRENGTH * -mouse.x;
-  const targetPitch = LOOK_STRENGTH * mouse.y * 0.5;
+  const targetYaw = LOOK_STRENGTH * -cameraMouse.x;
+  const targetPitch = LOOK_STRENGTH * cameraMouse.y * 0.5;
 
   currentYaw += (targetYaw - currentYaw) * LOOK_EASE;
   currentPitch += (targetPitch - currentPitch) * LOOK_EASE;

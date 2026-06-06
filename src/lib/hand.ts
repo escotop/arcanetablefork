@@ -3,7 +3,7 @@ import { CatmullRomCurve3, Euler, Group, Object3D, Vector3 } from 'three';
 import { animateObject } from './animations';
 import { cleanupCard, getSerializableCard, setCardData } from './card';
 import { Card, CardZone } from './constants';
-import { cardsById, setHoverSignal, zonesById } from './globals';
+import { cardsById, setHoverSignal, settings, zonesById } from './globals';
 import { getGlobalRotation } from './utils';
 import { createStore, SetStoreFunction } from 'solid-js/store';
 import { createRoot } from 'solid-js';
@@ -195,11 +195,12 @@ export class Hand implements CardZone {
 }
 
 function animateFocusCard(handMesh: Group, cards: Card[], index: number) {
+  let hoverHeight = settings.enableCameraTilt ? 10 : 18;
   animateObject(cards[index].mesh, {
     to: {
       position: new Vector3().addVectors(
         cards[index].mesh.userData.resting.position,
-        new Vector3(10, 5, 5),
+        new Vector3(10, hoverHeight, 5),
       ),
       rotation: cards[index].mesh.userData.resting.rotation,
     },

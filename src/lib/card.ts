@@ -285,7 +285,11 @@ export function getCardMeshTetherPoint(cardMesh: Mesh) {
 
   let location = cardMesh.userData.location;
 
-  if (['hand', 'deck'].includes(location)) {
+  if (location === 'hand') {
+    offset.y = '-50%';
+  }
+
+  if (['deck'].includes(location)) {
     if (cardMesh.userData.isPublic) {
       targetVertex = 8;
     } else {
