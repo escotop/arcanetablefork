@@ -36,13 +36,13 @@ export class CardGrid implements CardZone {
     public zone: string,
     public id: string = nanoid(),
   ) {
-    const POSITION = new Vector3(-((CARD_WIDTH + 1) * CARDS_PER_ROW) / 2 + CARD_WIDTH / 2, -200, 60);
+    const POSITION = new Vector3(-((CARD_WIDTH + 1) * CARDS_PER_ROW) / 2 + CARD_WIDTH / 2, -100, 75);
     this.mesh = new Group();
     zonesById.set(this.id, this);
     this.mesh.userData.isInteractive = true;
     this.mesh.userData.zone = zone;
     this.mesh.userData.id = id;
-    this.mesh.rotateX(Math.PI * 0.36);
+    this.mesh.rotateX(Math.PI * 0.15);
     this.mesh.position.copy(POSITION);
     this.scrollContainer = new Group();
     this.scrollContainer.userData.isScrollable = true;

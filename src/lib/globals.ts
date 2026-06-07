@@ -32,6 +32,7 @@ import { Selection } from './selection';
 import { captureConsole } from './console-capture';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import GUI from 'lil-gui';
+import { createLocalStore } from './localStore';
 
 export function expect(test: boolean, message: string, ...supplemental: any) {
   if (!test) {
@@ -72,7 +73,7 @@ export const PLAY_AREA_ROTATIONS = [0, Math.PI, Math.PI / 2, Math.PI / 2 + Math.
 export const colorHashLight = new ColorHash({ lightness: 0.7 });
 export const colorHashDark = new ColorHash({ lightness: 0.2 });
 export const [selectedDeckId, setSelectedDeckId] = createSignal<string | undefined>();
-export const [settings, setSettings] = createStore({ enableCameraTilt: false });
+export const [settings, setSettings] = createLocalStore('settings', { enableCameraTilt: false });
 export let textureLoaderWorker: Comlink.Remote<TextureLoaderWorkerType>;
 export let gui: GUI = null;
 export let baseCameraQuaternion: THREE.Quaternion;
@@ -259,12 +260,9 @@ export async function init({ gameId }) {
   table = new Mesh(tableGeometry, tableMaterial);
   table.receiveShadow = true;
   table.userData.zone = 'battlefield';
-  table.rotateX(Math.PI * -(2 / 3));
-  table.position.y = -200;
-  // table.position.z = -150;
-  // table.position.y = -75;
-  table.position.y = -100;
-  table.position.z = -25;
+  table.rotateX(Math.PI * -.4);
+  table.position.y = 20;
+  table.position.z = -10;
 
   arrowHelper.setDirection(new Vector3(0, 1, 0).applyQuaternion(table.quaternion));
   arrowHelper.position.copy(table.position)

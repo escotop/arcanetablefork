@@ -11,8 +11,9 @@ export const TABLE_COLOR = 0x2c1b4e;
 
 
 // camera
-export const LOOK_STRENGTH = 0.25;
-export const LOOK_EASE = 1;
+export const LOOK_STRENGTH_X = 0.15;
+export const LOOK_STRENGTH_Y = 0.125 / 2;
+export const LOOK_EASE = 0.15;
 
 
 export const KEY = {

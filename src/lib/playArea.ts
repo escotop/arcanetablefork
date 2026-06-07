@@ -446,7 +446,6 @@ export class PlayArea {
     let cardsInPlay = expandCardEntries(Object.values(hydratedDeck.inPlay));
 
     let cards = cardsInDeck.concat(cardsInPlay);
-
     const playArea = new PlayArea(clientId, cards, cardsInDeck, { isLocalPlayer: true });
 
     if (hydratedDeck?.inPlay) {

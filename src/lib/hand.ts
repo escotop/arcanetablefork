@@ -26,7 +26,7 @@ export class Hand implements CardZone {
     this.mesh.userData.isInteractive = true;
     this.mesh.userData.zone = 'hand';
     this.mesh.rotateX(Math.PI * 0.25);
-    this.mesh.position.set(0, -210, 50);
+    this.mesh.position.set(0, -105, 10);
     this.mesh.userData.id = id;
     this.mesh.userData.resting = this.mesh.position.clone();
     this.zone = 'hand';
@@ -195,7 +195,7 @@ export class Hand implements CardZone {
 }
 
 function animateFocusCard(handMesh: Group, cards: Card[], index: number) {
-  let hoverHeight = settings.enableCameraTilt ? 10 : 18;
+  let hoverHeight = settings.enableCameraTilt ? 10 : 15;
   animateObject(cards[index].mesh, {
     to: {
       position: new Vector3().addVectors(

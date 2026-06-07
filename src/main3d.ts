@@ -12,7 +12,8 @@ import {
   GameOptions,
   LoadSettings,
   LOOK_EASE,
-  LOOK_STRENGTH,
+  LOOK_STRENGTH_X,
+  LOOK_STRENGTH_Y,
 } from './lib/constants';
 import {
   animating,
@@ -620,8 +621,8 @@ let currentYaw = 0;
 let currentPitch = 0;
 
 function animateCameraLook() {
-  const targetYaw = LOOK_STRENGTH * -cameraMouse.x;
-  const targetPitch = LOOK_STRENGTH * cameraMouse.y * 0.5;
+  const targetYaw = -cameraMouse.x * LOOK_STRENGTH_X;
+  const targetPitch = cameraMouse.y * LOOK_STRENGTH_Y;
 
   currentYaw += (targetYaw - currentYaw) * LOOK_EASE;
   currentPitch += (targetPitch - currentPitch) * LOOK_EASE;

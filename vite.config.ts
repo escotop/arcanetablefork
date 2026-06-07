@@ -37,5 +37,5 @@ export default defineConfig({
     alias: { '~': path.resolve(__dirname, './src') },
   },
   server: { port: 3000, allowedHosts: true },
-  build: { target: 'esnext' },
+  build: { target: 'esnext', sourcemap: true },
 });

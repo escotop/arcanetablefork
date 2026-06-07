@@ -204,7 +204,11 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
       this.mesh.remove(cardMesh);
       this.setObservable('cardCount', this.cards.length);
     } else {
-      console.error(`didn't find card`, { cardMesh, cards: this.cards, meshId: cardMesh.userData.id });
+      console.error(`didn't find card`, {
+        cardMesh,
+        cards: this.cards,
+        meshId: cardMesh.userData.id,
+      });
     }
     if (this.isTopPublic && !this.cards[0]?.mesh.userData.isPublic) {
       this.flipTop();
@@ -305,7 +309,6 @@ export function expandCardEntries(cardEntries: DetailedCardEntry[]) {
   return cards;
 }
 
-
 export function loadCardList(cardList: string): CardEntry[] {
   return deckParser.run(cardList).result;
 }
@@ -342,7 +345,8 @@ export async function fetchCardInfo(
         ...entry,
         ...populateCardInfo(payload, entry),
       };
-    });
+    })
+    .catch(e => console.error(e));
 
   if (cache) {
     cache.set(urlString + entry.qty, result);
@@ -352,11 +356,12 @@ export async function fetchCardInfo(
 }
 
 export function populateCardInfo(detail: CardEntryDetail, entry?: Card) {
+  console.log({ detail, entry });
   let fields = {
     id: entry?.id || detail?.id,
     set: entry?.set || detail?.set,
     name: entry?.name || detail.name,
-    search: getSearchLine(detail),
+    search: detail?.search || getSearchLine(detail),
     popularity: detail?.popularity ?? detail[cardSystem.popularity],
   };
 
