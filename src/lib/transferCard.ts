@@ -14,7 +14,7 @@ interface ExtendedOptions<AddOptions extends DefaultAddOptions = {}> {
 
 export async function transferCard<AddOptions extends {}>(
   card: Card,
-  fromZone: CardZone<any>,
+  fromZone?: CardZone<any>,
   toZone?: CardZone<AddOptions>,
   {
     addOptions = {} as AddOptions,
@@ -22,13 +22,14 @@ export async function transferCard<AddOptions extends {}>(
     preventTransmit = false,
   }: ExtendedOptions<AddOptions> = {},
 ) {
-  if (!card) {
+  if (!card || !fromZone) {
     console.warn(`card is undefined`, new Error().stack);
     console.log({ card, fromZone, toZone });
     return;
   }
 
-  await fromZone.removeCard?.(card.mesh);
+  await fromZone?.removeCard?.(card.mesh);
+
   if (toZone && toZone?.zone !== 'battlefield') {
     if (card.mesh.userData.isToken) {
       addOptions.destroy = true;
@@ -54,7 +55,7 @@ export async function transferCard<AddOptions extends {}>(
       type: 'transferCard',
       payload: {
         userData: card.mesh.userData,
-        fromZoneId: fromZone.id,
+        fromZoneId: fromZone?.id,
         toZoneId: toZone?.id,
         extendedOptions: {
           addOptions: {
