@@ -89,6 +89,7 @@ export class Hand implements CardZone {
 
     setCardData(card.mesh, 'resting', {
       position: restingPosition,
+      rotation: new Euler()
     });
 
     let initialRotation = getGlobalRotation(card.mesh);

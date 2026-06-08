@@ -179,7 +179,7 @@ const TRANSFORMS = {
 };
 
 function buildSearchLine(cardDetail: CardEntryDetail, config) {
-  let values = config.searchFields.flatMap(({ field, transform, recurse }) => {
+  let values = (config?.searchFields ?? []).flatMap(({ field, transform, recurse }) => {
     const val = cardDetail[field];
     if (recurse && Array.isArray(val)) {
       return val.map(child => buildSearchLine(child, config));
@@ -188,7 +188,7 @@ function buildSearchLine(cardDetail: CardEntryDetail, config) {
     return result ?? '';
   });
 
-  if (config.filterEmtpy) {
+  if (config?.filterEmtpy) {
     values = values.filter(Boolean);
   }
 
@@ -324,7 +324,6 @@ export function getCardMeshTetherPoint(cardMesh: Mesh) {
   const tether = getProjectionVec(vec);
   tether.offset = offset;
   return tether;
-
 }
 
 export function cleanupCard(card: card) {

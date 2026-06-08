@@ -283,8 +283,6 @@ function onDocumentDragStart(event: PointerEvent) {
     .forEach((target, i) => {
       setCardData(target, 'isDragging', true);
 
-      console.log({target})
-
       let dragOffset = [0, 0, 0];
       if (target.userData.location !== 'hand') {
         dragOffset = targets
