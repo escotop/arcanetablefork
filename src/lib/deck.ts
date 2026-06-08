@@ -75,14 +75,16 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
       position,
     ]);
 
-    this.mesh.position.copy(new Vector3(70, -55, this.cards.length * 0.125 + 2.5));
+    // const prevPosition = this.mesh.position.clone();
+    const restingPosition = new Vector3(70, -55, this.cards.length * 0.125 + 2.5);
+    const curPosition = this.mesh.position.clone();
 
     animateObject(this.mesh, {
       completeOnCancel: true,
       path: new CatmullRomCurve3([
-        this.mesh.position.clone(),
-        this.mesh.position.clone().add(new Vector3(0, 0, 5)),
-        this.mesh.position.clone(),
+        curPosition,
+        restingPosition.clone().add(new Vector3(0, 0, 5)),
+        restingPosition,
       ]),
       duration: 0.5,
     });
@@ -159,7 +161,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
       promises.push(this.flipTop());
     }
 
-    Promise.all(promises).then(() => {
+    return Promise.all(promises).then(() => {
       // this is a hack. the animation library should be able to get the cards where they belong
       this.cards.forEach((card, i) => {
         card.mesh.position.set(0, 0, i * CARD_THICKNESS);
@@ -176,7 +178,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
   }
 
   async shuffle(order?: number[]) {
-    if (this.cards[0].mesh.userData.isPublic) {
+    if (this.cards?.[0]?.mesh?.userData?.isPublic) {
       await this.flipTop();
     }
 
@@ -190,7 +192,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
     return newOrder;
   }
 
-  removeCard(cardMesh: Mesh) {
+  async removeCard(cardMesh: Mesh) {
     let index = this.cards.findIndex(card => card.id === cardMesh.userData.id);
     if (index > -1) {
       this.cards.splice(index, 1);
@@ -211,7 +213,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
       });
     }
     if (this.isTopPublic && !this.cards[0]?.mesh.userData.isPublic) {
-      this.flipTop();
+      await this.flipTop();
     }
   }
 
@@ -356,7 +358,6 @@ export async function fetchCardInfo(
 }
 
 export function populateCardInfo(detail: CardEntryDetail, entry?: Card) {
-  console.log({ detail, entry });
   let fields = {
     id: entry?.id || detail?.id,
     set: entry?.set || detail?.set,
