@@ -330,12 +330,12 @@ export const DeckEditor: Component<Props> = props => {
       params.name = formRef.elements['name'].value;
     }
 
-    let cards = Object.values(deck.cards).map(card =>
-      [card.qty, card.name, card.set && `[${card.set}]`].filter(Boolean).join(' '),
-    );
-    let inPlayCards = Object.values(deck.inPlay).map(card =>
-      [card.qty, card.name, card.set && `[${card.set}]`].filter(Boolean).join(' '),
-    );
+    let cards = Object.values(deck.cards)
+      .filter(card => card.qty)
+      .map(card => [card.qty, card.name, card.set && `[${card.set}]`].filter(Boolean).join(' '));
+    // let inPlayCards = Object.values(deck.inPlay).map(card =>
+    //   [card.qty, card.name, card.set && `[${card.set}]`].filter(Boolean).join(' '),
+    // );
 
     let content = [cards].flat().join('\n');
 
