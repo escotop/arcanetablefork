@@ -36,13 +36,13 @@ export class CardGrid implements CardZone {
     public zone: string,
     public id: string = nanoid(),
   ) {
-    const POSITION = new Vector3(-((CARD_WIDTH + 1) * CARDS_PER_ROW) / 2 + CARD_WIDTH / 2, -95, 50);
+    const POSITION = new Vector3(-((CARD_WIDTH + 1) * CARDS_PER_ROW) / 2 + CARD_WIDTH / 2, -100, 75);
     this.mesh = new Group();
     zonesById.set(this.id, this);
     this.mesh.userData.isInteractive = true;
     this.mesh.userData.zone = zone;
     this.mesh.userData.id = id;
-    this.mesh.rotateX(Math.PI * 0.25);
+    this.mesh.rotateX(Math.PI * 0.15);
     this.mesh.position.copy(POSITION);
     this.scrollContainer = new Group();
     this.scrollContainer.userData.isScrollable = true;
@@ -64,7 +64,7 @@ export class CardGrid implements CardZone {
         this.scrollContainer.addEventListener('scroll', event => {
           let position = this.scrollContainer.position
             .clone()
-            .add(new Vector3(0, event.event.deltaY * 0.25, 0));
+            .add(new Vector3(0, event.event.deltaY * 2, 0));
 
           position.y = Math.min(position.y, this.maxScroll);
           position.y = Math.max(position.y, this.minScroll);

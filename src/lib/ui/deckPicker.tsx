@@ -20,10 +20,11 @@ import {
   TextFieldInput,
   TextFieldLabel,
 } from '~/components/ui/text-field';
-import { createDeckStore, useCardSystemContext } from '../deckStore';
-import { cardSystem, colorHashDark, getCardSystem, startSpectating } from '../globals';
+import { createDeckStore} from '../deckStore';
+import { useCardSystemContext } from '../cardSystemContext';
+import {  colorHashDark,  startSpectating } from '../globals';
 import PencilIcon from 'lucide-solid/icons/pencil';
-import { cn } from '../utils';
+import { cn } from '../cnUtil';
 import { Deck, DeckEditor } from './deckEditor';
 import styles from './deckPicker.module.css';
 import CopyLinkButton from '~/components/ui/copy-link-button';

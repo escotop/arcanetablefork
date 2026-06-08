@@ -1,0 +1,27 @@
+---
+date: "2026-06-07T18:38:54-07:00"
+target: beta
+title: "Persistent Settings and Camera Tilt Tuning"
+keywords:
+  - settings
+  - camera tilt
+  - localStorage
+  - table
+  - staging
+description: "Settings now persist between sessions, and camera tilt has been tuned to feel smoother and more subtle. Continued table and hand layout refinements."
+version: 595142d
+changeCount:
+  bugfixes: 1
+  features: 1
+commitRange: https://github.com/odama626/arcanetable/compare/dd2f153...595142d
+---
+
+> **Staging release** — try it at [staging.arcanetable.app](https://staging.arcanetable.app/).
+
+## Features
+
+- **Settings are now saved** — your preferences (like camera tilt) are remembered between sessions. No more re-enabling it every time you reload.
+
+## Fixes
+
+- **Camera tilt smoothness** — the previous build had no easing on the camera tilt, making it feel immediate and jarring. It's now properly smoothed with separate horizontal and vertical sensitivity, and a much gentler motion overall.

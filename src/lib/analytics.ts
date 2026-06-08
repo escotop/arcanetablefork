@@ -1,6 +1,6 @@
 import googleTagManager from '@analytics/google-tag-manager';
 import { useLocation } from '@solidjs/router';
-import Analytics from 'analytics';
+import { Analytics } from 'analytics';
 import { createEffect } from 'solid-js';
 
 export const analytics = Analytics({

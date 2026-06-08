@@ -1,3 +1,3 @@
-FROM caddy:latest 
+FROM caddy:latest
 COPY ./Caddyfile /etc/caddy/Caddyfile
-COPY ./dist /dist
+COPY ./.output/public /dist

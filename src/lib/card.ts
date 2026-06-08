@@ -179,7 +179,7 @@ const TRANSFORMS = {
 };
 
 function buildSearchLine(cardDetail: CardEntryDetail, config) {
-  let values = config.searchFields.flatMap(({ field, transform, recurse }) => {
+  let values = (config?.searchFields ?? []).flatMap(({ field, transform, recurse }) => {
     const val = cardDetail[field];
     if (recurse && Array.isArray(val)) {
       return val.map(child => buildSearchLine(child, config));
@@ -188,7 +188,7 @@ function buildSearchLine(cardDetail: CardEntryDetail, config) {
     return result ?? '';
   });
 
-  if (config.filterEmtpy) {
+  if (config?.filterEmtpy) {
     values = values.filter(Boolean);
   }
 
@@ -277,12 +277,19 @@ export function initializeCardMesh(card: Card, clientId: string): Card {
 }
 
 export function getCardMeshTetherPoint(cardMesh: Mesh) {
+  let offset = { x: 0, y: 0 };
   let targetVertex = 6;
   if (cardMesh.userData.isTapped) {
     targetVertex = 15;
   }
 
-  if (['deck', 'hand'].includes(cardMesh.userData.location)) {
+  let location = cardMesh.userData.location;
+
+  if (location === 'hand') {
+    offset.y = '-50%';
+  }
+
+  if (['deck'].includes(location)) {
     if (cardMesh.userData.isPublic) {
       targetVertex = 8;
     } else {
@@ -290,7 +297,11 @@ export function getCardMeshTetherPoint(cardMesh: Mesh) {
     }
   }
 
-  if (cardMesh.userData.location === 'battlefield') {
+  if (location === 'deck') {
+    offset.y = '-100%';
+  }
+
+  if (['battlefield'].includes(location)) {
     if (cardMesh.userData.isFlipped) {
       if (cardMesh.userData.isTapped) {
         targetVertex = 6;
@@ -311,6 +322,7 @@ export function getCardMeshTetherPoint(cardMesh: Mesh) {
   );
   cardMesh.localToWorld(vec);
   const tether = getProjectionVec(vec);
+  tether.offset = offset;
   return tether;
 }
 

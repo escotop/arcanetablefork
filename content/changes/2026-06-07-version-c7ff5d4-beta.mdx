@@ -1,0 +1,30 @@
+---
+date: "2026-06-07T19:22:52-07:00"
+target: beta
+title: "Deck Paste with Mismatched Card System, Hand Animation Fix, and Scroll Speed"
+keywords:
+  - deck editor
+  - paste
+  - card system
+  - hand
+  - animation
+  - scroll
+  - staging
+description: "You can now paste a deck list even when the card system doesn't have full search config. Fixed a hand card animation bug and increased card grid scroll speed."
+version: c7ff5d4
+changeCount:
+  bugfixes: 2
+  features: 1
+commitRange: https://github.com/odama626/arcanetable/compare/595142d...c7ff5d4
+---
+
+> **Staging release** — try it at [staging.arcanetable.app](https://staging.arcanetable.app/).
+
+## Features
+
+- **Paste deck list with any card system** — pasting a deck list into the editor no longer fails when the card system doesn't have a full search configuration. Cards are loaded and matched more robustly.
+
+## Fixes
+
+- **Hand animation bug** — cards added to hand were missing rotation data, causing them to snap or animate incorrectly. Fixed.
+- **Card grid scroll speed** — scrolling through the card grid was far too slow. It's now 8× faster and much more usable.

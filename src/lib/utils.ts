@@ -116,7 +116,7 @@ export function shuffleItems<T>(items: T[], order?: number[]) {
   return newOrder;
 }
 
-export function restackItems<T>(items: T[], intersections: Intersection[]) {
+export function restackItems(items: Object3D[], intersections: Intersection[]) {
   if (!intersections.length) return;
 
   let targetsById = Object.fromEntries(items.map(target => [target.userData.id, target]));
@@ -125,16 +125,22 @@ export function restackItems<T>(items: T[], intersections: Intersection[]) {
       !targetsById[i.object.userData.id] &&
       (i.object.userData.isInteractive || i.object.userData.zone),
   )!;
+
+  if (!intersection) return;
+
+  const intersectionWorldQuat = new Quaternion();
+  intersection.object.getWorldQuaternion(intersectionWorldQuat);
+
   for (const target of items) {
-    if (!intersection) continue;
     let pointTarget = intersection.point.clone();
-    let zone = zonesById.get(target.userData.zoneId)!;
+
     if (['hand', 'peek', 'tokenSearch'].includes(target.userData.location)) {
-      let globalRotation = getGlobalRotation(target.parent);
-      globalRotation.x += Math.PI / 2;
-      let quarternion = new Quaternion().setFromEuler(globalRotation).invert();
-      target.rotation.setFromQuaternion(quarternion);
+      let parentWorldQuat = new Quaternion();
+      target.parent?.getWorldQuaternion(parentWorldQuat);
+      const localQuat = parentWorldQuat.clone().invert().multiply(intersectionWorldQuat);
+      target.quaternion.copy(localQuat);
     }
+
     target.parent.worldToLocal(pointTarget);
 
     let rotationMatrix = new Matrix4().makeRotationFromEuler(target.rotation);

@@ -3,10 +3,12 @@ import { CatmullRomCurve3, Euler, Group, Object3D, Vector3 } from 'three';
 import { animateObject } from './animations';
 import { cleanupCard, getSerializableCard, setCardData } from './card';
 import { Card, CardZone } from './constants';
-import { cardsById, setHoverSignal, zonesById } from './globals';
+import { cardsById, setHoverSignal, settings, zonesById } from './globals';
 import { getGlobalRotation } from './utils';
 import { createStore, SetStoreFunction } from 'solid-js/store';
 import { createRoot } from 'solid-js';
+
+const HAND_ROTATION = new Euler(Math.PI * 0.2, 0, 0);
 
 export class Hand implements CardZone {
   public mesh: Group;
@@ -25,8 +27,8 @@ export class Hand implements CardZone {
     this.mesh = new Group();
     this.mesh.userData.isInteractive = true;
     this.mesh.userData.zone = 'hand';
-    this.mesh.rotateX(Math.PI * 0.25);
-    this.mesh.position.set(0, -120, 40);
+    this.mesh.setRotationFromEuler(HAND_ROTATION.clone())
+    this.mesh.position.set(0, -105, 10);
     this.mesh.userData.id = id;
     this.mesh.userData.resting = this.mesh.position.clone();
     this.zone = 'hand';
@@ -44,7 +46,7 @@ export class Hand implements CardZone {
   adjustHandPosition() {
     this.mesh.userData.resting = {
       position: new Vector3(this.cards.length * -2.5, this.mesh.position.y, this.mesh.position.z),
-      rotation: new Euler(Math.PI * 0.25, 0, 0),
+      rotation: HAND_ROTATION.clone(),
     };
 
     animateObject(this.mesh, {
@@ -87,7 +89,7 @@ export class Hand implements CardZone {
 
     setCardData(card.mesh, 'resting', {
       position: restingPosition,
-      rotation: new Euler(0, 0, 0),
+      rotation: new Euler()
     });
 
     let initialRotation = getGlobalRotation(card.mesh);
@@ -195,11 +197,12 @@ export class Hand implements CardZone {
 }
 
 function animateFocusCard(handMesh: Group, cards: Card[], index: number) {
+  let hoverHeight = settings.enableCameraTilt ? 10 : 15;
   animateObject(cards[index].mesh, {
     to: {
       position: new Vector3().addVectors(
         cards[index].mesh.userData.resting.position,
-        new Vector3(10, 13, 5),
+        new Vector3(10, hoverHeight, 5),
       ),
       rotation: cards[index].mesh.userData.resting.rotation,
     },

@@ -5,7 +5,8 @@ import { hydrate } from 'solid-js/web';
 import { Button } from '~/components/ui/button';
 import CopyLinkButton from '~/components/ui/copy-link-button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '~/components/ui/dialog';
-import { getDeckStore, useCardSystemContext } from '~/lib/deckStore';
+import { useCardSystemContext } from '~/lib/cardSystemContext';
+import { getDeckStore} from '~/lib/deckStore';
 import {
   cleanup,
   isInitialized,

@@ -1,16 +1,14 @@
 import hotkeys from 'hotkeys-js';
 import {
   createEffect,
+  createMemo,
   createSelector,
   createSignal,
   For,
-  Match,
-  onCleanup,
-  onMount,
   Show,
-  Switch,
   type Component,
 } from 'solid-js';
+import { Mesh } from 'three';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -21,21 +19,24 @@ import {
   DialogTrigger,
 } from '~/components/ui/dialog';
 import { Menubar, MenubarItem, MenubarMenu, MenubarShortcut } from '../../components/ui/menubar';
+import { KEY } from '../constants';
 import {
   cardsById,
   focusRenderer,
   hoverSignal,
   isSpectating,
-  mouseToScreen,
   onConcede,
   playAreas,
   players,
   provider,
   selection,
+  setSettings,
+  settings,
 } from '../globals';
 import CommandPalette from '../shortcuts/command-palette';
 import { untapAll } from '../shortcuts/commands/field';
 import HotkeysTable from '../shortcuts/hotkeys-table';
+import CardOverlay from './cardOverlay';
 import CounterDialog from './counterDialog';
 import Log from './log';
 import MoveMenu from './moveMenu';
@@ -44,15 +45,19 @@ import PeekMenu from './peekMenu';
 import { LocalPlayer, NetworkPlayer } from './playerMenu';
 import RevealMenu from './revealMenu';
 import TokenSearchMenu from './tokenMenu';
-import CardOverlay from './cardOverlay';
-import { Mesh } from 'three';
-import { KEY } from '../constants';
+import { useSearchParams } from '@solidjs/router';
+import SettingsOverlay from './settingsOverlay';
+import { PlayArea } from '../playArea';
 
-const Overlay: Component = () => {
+export default function Overlay() {
   let userData = () => hoverSignal()?.mesh?.userData;
-  let [isLogVisible, setIsLogVisible] = createSignal(false);
-  const [visibleDialog, setVisibleDialog] = createSignal();
-  const isVisibleDialog = createSelector(visibleDialog);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const isDialogVisible = (dialog: string) => dialog === searchParams.dialog;
+  const setVisibleDialog = (dialog?: string) => {
+    setSearchParams({ dialog }, { replace: !dialog });
+  };
+
   const isPublic = () => userData()?.isPublic;
   const isOwner = () => userData()?.clientId === provider?.awareness?.clientID;
   const location = () => userData()?.location;
@@ -123,103 +128,14 @@ const Overlay: Component = () => {
       <Show when={tether() && isCardOwnedByPlayer(cardMesh())}>
         <div
           class={styles.cardActions}
-          style={`--x: ${tether().x}px; --y: ${tether().y}px`}
+          style={`--x: ${tether().x}px; --y: ${tether().y}px; --offset-x: ${tether().offset?.x || 0}; --offset-y: ${tether().offset?.y || 0};`}
           onClick={e => {
             e.stopImmediatePropagation();
           }}>
           <CardOverlay cardMesh={cardMesh()} playArea={playArea} />
         </div>
       </Show>
-      <div class={styles.mainMenu}>
-        <Menubar
-          style='height: auto; white-space: nowrap;'
-          class={`${styles.menu} flex-col items-start`}>
-          <MenubarMenu>
-            <Show when={!isSpectating()}>
-              <MenubarItem class='w-full flex' onClick={() => untapAll(playArea)}>
-                Untap All <MenubarShortcut>{KEY.Shift}R</MenubarShortcut>
-              </MenubarItem>
-              <MenubarItem class='w-full flex' onClick={() => playArea.toggleTokenMenu()}>
-                Add Tokens
-              </MenubarItem>
-              <MoveMenu
-                text={`Battlefield (${playArea.battlefieldZone.observable.cardCount})`}
-                cards={playArea.battlefieldZone.cards}
-                playArea={playArea}
-                fromZone={playArea.battlefieldZone}
-              />
-              <MoveMenu
-                text={`Hand (${playArea.hand.observable.cardCount})`}
-                cards={playArea.hand.cards}
-                playArea={playArea}
-                fromZone={playArea.hand}
-              />
-              <Dialog
-                open={isVisibleDialog('concede')}
-                onOpenChange={isOpen => setVisibleDialog(isOpen ? 'concede' : undefined)}>
-                <DialogTrigger>
-                  <MenubarItem class='width-full'>Concede</MenubarItem>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>Are you sure you want to concede?</DialogHeader>
-                  <DialogDescription>
-                    Conceding will allow you to spectate until the session ends
-                  </DialogDescription>
-                  <DialogFooter>
-                    <Button onClick={() => setVisibleDialog()} variant='ghost'>
-                      Cancel
-                    </Button>
-                    <Button onClick={() => onConcede()}>Concede</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </Show>
-            <MenubarItem class='width-full' onClick={() => setIsLogVisible(visible => !visible)}>
-              {isLogVisible() ? 'Hide Log' : 'Show Log'}
-            </MenubarItem>
-            <Dialog
-              open={isVisibleDialog('shortcuts')}
-              onOpenChange={isOpen => setVisibleDialog(isOpen ? 'shortcuts' : undefined)}>
-              <DialogTrigger>
-                <MenubarItem class='width-full'>Shortcuts</MenubarItem>
-              </DialogTrigger>
-              <DialogContent class='max-w-xl'>
-                <DialogHeader>Shortcuts</DialogHeader>
-                <DialogDescription>
-                  <HotkeysTable />
-                </DialogDescription>
-                <DialogFooter>
-                  <Button onClick={() => setVisibleDialog()}>Close</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-            <Dialog
-              open={isVisibleDialog('donate')}
-              onOpenChange={isOpen => setVisibleDialog(isOpen ? 'donate' : undefined)}>
-              <DialogTrigger>
-                <MenubarItem class='width-full'>Support Us</MenubarItem>
-              </DialogTrigger>
-              <DialogContent class='max-w-xl'>
-                <DialogHeader>Support Arcanetable Development</DialogHeader>
-                <DialogDescription>
-                  <iframe
-                    id='kofiframe'
-                    src='https://ko-fi.com/sparkstonepdx/?hidefeed=true&widget=true&embed=true&preview=true'
-                    style='border:none;width:100%; border-radius: 8px;'
-                    height='712'
-                    title='sparkstonepdx'></iframe>
-                </DialogDescription>
-                <DialogFooter>
-                  <Button onClick={() => setVisibleDialog()}>Close</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </MenubarMenu>
-        </Menubar>
-        <Show when={isLogVisible()}>
-          <Log />
-        </Show>
-      </div>
+      <MainMenu playArea={playArea} />
       <PeekMenu />
       <RevealMenu />
       <TokenSearchMenu />
@@ -227,6 +143,117 @@ const Overlay: Component = () => {
       <CommandPalette playArea={playArea} />
     </div>
   );
-};
+}
 
-export default Overlay;
+export function MainMenu(props: { playArea?: PlayArea }) {
+  let [isLogVisible, setIsLogVisible] = createSignal(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const isDialogVisible = (dialog: string) => dialog === searchParams.dialog;
+  const setVisibleDialog = (dialog?: string) => {
+    setSearchParams({ dialog }, { replace: !dialog });
+  };
+
+  return (
+    <div class={styles.mainMenu}>
+      <Menubar
+        style='height: auto; white-space: nowrap;'
+        class={`${styles.menu} flex-col items-start`}>
+        <MenubarMenu>
+          <Show when={!isSpectating()}>
+            <Show when={props.playArea}>
+              <>
+                <MenubarItem class='w-full flex' onClick={() => untapAll(props.playArea)}>
+                  Untap All <MenubarShortcut>{KEY.Shift}R</MenubarShortcut>
+                </MenubarItem>
+                <MenubarItem class='w-full flex' onClick={() => props.playArea.toggleTokenMenu()}>
+                  Add Tokens
+                </MenubarItem>
+                <MoveMenu
+                  text={`Battlefield (${props.playArea.battlefieldZone.observable.cardCount})`}
+                  cards={props.playArea.battlefieldZone.cards}
+                  playArea={props.playArea}
+                  fromZone={props.playArea.battlefieldZone}
+                />
+                <MoveMenu
+                  text={`Hand (${props.playArea.hand.observable.cardCount})`}
+                  cards={props.playArea.hand?.cards}
+                  playArea={props.playArea}
+                  fromZone={props.playArea.hand}
+                />
+                <Dialog
+                  open={isDialogVisible('concede')}
+                  onOpenChange={isOpen => setVisibleDialog(isOpen ? 'concede' : undefined)}>
+                  <DialogTrigger>
+                    <MenubarItem class='width-full'>Concede</MenubarItem>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>Are you sure you want to concede?</DialogHeader>
+                    <DialogDescription>
+                      Conceding will allow you to spectate until the session ends
+                    </DialogDescription>
+                    <DialogFooter>
+                      <Button onClick={() => setVisibleDialog()} variant='ghost'>
+                        Cancel
+                      </Button>
+                      <Button onClick={() => onConcede()}>Concede</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </>
+            </Show>
+          </Show>
+          <MenubarItem class='width-full' onClick={() => setIsLogVisible(visible => !visible)}>
+            {isLogVisible() ? 'Hide Log' : 'Show Log'}
+          </MenubarItem>
+          <Dialog
+            open={isDialogVisible('shortcuts')}
+            onOpenChange={isOpen => setVisibleDialog(isOpen ? 'shortcuts' : undefined)}>
+            <DialogTrigger>
+              <MenubarItem class='width-full'>Shortcuts</MenubarItem>
+            </DialogTrigger>
+            <DialogContent class='max-w-xl'>
+              <DialogHeader>Shortcuts</DialogHeader>
+              <DialogDescription>
+                <HotkeysTable />
+              </DialogDescription>
+              <DialogFooter>
+                <Button onClick={() => setVisibleDialog()}>Close</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <SettingsOverlay
+            isOpen={isDialogVisible('settings')}
+            onOpen={() => setVisibleDialog('settings')}
+            onClose={() => setVisibleDialog(undefined)}
+          />
+
+          <Dialog
+            open={isDialogVisible('donate')}
+            onOpenChange={isOpen => setVisibleDialog(isOpen ? 'donate' : undefined)}>
+            <DialogTrigger>
+              <MenubarItem class='width-full'>Support Us</MenubarItem>
+            </DialogTrigger>
+            <DialogContent class='max-w-xl'>
+              <DialogHeader>Support Arcanetable Development</DialogHeader>
+              <DialogDescription>
+                <iframe
+                  id='kofiframe'
+                  src='https://ko-fi.com/sparkstonepdx/?hidefeed=true&widget=true&embed=true&preview=true'
+                  style='border:none;width:100%; border-radius: 8px;'
+                  height='712'
+                  title='sparkstonepdx'></iframe>
+              </DialogDescription>
+              <DialogFooter>
+                <Button onClick={() => setVisibleDialog()}>Close</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </MenubarMenu>
+      </Menubar>
+      <Show when={isLogVisible()}>
+        <Log />
+      </Show>
+    </div>
+  );
+}

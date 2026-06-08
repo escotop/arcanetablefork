@@ -23,7 +23,7 @@ const baseURL = import.meta.env.VITE_SITE_URL;
 
 const SITE_DEFAULTS = {
 	title: 'Arcanetable - 3D TCG Playtesting in Your Browser',
-	image: 'https://arcanetable.app/hero.png',
+	image: 'https://arcanetable.app/table.webp',
 	url: baseURL,
 	keywords: [
 		// core product
@@ -63,7 +63,7 @@ const SITE_DEFAULTS = {
 		'TCG prototype testing',
 	],
 	description:
-		'The ultimate 3D playtesting platform for Magic: The Gathering and other TCGs. Test your decks, play with friends, and perfect your paper decks — right in your browser.',
+		'The ultimate 3D playtesting platform for Magic: The Gathering and other TCGs. Test your decks, play with friends, and perfect your paper decks. Right in your browser.',
 };
 
 function getValue(value: string | undefined, defaultValue: string) {
@@ -150,7 +150,7 @@ export function ArticleMetaTags(props: ArticleMetaTagsProps) {
 				url: baseURL,
 				logo: {
 					'@type': 'ImageObject',
-					url: new URL('/favicon-96x96.png', baseURL).toString(),
+					url: new URL('/favicon.png', baseURL).toString(),
 				},
 			},
 		};

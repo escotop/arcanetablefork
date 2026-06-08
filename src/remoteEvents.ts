@@ -1,16 +1,16 @@
 import uniqBy from 'lodash-es/uniqBy';
 import { nanoid } from 'nanoid';
-import { Vector3 } from 'three';
+import { Mesh, Vector3 } from 'three';
 import { animateObject, queueAnimationGroup } from './lib/animations';
 import { cloneCard, splitUserdata, setCardData } from './lib/card';
 import { Card } from './lib/constants';
 import {
+  applyPlayerTransform,
   cardsById,
   expect,
   gameLog,
   logs,
   onConcede,
-  PLAY_AREA_ROTATIONS,
   playAreas,
   playerCount,
   processedEvents,
@@ -86,9 +86,7 @@ const EVENTS = {
     setPlayAreas(event.clientID, playArea);
     setPlayerCount(count => count + 1);
 
-    console.log({ playerCount: playerCount() });
-    const rotation = PLAY_AREA_ROTATIONS[playerCount()];
-    playArea.mesh.rotateZ(rotation);
+    applyPlayerTransform(playArea.mesh, playerCount());
   },
   concede(event: Event, playArea: PlayArea) {
     onConcede(event.clientID);

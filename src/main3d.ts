@@ -6,9 +6,18 @@ import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { cancelAnimation, renderAnimations } from './lib/animations';
 import { cloneCard, getCardMeshTetherPoint, setCardData, updateTextureAnimation } from './lib/card';
-import { CARD_STACK_OFFSET, CARD_THICKNESS, GameOptions, LoadSettings } from './lib/constants';
+import {
+  CARD_STACK_OFFSET,
+  CARD_THICKNESS,
+  GameOptions,
+  LoadSettings,
+  LOOK_EASE,
+  LOOK_STRENGTH_X,
+  LOOK_STRENGTH_Y,
+} from './lib/constants';
 import {
   animating,
+  baseCameraQuaternion,
   camera,
   cardsById,
   clock,
@@ -36,6 +45,7 @@ import {
   setIsIntitialized,
   setPlayAreas,
   setPlayers,
+  settings,
   table,
   updateFocusCamera,
   zonesById,
@@ -54,6 +64,7 @@ var container;
 let composer: EffectComposer;
 let raycaster: THREE.Raycaster;
 let mouse: THREE.Vector2;
+let cameraMouse: THREE.Vector2;
 let outlinePass: OutlinePass;
 let dragTargets: THREE.Object3D[];
 let hand: Hand;
@@ -100,6 +111,7 @@ export async function localInit(gameOptions: GameOptions) {
   scene.add(directionalLight);
   raycaster = new THREE.Raycaster();
   mouse = new THREE.Vector2();
+  cameraMouse = new THREE.Vector2();
 
   gameLog.observe(processEvents);
 
@@ -110,7 +122,8 @@ export async function localInit(gameOptions: GameOptions) {
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
 
-  renderer.domElement.addEventListener('mousemove', onDocumentMouseMove, false);
+  renderer.domElement.addEventListener('mousemove', onRendererMouseMove, false);
+  document.addEventListener('mousemove', onDocumentMouseMove, false);
   document.addEventListener('click', onDocumentClick, false);
   document.addEventListener('dragstart', onDocumentDragStart, false);
   document.addEventListener('mouseup', onDocumentDrop, false);
@@ -381,6 +394,13 @@ function onWindowResize() {
 }
 
 function onDocumentMouseMove(event) {
+  cameraMouse.set(
+    (event.clientX / window.innerWidth) * 2 - 1,
+    -(event.clientY / window.innerHeight) * 2 + 1,
+  );
+}
+
+function onRendererMouseMove(event) {
   mouse.set(
     (event.clientX / window.innerWidth) * 2 - 1,
     -(event.clientY / window.innerHeight) * 2 + 1,
@@ -534,6 +554,10 @@ function render3d(delta: number) {
   renderAnimations(time);
   updateTextureAnimation(delta);
 
+  if (settings.enableCameraTilt) {
+    animateCameraLook();
+  }
+
   raycaster.setFromCamera(mouse, camera);
 
   if (!selection.enabled) {
@@ -551,7 +575,7 @@ function render3d(delta: number) {
   }
 
   let signal = hoverSignal();
-  if (signal?.mesh && signal?.mesh.userData.location !== 'deck') {
+  if (signal?.mesh) {
     const tetherPoint = getCardMeshTetherPoint(signal.mesh);
     if (!tetherPoint.equals(signal.tether)) {
       setHoverSignal(signal => ({
@@ -561,8 +585,9 @@ function render3d(delta: number) {
     }
   }
 
-  camera.lookAt(scene.position);
+  // camera.lookAt(scene.position);
   composer.render();
+
   if (hoverSignal()?.mesh) {
     let mesh = hoverSignal().mesh as THREE.Mesh;
     updateFocusCamera(mesh);
@@ -588,4 +613,21 @@ function render3d(delta: number) {
     focusRenderer.render(scene, focusCamera);
     materials.forEach(mat => (mat.wireframe = false));
   }
+}
+
+let currentYaw = 0;
+let currentPitch = 0;
+
+function animateCameraLook() {
+  const targetYaw = -cameraMouse.x * LOOK_STRENGTH_X;
+  const targetPitch = cameraMouse.y * LOOK_STRENGTH_Y;
+
+  currentYaw += (targetYaw - currentYaw) * LOOK_EASE;
+  currentPitch += (targetPitch - currentPitch) * LOOK_EASE;
+
+  // Apply on top of base rotation
+  const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), currentYaw);
+  const pitchQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), currentPitch);
+
+  camera.quaternion.copy(baseCameraQuaternion).multiply(yawQ).multiply(pitchQ);
 }

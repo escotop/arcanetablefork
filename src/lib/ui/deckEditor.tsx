@@ -33,27 +33,34 @@ import {
   TextField,
   TextFieldInput,
   TextFieldLabel,
+  TextFieldTextArea,
 } from '~/components/ui/text-field';
 import { getCardArtImage, getCardImage } from '../card';
-import { CardEntry, CardEntryDetail, DetailedCardEntry, Deck, FORMATS } from '../constants';
+import {
+  CardEntry,
+  CardEntryDetail,
+  DetailedCardEntry,
+  Deck,
+  FORMATS,
+  CardSystem,
+} from '../constants';
 import { fetchCardInfo, loadCardList, populateCardInfo } from '../deck';
-import { CardSystem, cardSystem, colorHashDark } from '../globals';
-import CircleInfoIcon from 'lucide-solid/icons/info';
-import CloseIcon from 'lucide-solid/icons/x';
+import { cardSystem, colorHashDark } from '../globals';
 import { cn } from '../utils';
 import styles from './deckEditor.module.css';
 import CardList from './deckEditor/cardList';
 import random from 'lodash-es/random';
-import { Command, CommandInput, CommandItem, CommandList } from '~/components/ui/command';
+import { Command, CommandInput } from '~/components/ui/command';
 import { ToggleGroup, ToggleGroupItem } from '~/components/ui/toggle-group';
-import { capitalize, create, debounce, isSafeInteger } from 'lodash-es';
+import { capitalize, debounce } from 'lodash-es';
 import { createStore, SetStoreFunction, unwrap } from 'solid-js/store';
-import { getCardKey, hydrateDeck, serializeDeck, useCardSystemContext } from '../deckStore';
+import { getCardKey, hydrateDeck, serializeDeck } from '../deckStore';
+import { useCardSystemContext } from '../cardSystemContext';
 import AddIcon from 'lucide-solid/icons/plus';
 import SubIcon from 'lucide-solid/icons/minus';
 import SearchIcon from 'lucide-solid/icons/search';
 import { useSearchParams } from '@solidjs/router';
-import { trackStore, trackDeep } from '@solid-primitives/deep';
+import { trackDeep } from '@solid-primitives/deep';
 import DownloadIcon from 'lucide-solid/icons/download';
 import {
   Select,
@@ -167,11 +174,13 @@ export const DeckEditor: Component<Props> = props => {
   async function parseDeckList(cardListText: string) {
     let newCardEntries = loadCardList(cardListText);
     let newCardList = await Promise.all(newCardEntries.map(entry => fetchCardInfo(entry, cache)));
+
     for (const card of newCardList) {
-      if (deck.cards[card.id]) {
-        updateDeck('cards', card.id, 'qty', qty => qty + card.qty);
+      const key = getCardKey(card);
+      if (card?.id && deck.cards?.[key]) {
+        updateDeck('cards', key, 'qty', qty => qty + card.qty);
       } else {
-        updateDeck('cards', card.id, card);
+        updateDeck('cards', key, card);
       }
     }
   }
@@ -463,10 +472,10 @@ export const DeckEditor: Component<Props> = props => {
               <CardList
                 entries={getDeckList()}
                 addCard={entry => {
-                  updateDeck('cards', entry.id, 'qty', number => number + 1);
+                  updateDeck('cards', getCardKey(entry), 'qty', number => number + 1);
                 }}
                 removeCard={entry =>
-                  updateDeck('cards', entry.id, 'qty', number => Math.max(number - 1, 0))
+                  updateDeck('cards', getCardKey(entry), 'qty', number => Math.max(number - 1, 0))
                 }
               />
             </Show>
@@ -746,7 +755,7 @@ export const DeckEditor: Component<Props> = props => {
 
 function EmptyGridContainer() {
   return (
-    <div class='p-8'>
+    <div class='p-8 flex-col flex gap-4'>
       <Alert class='inline-block'>
         <AlertTitle>Welcome to the Deck Editor</AlertTitle>
         <AlertDescription>
@@ -756,6 +765,13 @@ function EmptyGridContainer() {
           <p>Or start fresh by searching for cards above</p>
         </AlertDescription>
       </Alert>
+      {/*<Alert>
+        <AlertTitle>Paste your deck list here or drag and drop</AlertTitle>
+        <TextField>
+          <TextFieldTextArea rows={20} />
+        </TextField>
+        <Button>Submit Deck List</Button>
+      </Alert>*/}
     </div>
   );
 }

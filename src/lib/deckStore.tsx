@@ -1,15 +1,15 @@
 import { createStore, SetStoreFunction, unwrap } from 'solid-js/store';
 import { nanoid } from 'nanoid';
 import { createContext, onMount, ParentProps, useContext } from 'solid-js';
-import { CardEntry, Deck, DetailedCardEntry } from './constants';
+import { CardEntry, Deck, DetailedCardEntry, CardSystem } from './constants';
 import { loadCardList, fetchCardInfo } from './deck';
 import { getCardArtImage } from './card';
 import {
-  CardSystem,
   DEFAULT_CARD_SYSTEM_URI,
-  setCardSystem as setGlobaCardSystem,
+  setCardSystem as setGlobalCardSystem,
 } from './globals';
 import { useSearchParams } from '@solidjs/router';
+import { CardSystemContext } from './cardSystemContext';
 
 const defaultDeckStore = {
   decks: {},
@@ -144,7 +144,7 @@ function getCardSystemStore() {
   let state = JSON.parse(stateString);
   for (const [name, system] of Object.entries(state.systems)) {
     if (!system) {
-      delete state.systems[name] 
+      delete state.systems[name]
     }
   }
   return state;
@@ -171,7 +171,7 @@ export function CardSystemProvider(props: ParentProps) {
 
     updateStore('systems', system.id, system);
     updateStore('system', system.id);
-    setGlobaCardSystem(system);
+    setGlobalCardSystem(system);
     return system;
   }
 
@@ -199,23 +199,4 @@ export function CardSystemProvider(props: ParentProps) {
       {props.children}
     </CardSystemContext.Provider>
   );
-}
-
-interface CardSystemStore {
-  systems: Record<string, CardSystem>;
-  system: string;
-}
-
-type CardSystemStoreContextType = [
-  CardSystemStore,
-  {
-    update: SetStoreFunction<CardSystemStore>;
-    setCardSystem(name: string): Promise<CardSystem>;
-    initCardSystem(uri: string): Promise<CardSystem>;
-  },
-];
-const CardSystemContext = createContext<CardSystemStoreContextType>();
-
-export function useCardSystemContext() {
-  return useContext(CardSystemContext) as CardSystemStoreContextType;
 }
