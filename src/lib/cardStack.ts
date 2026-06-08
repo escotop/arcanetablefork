@@ -96,7 +96,7 @@ export class CardStack implements CardZone {
 
     let initialRotation = card.mesh.rotation;
     if (card.mesh.parent) {
-      initialRotation = new Euler().setFromQuaternion(card.mesh.parent.quaternion.invert());
+      initialRotation = new Euler().setFromQuaternion(card.mesh.parent.quaternion.clone().invert());
     }
 
     animateObject(card.mesh, {

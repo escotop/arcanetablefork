@@ -103,7 +103,7 @@ export class CardArea implements CardZone<{ positionArray?: [number, number, num
 
     let initialRotation = card.mesh.rotation;
     if (card.mesh.parent) {
-      initialRotation = new Euler().setFromQuaternion(card.mesh.parent.quaternion.invert());
+      initialRotation = new Euler().setFromQuaternion(card.mesh.parent.quaternion.clone().invert());
     }
 
     if (card.mesh.userData.isFlipped) {
