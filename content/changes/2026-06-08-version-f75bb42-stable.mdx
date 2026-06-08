@@ -1,0 +1,25 @@
+---
+date: "2026-06-08T00:35:42-07:00"
+target: stable
+title: "Network Animation Fixes and Deck Stability"
+keywords:
+  - multiplayer
+  - network
+  - animation
+  - deck
+  - race condition
+  - stability
+description: "Fixed a long-standing set of serialization bugs that broke remote card animations for other players, plus deck flip hangs and animation queue corruption."
+version: f75bb42
+changeCount:
+  bugfixes: 4
+  features: 0
+commitRange: https://github.com/odama626/arcanetable/compare/280dcfb...f75bb42
+---
+
+## Fixes
+
+- **Remote card animations** - card animations were silently never playing for other players due to Three.js objects (positions, rotations, curves) not being correctly serialized and reconstructed across the network. Fixed.
+- **Deck flip hang** - the deck flip animation would hang indefinitely when triggered on an empty deck. Fixed.
+- **Animation queue corruption** - rapidly adding cards to the top of a deck with keep-flipped enabled could corrupt the animation queue. Fixed.
+- **Animation data guards** - added runtime checks that surface bad animation data at the call site rather than crashing silently several frames later.

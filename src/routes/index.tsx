@@ -6,7 +6,6 @@ import PatreonIcon from '~/lib/icons/patreon.svg';
 import DiscordIcon from '~/lib/icons/discord-brands-solid.svg';
 import MetaTags, { JsonLd } from '~/lib/meta-tags';
 import { SHORTCUTS, BATTLEFIELD_SHORTCUTS, OVERLAY_SHORTCUTS } from '~/lib/shortcuts/hotkeys-table';
-import { Button } from '~/components/ui/button';
 import { useClientCardSystemContext } from '~/lib/cardSystemProviderClient';
 import softwareLd from '~/lib/json-ld/software.json';
 import faqLd from '~/lib/json-ld/faq.json';
