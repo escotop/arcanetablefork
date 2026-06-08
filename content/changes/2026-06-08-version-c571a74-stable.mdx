@@ -1,0 +1,20 @@
+---
+date: "2026-06-08T01:29:11-07:00"
+target: stable
+title: "Hotfix: Production Load Crash"
+keywords:
+  - hotfix
+  - loading
+  - stability
+  - crash
+description: "Fixed a crash on production where the deck picker would try to render before the card system context was ready, causing a blank screen or crash."
+version: c571a74
+changeCount:
+  bugfixes: 1
+  features: 0
+commitRange: https://github.com/odama626/arcanetable/compare/f75bb42...c571a74
+---
+
+## Fixes
+
+- **Production load crash** - in certain load conditions, the deck picker would try to render before the card system context was ready, causing a crash or blank screen. Fixed with proper fallbacks.
