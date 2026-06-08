@@ -1,4 +1,12 @@
-import { CatmullRomCurve3, Euler, Object3D, Quaternion, Vector3 } from 'three';
+import {
+  CatmullRomCurve3,
+  CurveJSON,
+  Euler,
+  EulerTuple,
+  Object3D,
+  Quaternion,
+  Vector3,
+} from 'three';
 import { clock, expect, sendEvent } from './globals';
 import { setCardData } from './card';
 
@@ -20,6 +28,23 @@ export interface AnimationOpts {
   onComplete?: () => void;
 }
 
+export interface SerializedAnimationOpts {
+  from?: {
+    position?: number[];
+    rotation?: EulerTuple;
+    quarternion?: number[];
+  };
+  to?: {
+    position?: number[];
+    rotation?: EulerTuple;
+    quarternion?: number[];
+  };
+  path?: CurveJSON;
+  duration: number;
+  start?: number;
+  completeOnCancel?: boolean;
+}
+
 export interface AnimationGroup {
   animatingObjects: Set<{ obj: Object3D } & AnimationOpts>;
   animationMap: Map<string, any>;
@@ -27,6 +52,83 @@ export interface AnimationGroup {
 
 export const animationGroupQueue: AnimationGroup[] = [];
 queueAnimationGroup();
+
+export function rehydrateAnimation(serialized: SerializedAnimationOpts): AnimationOpts {
+  const opts = structuredClone(serialized) as AnimationOpts;
+
+  if (serialized.to?.position) {
+    if (!Array.isArray(serialized.to.position))
+      throw new Error(
+        `rehydrateAnimation opts.to.position not serialized ${serialized.to.position}`,
+      );
+    opts.to!.position = new Vector3().fromArray(serialized.to.position);
+  }
+  if (serialized.from?.position) {
+    if (!Array.isArray(serialized.from.position))
+      throw new Error(
+        `rehydrateAnimation opts.from.position not serialized ${serialized.from.position}`,
+      );
+    opts.from!.position = new Vector3().fromArray(serialized.from.position);
+  }
+
+  if (serialized.to?.rotation) {
+    if (!Array.isArray(serialized.to.rotation))
+      throw new Error(
+        `rehydrateAnimation opts.to.rotation not serialized ${serialized.to.rotation}`,
+      );
+    opts.to!.rotation = new Euler().fromArray(serialized.to.rotation);
+  }
+  if (serialized.from?.rotation) {
+    if (!Array.isArray(serialized.from.rotation))
+      throw new Error(
+        `rehydrateAnimation opts.from.rotation not serialized ${serialized.from.rotation}`,
+      );
+    opts.from!.rotation = new Euler().fromArray(serialized.from.rotation);
+  }
+
+  if (serialized.to?.quarternion) {
+    if (!Array.isArray(serialized.to.quarternion))
+      throw new Error(
+        `rehydrateAnimation opts.to.quarternion not serialized ${serialized.to.quarternion}`,
+      );
+    opts.to!.quarternion = new Quaternion().fromArray(serialized.to.quarternion);
+  }
+  if (serialized.from?.quarternion) {
+    if (!Array.isArray(serialized.from.quarternion))
+      throw new Error(
+        `rehydrateAnimation opts.from.quarternion not serialized ${serialized.from.quarternion}`,
+      );
+    opts.from!.quarternion = new Quaternion().fromArray(serialized.from.quarternion);
+  }
+
+  if (serialized.path) {
+    if (!Array.isArray(serialized.path))
+      throw new Error(`rehydrateAnimation opts.to.rotation not serialized ${serialized.path}`);
+    opts.path = new CatmullRomCurve3().fromJSON(serialized.path);
+  }
+  return opts;
+}
+
+export function serializeAnimation(opts: AnimationOpts): SerializedAnimationOpts {
+  const { to, from, path, ...rest } = opts;
+  const serialized: any = { ...rest };
+
+  if (to) {
+    serialized.to = {};
+    if (to.position) serialized.to.position = to.position.toArray();
+    if (to.rotation) serialized.to.rotation = to.rotation.toArray();
+    if (to.quarternion) serialized.to.quarternion = to.quarternion.toArray();
+  }
+  if (from) {
+    serialized.from = {};
+    if (from.position) serialized.from.position = from.position.toArray();
+    if (from.rotation) serialized.from.rotation = from.rotation.toArray();
+    if (from.quarternion) serialized.from.quarternion = from.quarternion.toArray();
+  }
+  if (path) serialized.path = path.toJSON();
+
+  return serialized;
+}
 
 export function queueAnimationGroup(emit?: boolean) {
   if (emit) {
@@ -41,6 +143,13 @@ export function queueAnimationGroup(emit?: boolean) {
 export function animateObject(obj: Object3D, opts: AnimationOpts) {
   expect(animationGroupQueue.length > 0, `animationGroupQueue empty!`);
   const { animationMap, animatingObjects } = animationGroupQueue.at(-1)!;
+
+  if (opts.to?.position && !(opts.to.position instanceof Vector3)) {
+    throw new Error(`animateObject: to.position is not a Vector3 for object ${obj.userData.id}`);
+  }
+  if (opts.from?.position && !(opts.from.position instanceof Vector3)) {
+    throw new Error(`animateObject: from.position is not a Vector3 for object ${obj.userData.id}`);
+  }
 
   if (opts.path) {
     const badIndex = opts.path.points.findIndex(p => !p);

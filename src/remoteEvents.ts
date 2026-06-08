@@ -1,7 +1,7 @@
 import uniqBy from 'lodash-es/uniqBy';
 import { nanoid } from 'nanoid';
-import { Mesh, Vector3 } from 'three';
-import { animateObject, queueAnimationGroup } from './lib/animations';
+import { Vector3 } from 'three';
+import { animateObject, queueAnimationGroup, rehydrateAnimation } from './lib/animations';
 import { cloneCard, splitUserdata, setCardData } from './lib/card';
 import { Card } from './lib/constants';
 import {
@@ -44,7 +44,6 @@ export async function processEvents() {
       const srcEvent = gameLog.get(processedEvents());
       setProcessedEvents(e => e + 1);
       if (srcEvent.type === 'bulk') {
-        console.log(srcEvent);
         timing = srcEvent.timing;
         events = srcEvent.events.map(e => {
           e.clientID = srcEvent.clientID;
@@ -72,7 +71,6 @@ export async function processEvents() {
 }
 
 export async function handleEvent(event, playArea: PlayArea) {
-  console.log(event);
   expect(!!EVENTS[event.type], `${event.type} not implemented`);
   let card = cardsById.get(event.payload?.userData?.id);
   await EVENTS[event.type](event, playArea, card);
@@ -107,7 +105,7 @@ const EVENTS = {
   animateObject(event: Event, _playArea: PlayArea, card: Card) {
     const [_, cloneable] = splitUserdata(event.payload.userData);
     Object.assign(card.mesh.userData, cloneable);
-    animateObject(card.mesh, event.payload.animation);
+    animateObject(card.mesh, rehydrateAnimation(event.payload.animation));
   },
   async transferCard(event: Event, playArea: PlayArea, card: Card) {
     let fromZone = zonesById.get(event.payload.fromZoneId)!;

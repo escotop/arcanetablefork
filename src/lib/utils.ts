@@ -5,7 +5,7 @@ import set from 'lodash-es/set';
 import { twMerge } from 'tailwind-merge';
 import { Euler, Intersection, Matrix4, Mesh, Object3D, Quaternion, Vector3 } from 'three';
 import { CARD_THICKNESS, CARD_WIDTH } from './constants';
-import { provider, zonesById } from './globals';
+import { provider } from './globals';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

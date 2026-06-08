@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer';
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
-import { cancelAnimation, renderAnimations } from './lib/animations';
+import { cancelAnimation, renderAnimations, serializeAnimation } from './lib/animations';
 import { cloneCard, getCardMeshTetherPoint, setCardData, updateTextureAnimation } from './lib/card';
 import {
   CARD_STACK_OFFSET,
@@ -331,13 +331,13 @@ async function onDocumentDrop(event) {
         type: 'animateObject',
         payload: {
           userData: target.userData,
-          animation: {
+          animation: serializeAnimation({
             duration: 0.2,
             to: {
               position: target.position,
               rotation: target.rotation,
             },
-          },
+          }),
         },
       });
       continue;
@@ -554,7 +554,7 @@ function render3d(delta: number) {
   renderAnimations(time);
   updateTextureAnimation(delta);
 
-  if (settings.enableCameraTilt) {
+  if (settings.enableCameraTilt && !isSpectating()) {
     animateCameraLook();
   }
 

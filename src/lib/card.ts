@@ -233,13 +233,6 @@ export function splitUserdata(userData: CardUserData) {
   return [transferable, cloneable];
 }
 
-export function shuffle(cards: Card[]) {
-  for (let i = 0; i < cards.length - 2; i++) {
-    let j = (Math.random() * i) | 0;
-    [cards[i], cards[j]] = [cards[j], cards[i]];
-  }
-}
-
 function getImageUris(card: { detail: CardEntryDetail }, face = 0) {
   return card?.detail?.card_faces?.[face]?.image_uris ?? card?.detail?.image_uris;
 }
