@@ -1,0 +1,25 @@
+---
+date: "2026-06-07T21:07:52-07:00"
+target: stable
+title: "Shuffle Fix, Deck Animation, and Stability"
+keywords:
+  - shuffle
+  - deck
+  - animation
+  - stability
+  - crash
+description: "Fixed a statistical bias in the shuffle algorithm, corrected the deck bounce animation, fixed visual glitches when moving cards between zones, and improved crash resistance."
+version: 280dcfb
+changeCount:
+  bugfixes: 5
+  features: 0
+commitRange: https://github.com/odama626/arcanetable/compare/f5443da...280dcfb
+---
+
+## Fixes
+
+- **Shuffle bias** — the shuffle algorithm had a statistical bias that gave cards near the top of the deck a higher chance of staying there. Fixed with a correct Fisher-Yates implementation.
+- **Deck bounce animation** — the bounce animation when cards are added to the deck was using the wrong position as its anchor, making it look wrong. Fixed.
+- **Card rotation mutation** — moving cards between zones (graveyard, stacks) was accidentally mutating the parent mesh rotation, causing visual glitches. Fixed by cloning the quaternion before inverting.
+- **Transfer crash** — transferring a card with a missing source zone could crash the game. Now handled gracefully.
+- **Animation path guard** — added a guard against undefined points in card movement paths, preventing a class of rare animation crashes.
