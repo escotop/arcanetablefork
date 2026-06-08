@@ -4,7 +4,6 @@ import { nitroV2Plugin } from '@solidjs/vite-plugin-nitro-2';
 import solidSvg from 'vite-plugin-solid-svg';
 import { compression } from 'vite-plugin-compression2';
 import path from 'node:path';
-import fs from 'node:fs';
 import mdx from '@mdx-js/rollup';
 import remarkGfm from 'remark-gfm';
 import remarkFrontmatter from 'remark-frontmatter';

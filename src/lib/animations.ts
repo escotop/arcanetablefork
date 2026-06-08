@@ -42,6 +42,15 @@ export function animateObject(obj: Object3D, opts: AnimationOpts) {
   expect(animationGroupQueue.length > 0, `animationGroupQueue empty!`);
   const { animationMap, animatingObjects } = animationGroupQueue.at(-1)!;
 
+  if (opts.path) {
+    const badIndex = opts.path.points.findIndex(p => !p);
+    if (badIndex !== -1) {
+      throw new Error(
+        `animateObject: CatmullRomCurve3 has undefined point at index ${badIndex} for object ${obj.userData.id} (${obj.userData.location})`,
+      );
+    }
+  }
+
   if (animationMap.has(obj.uuid)) {
     let animation = animationMap.get(obj.uuid);
     if (animation.completeOnCancel) renderAnimation(animationMap.get(obj.uuid), 1);
