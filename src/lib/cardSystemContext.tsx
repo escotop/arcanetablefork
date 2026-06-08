@@ -16,7 +16,7 @@ export type CardSystemStoreContextType = [
   },
 ];
 
-export const CardSystemContext = createContext<CardSystemStoreContextType>();
+export const CardSystemContext = createContext<CardSystemStoreContextType>([undefined, {}]);
 
 export function useCardSystemContext() {
   return useContext(CardSystemContext) as CardSystemStoreContextType;

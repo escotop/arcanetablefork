@@ -332,7 +332,7 @@ export function cleanup() {
   setIsSpectating(false);
   setIsIntitialized(false);
 
-  gui.destroy();
+  gui?.destroy?.();
   gui = null;
 
   if (!renderer) return;

@@ -6,7 +6,7 @@ import { Button } from '~/components/ui/button';
 import CopyLinkButton from '~/components/ui/copy-link-button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '~/components/ui/dialog';
 import { useCardSystemContext } from '~/lib/cardSystemContext';
-import { getDeckStore} from '~/lib/deckStore';
+import { getDeckStore } from '~/lib/deckStore';
 import {
   cleanup,
   isInitialized,
@@ -40,20 +40,22 @@ const GamePage: Component = props => {
         <Overlay />
         <HotKeys />
       </Show>
-      <Show when={!selectedDeckId() && !isSpectating()}>
-        <DeckPicker
-          onStart={async settings => {
-            setSelectedDeckId(settings.deckId);
-            const deckStore = getDeckStore();
-            let deck = structuredClone(unwrap(deckStore.decks[settings.deckId]));
-            const cardSystem = await setCardSystem(deck.system || cardSystemStore.system);
-            setSearchParams({ system: cardSystem.uri }, { replace: true });
+      <Show when={cardSystemStore}>
+        <Show when={!selectedDeckId() && !isSpectating()}>
+          <DeckPicker
+            onStart={async settings => {
+              setSelectedDeckId(settings.deckId);
+              const deckStore = getDeckStore();
+              let deck = structuredClone(unwrap(deckStore.decks[settings.deckId]));
+              const cardSystem = await setCardSystem(deck.system || cardSystemStore.system);
+              setSearchParams({ system: cardSystem.uri }, { replace: true });
 
-            settings.deck = deck;
-            settings.cardSystem = cardSystem;
-            loadDeckAndJoin(settings);
-          }}
-        />
+              settings.deck = deck;
+              settings.cardSystem = cardSystem;
+              loadDeckAndJoin(settings);
+            }}
+          />
+        </Show>
       </Show>
       <Show when={selectedDeckId() && players().length < 2 && !inviteDismissed()}>
         <Dialog open onOpenChange={open => setInviteDismissed(!open)}>

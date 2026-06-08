@@ -179,7 +179,7 @@ export function CardSystemProvider(props: ParentProps) {
     let systemUri = searchParams.system;
     if (systemUri && typeof systemUri === 'string') {
       await initCardSystem(systemUri);
-      setSearchParams({ system: undefined });
+      setSearchParams({ system: undefined }, { replace: true});
     } else {
       systemUri = store.systems[store.system]?.uri;
       await initCardSystem(systemUri);
