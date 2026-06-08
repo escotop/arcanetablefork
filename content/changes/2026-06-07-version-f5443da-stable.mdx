@@ -1,0 +1,38 @@
+---
+date: "2026-06-07T20:01:15-07:00"
+target: stable
+title: "4-Player Table, Night Sky, Settings, Changelog Page, and More"
+keywords:
+  - 4 players
+  - multiplayer
+  - table
+  - skybox
+  - night sky
+  - settings
+  - camera tilt
+  - changelog
+  - deck editor
+description: "A larger table supporting four players, a night sky environment, an opt-in head-tilt camera, a live changelog page, and persistent settings."
+version: f5443da
+changeCount:
+  bugfixes: 6
+  features: 5
+commitRange: https://github.com/odama626/arcanetable/compare/389c2c7...f5443da
+---
+
+## Features
+
+- **4-player table** — the table has been widened with player areas repositioned to support up to four players on different sides.
+- **Night sky** — the 3D scene now has a full HDR night sky environment, adding depth and atmosphere to the table.
+- **Head-tilt camera** — an optional subtle camera sway as you move your mouse, giving the table a more physical feel. Enable it under Settings.
+- **Settings menu** — a new Settings option in the in-game menu, with preferences saved between sessions.
+- **Live changelog** — the full release history is now available at [arcanetable.app/changes](https://arcanetable.app/changes), linked from the footer.
+
+## Fixes
+
+- **Deck paste** — pasting a deck list into the editor was failing when card keys didn't match exactly. Cards are now loaded and matched more robustly.
+- **MTG card server** — fixed a typo in the MTG card server URL that was causing card lookups to fail when starting a game from the landing page.
+- **Nav links** — Discord, GitHub, and Patreon links in the nav were not opening in a new tab. Fixed.
+- **Custom card system search** — fixed a crash when a card system doesn't define search fields.
+- **Hand animation** — cards added to hand were missing rotation data, causing them to snap or animate incorrectly.
+- **Card grid scroll speed** — scrolling through the card grid was far too slow. It's now much faster and usable.
