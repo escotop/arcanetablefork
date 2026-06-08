@@ -109,7 +109,7 @@ export async function sha1(input) {
 export function shuffleItems<T>(items: T[], order?: number[]) {
   let newOrder = [];
   for (let i = 0; i < items.length; i++) {
-    let j = order?.[i] ?? (Math.random() * i) | 0;
+    let j = order?.[i] ?? (Math.random() * (i + 1)) | 0;
     [items[i], items[j]] = [items[j], items[i]];
     newOrder[i] = j;
   }
