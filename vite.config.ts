@@ -1,5 +1,5 @@
 import { solidStart } from '@solidjs/start/config';
-import { defineConfig } from 'vite';
+import { build, defineConfig } from 'vite';
 import { nitroV2Plugin } from '@solidjs/vite-plugin-nitro-2';
 import solidSvg from 'vite-plugin-solid-svg';
 import { compression } from 'vite-plugin-compression2';
@@ -10,10 +10,12 @@ import remarkFrontmatter from 'remark-frontmatter';
 import remarkMDXFrontmatter from 'remark-mdx-frontmatter';
 import yaml from '@modyfi/vite-plugin-yaml';
 import remarkHasBody from './src/lib/spark/remark-has-body';
+import { sentryVitePlugin } from '@sentry/vite-plugin';
 
 export default defineConfig({
   plugins: [
     solidStart(),
+    sentryVitePlugin(),
     nitroV2Plugin({
       preset: 'static',
       prerender: {

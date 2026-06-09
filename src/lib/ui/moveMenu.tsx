@@ -25,7 +25,14 @@ const MoveMenu: Component<Props> = props => {
   function moveTo<T extends {}>(zone: CardZone<T>, addOptions?: T) {
     let cards = props.cards.slice();
     doXTimes(cards.length, () => {
-      transferCard(cards.shift()!, props.fromZone, zone, { addOptions });
+      if (!cards.length) {
+        return console.trace(`tried to transfer cards when there are no cards`, {
+          cards,
+          zone,
+          addOptions,
+        });
+      }
+      transferCard(cards.shift(), props.fromZone, zone, { addOptions });
     });
     props.onComplete?.();
   }

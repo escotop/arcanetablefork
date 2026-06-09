@@ -11,21 +11,22 @@ import { MetaProvider } from '@solidjs/meta';
 import './app.css';
 import './index.css';
 import ClientOnly from './lib/clientOnly';
+import { withSentryRouterRouting } from '@sentry/solidstart/solidrouter';
 
-const GameRoute = lazy(() => import('./routes/game/[id]'));
+const SentryRouter = withSentryRouterRouting(Router);
 
 const App: Component = () => {
   const storageManager = createLocalStorageManager('vite-ui-theme');
   return (
-    <Router
+    <SentryRouter
       root={props => (
         <MetaProvider>
           <CardSystemProviderClient>
             <AnalyticsContext>
               <script>
                 {`
-                window.env = ${JSON.stringify(getBuildData())}
-              `}
+                  window.env = ${JSON.stringify(getBuildData())}
+                `}
               </script>
               <ColorModeScript storageType={storageManager.type} />
               <ColorModeProvider storageManager={storageManager}>
@@ -39,11 +40,11 @@ const App: Component = () => {
       <Route path='/' component={lazy(() => import('./routes/index'))} />
       <Route path='/changes' component={lazy(() => import('./routes/changes/index'))} />
       <ClientOnly>
-        <Route path='/game/:gameId' component={GameRoute} />
+        <Route path='/game/:gameId' component={lazy(() => import('./routes/game/[id]'))} />
         <Route path='/table-view' component={lazy(() => import('./routes/table-view/index'))} />
       </ClientOnly>
       {/*<FileRoutes />*/}
-    </Router>
+    </SentryRouter>
   );
 };
 
