@@ -1,0 +1,30 @@
+---
+date: "2026-06-08T21:17:47-07:00"
+target: beta
+title: "Related Cards, Tapped State Fix, and Log Stability"
+keywords:
+  - related cards
+  - tokens
+  - tapped
+  - battlefield
+  - log
+  - stability
+  - staging
+description: "The token menu is now a Related Cards menu showing all associated card parts. Fixed cards keeping their tapped state when leaving the battlefield. Game log no longer crashes on malformed entries."
+version: b323f91
+changeCount:
+  bugfixes: 2
+  features: 1
+commitRange: https://github.com/odama626/arcanetable/compare/7f733ea...b323f91
+---
+
+> **Staging release** — try it at [staging.arcanetable.app](https://staging.arcanetable.app/).
+
+## Features
+
+- **Related Cards** - the "Add Tokens" menu has been renamed to "Related Cards" and now shows all associated card parts, not just tokens. Meld cards, adventure cards, and other linked parts now appear here too.
+
+## Fixes
+
+- **Tapped state on leave** - cards were retaining their tapped state when moved off the battlefield. They now reset to untapped when they leave.
+- **Game log stability** - the game log was crashing when it encountered malformed or incomplete network events. It now handles those gracefully.
