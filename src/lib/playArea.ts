@@ -257,15 +257,12 @@ export class PlayArea {
 
   async mulligan(drawCount: number, existingOrder?: number[]) {
     let cardsInHand = this.hand.cards;
-    await doXTimes(
-      cardsInHand.length,
-      () => {
-        let card = this.hand.cards[0];
-        this.hand.removeCard(card.mesh);
-        this.deck.addCardBottom(card);
-      },
-      50,
-    );
+
+    await doXTimes(cardsInHand.length, () => {
+      let card = this.hand.cards[0];
+      transferCard(card, this.hand, this.deck, { preventTransmit: true });
+    });
+
     let order = await this.deck.shuffle(existingOrder);
     this.emitEvent({ type: 'mulligan', payload: { order, drawCount } });
 
