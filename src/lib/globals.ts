@@ -131,7 +131,6 @@ export async function setCardBackTexture(url: string) {
     const mesh = obj as THREE.Mesh;
     if (mesh.isMesh) {
       const mat = mesh.material as THREE.MeshStandardMaterial;
-      console.log({ mat });
       if (Array.isArray(mat)) {
         mat.forEach((mat, i) => {
           if (mat.map === old) {
