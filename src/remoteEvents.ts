@@ -4,6 +4,7 @@ import { Vector3 } from 'three';
 import { animateObject, queueAnimationGroup, rehydrateAnimation } from './lib/animations';
 import { cloneCard, splitUserdata, setCardData } from './lib/card';
 import { Card } from './lib/constants';
+import * as Sentry from '@sentry/solidstart';
 import {
   applyPlayerTransform,
   cardsById,
@@ -56,7 +57,12 @@ export async function processEvents() {
 
       while (events.length > 0) {
         let event = events.shift();
-        addLogMessage(event);
+        try {
+          addLogMessage(event);
+        } catch (e) {
+          Sentry.captureException(e, 'addLogMessage');
+          console.error(e);
+        }
         if (event.clientID === provider.awareness.clientID) break;
         let playArea = playAreas[event.clientID];
         await handleEvent(event, playArea);
@@ -105,7 +111,7 @@ const EVENTS = {
   animateObject(event: Event, _playArea: PlayArea, card: Card) {
     const [_, cloneable] = splitUserdata(event.payload.userData);
     if (!card) {
-      console.trace('card undefined', { event, _playArea, card})
+      console.trace('card undefined', { event, _playArea, card });
     }
     Object.assign(card.mesh.userData, cloneable);
     animateObject(card.mesh, rehydrateAnimation(event.payload.animation));

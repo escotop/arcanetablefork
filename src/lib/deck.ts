@@ -33,7 +33,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
     zonesById.set(this.id, this);
 
     this.mesh.rotation.set(0, Math.PI, 0);
-    this.mesh.position.set(70, -55, cards.length * 0.125 + 2.5);
+    this.mesh.position.set(70, -55, cards.length * CARD_THICKNESS + 2.5);
     this.mesh.userData.isInteractive = true;
     this.mesh.userData.zone = 'deck';
     this.mesh.userData.id = id;
