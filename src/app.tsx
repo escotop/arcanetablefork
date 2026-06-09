@@ -1,6 +1,6 @@
 import { Route, Router } from '@solidjs/router';
 import { FileRoutes } from '@solidjs/start/router';
-import { Component, lazy, Suspense } from 'solid-js';
+import { Component, ErrorBoundary, lazy, Suspense } from 'solid-js';
 import IndexPage from './routes/index';
 import { ColorModeProvider, ColorModeScript, createLocalStorageManager } from '@kobalte/core';
 import { AnalyticsContext } from './lib/analytics';
@@ -12,14 +12,17 @@ import './app.css';
 import './index.css';
 import ClientOnly from './lib/clientOnly';
 import { withSentryRouterRouting } from '@sentry/solidstart/solidrouter';
+import { withSentryErrorBoundary } from '@sentry/solidstart';
 
 const SentryRouter = withSentryRouterRouting(Router);
+const SentryErrorBoundry = withSentryErrorBoundary(ErrorBoundary);
 
 const App: Component = () => {
   const storageManager = createLocalStorageManager('vite-ui-theme');
   return (
     <SentryRouter
       root={props => (
+        <SentryErrorBoundry fallback={(error, reset) => <div>Something went wrong</div>}>
         <MetaProvider>
           <CardSystemProviderClient>
             <AnalyticsContext>
@@ -36,6 +39,7 @@ const App: Component = () => {
             </AnalyticsContext>
           </CardSystemProviderClient>
         </MetaProvider>
+      </SentryErrorBoundry>
       )}>
       <Route path='/' component={lazy(() => import('./routes/index'))} />
       <Route path='/changes' component={lazy(() => import('./routes/changes/index'))} />
