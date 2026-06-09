@@ -1,5 +1,5 @@
 import { solidStart } from '@solidjs/start/config';
-import { build, defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import { nitroV2Plugin } from '@solidjs/vite-plugin-nitro-2';
 import solidSvg from 'vite-plugin-solid-svg';
 import { compression } from 'vite-plugin-compression2';
@@ -11,32 +11,41 @@ import remarkMDXFrontmatter from 'remark-mdx-frontmatter';
 import yaml from '@modyfi/vite-plugin-yaml';
 import remarkHasBody from './src/lib/spark/remark-has-body';
 import { sentryVitePlugin } from '@sentry/vite-plugin';
+import sitemapPlugin from 'vite-plugin-sitemap';
 
-export default defineConfig({
-  plugins: [
-    solidStart(),
-    sentryVitePlugin(),
-    nitroV2Plugin({
-      preset: 'static',
-      prerender: {
-        routes: ['/', '/changes'],
-      },
-    }),
-    {
-      ...mdx({
-        jsxImportSource: 'solid-jsx',
-        remarkPlugins: [remarkGfm, remarkFrontmatter, remarkHasBody, remarkMDXFrontmatter],
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+
+  return {
+    plugins: [
+      solidStart(),
+      sentryVitePlugin(),
+      nitroV2Plugin({
+        preset: 'static',
+        prerender: {
+          routes: ['/', '/changes'],
+        },
       }),
-      enforce: 'pre',
+      sitemapPlugin({
+        hostname: env.VITE_SITE_URL,
+        outDir: '.output/public',
+      }),
+      {
+        ...mdx({
+          jsxImportSource: 'solid-jsx',
+          remarkPlugins: [remarkGfm, remarkFrontmatter, remarkHasBody, remarkMDXFrontmatter],
+        }),
+        enforce: 'pre',
+      },
+      yaml(),
+      solidSvg(),
+      compression(),
+      compression({ algorithm: 'brotliCompress' }),
+    ],
+    resolve: {
+      alias: { '~': path.resolve(__dirname, './src') },
     },
-    yaml(),
-    solidSvg(),
-    compression(),
-    compression({ algorithm: 'brotliCompress' }),
-  ],
-  resolve: {
-    alias: { '~': path.resolve(__dirname, './src') },
-  },
-  server: { port: 3000, allowedHosts: true },
-  build: { target: 'esnext', sourcemap: true },
+    server: { port: 3000, allowedHosts: true },
+    build: { target: 'esnext', sourcemap: true },
+  };
 });

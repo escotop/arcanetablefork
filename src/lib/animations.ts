@@ -213,7 +213,7 @@ function renderAnimation(animation, delta: number): boolean {
     let from = animation.from?.position ?? animation.to?.position;
     if (!from) {
       console.log({ animation });
-      return false;
+      return true;
     }
     animation.obj.position.copy(from.clone().lerp(animation.to.position, delta));
   }

@@ -119,6 +119,9 @@ importers:
       vite-plugin-compression2:
         specifier: ^2.5.3
         version: 2.5.3(rollup@4.61.1)
+      vite-plugin-sitemap:
+        specifier: ^0.8.2
+        version: 0.8.2
       vite-plugin-solid-svg:
         specifier: ^0.8.1
         version: 0.8.1(solid-js@1.9.13)(vite@7.3.5(@types/node@25.9.2)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0))
@@ -4079,6 +4082,9 @@ packages:
 
   vite-plugin-compression2@2.5.3:
     resolution: {integrity: sha512-ItPgqQWkcnBbVw7is9OKwiZ8v6+ju9rYROl5Lp6QfQDEx/d55AwJQb/KLpsQqsU9HoigYBsZ8tK6I02UwJNvEw==}
+
+  vite-plugin-sitemap@0.8.2:
+    resolution: {integrity: sha512-bqIw6NVOXg6je81lzX8Lm0vjf8/QSAp8di8fYQzZ3ZdVicOm8+6idBGALJiy1R1FiXNIK8rgORO6HBqXyHW+iQ==}
 
   vite-plugin-solid-svg@0.8.1:
     resolution: {integrity: sha512-ROGC2ae1eYUCMd+zfJtsbUtuZwsb6DZS0+Sy5/ZXDokOunGi0Ez/cL7OPdsixN3I0/rNYd/3hilo3kpRMAS+IA==}
@@ -8641,6 +8647,8 @@ snapshots:
       tar-mini: 0.2.0
     transitivePeerDependencies:
       - rollup
+
+  vite-plugin-sitemap@0.8.2: {}
 
   vite-plugin-solid-svg@0.8.1(solid-js@1.9.13)(vite@7.3.5(@types/node@25.9.2)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0)):
     dependencies:
