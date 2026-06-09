@@ -201,7 +201,7 @@ export class PlayArea {
       let cardsInPlay = this.cards;
       let allTokens = new Set(
         cardsInPlay
-          .map(card => (card.detail.all_parts ?? []).filter(part => part.component === 'token'))
+          .map(card => card.detail.all_parts ?? [])
           .flat()
           .map(part => part.uri),
       );
