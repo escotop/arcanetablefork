@@ -167,7 +167,7 @@ export function MainMenu(props: { playArea?: PlayArea }) {
                   Untap All <MenubarShortcut>{KEY.Shift}R</MenubarShortcut>
                 </MenubarItem>
                 <MenubarItem class='w-full flex' onClick={() => props.playArea.toggleTokenMenu()}>
-                  Add Tokens
+                  Related Cards
                 </MenubarItem>
                 <MoveMenu
                   text={`Battlefield (${props.playArea.battlefieldZone.observable.cardCount})`}
