@@ -43,7 +43,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
       setCardData(card.mesh, 'location', 'deck');
       setCardData(card.mesh, 'isPublic', false);
       setCardData(card.mesh, 'zoneId', id);
-      card.mesh.position.set(0, 0, i * 0.125);
+      card.mesh.position.set(0, 0, i * CARD_THICKNESS);
       this.mesh.add(card.mesh);
     });
     createRoot(destroy => {
