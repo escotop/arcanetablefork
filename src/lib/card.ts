@@ -353,6 +353,7 @@ export function setCardData(cardMesh: Mesh, field: string, value: unknown) {
     cleanupFromNode(cardMesh);
     cardMesh.userData.isFlipped = false;
     cardMesh.userData.modifiers = undefined;
+    cardMesh.userData.isTapped = false;
   }
 
   if (field === 'location') {
