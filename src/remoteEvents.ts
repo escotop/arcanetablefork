@@ -104,6 +104,9 @@ const EVENTS = {
   },
   animateObject(event: Event, _playArea: PlayArea, card: Card) {
     const [_, cloneable] = splitUserdata(event.payload.userData);
+    if (!card) {
+      console.trace('card undefined', { event, _playArea, card})
+    }
     Object.assign(card.mesh.userData, cloneable);
     animateObject(card.mesh, rehydrateAnimation(event.payload.animation));
   },

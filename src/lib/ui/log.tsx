@@ -12,7 +12,7 @@ const Log: Component = props => {
           return (
             <Show when={text}>
               <p>
-                {player.entry.name} {text}
+                {player?.entry?.name ?? 'unknown'} {text}
               </p>
             </Show>
           );
@@ -48,11 +48,11 @@ export function parseLogEntry(entry) {
   let { userData, ...data } = entry?.payload || {};
   let cardReference = () => {
     if (userData?.isPublic || userData?.wasPublic) return card?.detail?.name;
-    if (entry.count > 1) return `${entry.count} cards`;
+    if (entry?.count > 1) return `${entry.count} cards`;
     return 'a card';
   };
 
-  switch (entry.type) {
+  switch (entry?.type) {
     case 'join':
       return 'Joined';
     case 'transferCard': {
@@ -81,7 +81,7 @@ export function parseLogEntry(entry) {
     case 'shuffleDeck':
       return 'shuffled';
     case 'mulligan':
-      return `mulliganed and drew ${entry.payload.drawCount} cards`;
+      return `mulliganed and drew ${entry.payload?.drawCount} cards`;
     case 'createCounter':
       return null;
     case 'reveal':
@@ -107,7 +107,7 @@ export function parseLogEntry(entry) {
       );
 
     default:
-      return `${entry.type} ${cardReference()}`;
+      return `${entry?.type} ${cardReference()}`;
   }
 }
 
