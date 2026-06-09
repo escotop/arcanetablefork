@@ -1,16 +1,20 @@
 {
-  "name": "",
-  "short_name": "",
+  "name": "Arcanetable",
+  "short_name": "Arcanetable",
+  "description": "A 3D TCG playtesting sandbox in your browser. Play Magic: The Gathering, Pokémon, Yu-Gi-Oh, or your own custom card game. No download, no account — share a link and play.",
+  "start_url": "/",
+  "display": "standalone",
   "icons": [
     {
-      "src": "/android-chrome-192x192.png",
-      "sizes": "192x192",
+      "src": "/favicon.png",
+      "sizes": "any",
       "type": "image/png"
     },
     {
-      "src": "/android-chrome-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png"
+      "src": "/icon-1024.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ],
   "theme_color": "#ffffff",

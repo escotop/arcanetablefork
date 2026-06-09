@@ -20,15 +20,14 @@ export default defineConfig(({ mode }) => {
     plugins: [
       solidStart(),
       sentryVitePlugin(),
+      sitemapPlugin({
+        hostname: env.VITE_SITE_URL,
+      }),
       nitroV2Plugin({
         preset: 'static',
         prerender: {
           routes: ['/', '/changes'],
         },
-      }),
-      sitemapPlugin({
-        hostname: env.VITE_SITE_URL,
-        outDir: '.output/public',
       }),
       {
         ...mdx({
