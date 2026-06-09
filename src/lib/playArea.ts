@@ -13,13 +13,21 @@ import { CardArea } from './cardArea';
 import { CardGrid } from './cardGrid';
 import { CardStack } from './cardStack';
 import { Card, CARD_HEIGHT, CARD_WIDTH, CardZone, SerializableCard } from './constants';
-import { Deck, loadCardList, expandCardEntries } from './deck';
-import { cardsById, doXTimes, focusCamera, provider, zonesById } from './globals';
+import { Deck, expandCardEntries } from './deck';
+import {
+  cardsById,
+  dispatchGameEvent,
+  doXTimes,
+  focusCamera,
+  provider,
+  zonesById,
+} from './globals';
 import { Hand } from './hand';
 import { transferCard } from './transferCard';
 import { getFocusCameraPositionRelativeTo } from './utils';
 import { getCardKey, hydrateDeck } from './deckStore';
 import { Deck as DeckData } from './constants';
+import { createTransferCardEvent } from './createEvents';
 
 interface RemoteZoneState {
   id: string;
@@ -252,7 +260,10 @@ export class PlayArea {
   }
 
   draw() {
-    transferCard(this.deck.cards[0], this.deck, this.hand);
+    let card = this.deck.cards[0];
+    if (!card) return;
+    const event = createTransferCardEvent(card, this.deck, this.hand);
+    dispatchGameEvent(event);
   }
 
   async mulligan(drawCount: number, existingOrder?: number[]) {

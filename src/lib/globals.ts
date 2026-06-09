@@ -78,7 +78,6 @@ export let textureLoaderWorker: Comlink.Remote<TextureLoaderWorkerType>;
 export let gui: GUI = null;
 export let baseCameraQuaternion: THREE.Quaternion;
 
-
 export let selection: Selection;
 export let [capturedErrors, setCapturedErrors] = createSignal([]);
 
@@ -213,9 +212,9 @@ export async function init({ gameId }) {
 
   createEffect(() => {
     if (!settings.enableCameraTilt) {
-      camera.quaternion.copy(baseCameraQuaternion)
+      camera.quaternion.copy(baseCameraQuaternion);
     }
-  })
+  });
 
   selection = new Selection(renderer, camera, scene);
 
@@ -259,14 +258,13 @@ export async function init({ gameId }) {
   table = new Mesh(tableGeometry, tableMaterial);
   table.receiveShadow = true;
   table.userData.zone = 'battlefield';
-  table.rotateX(Math.PI * -.4);
+  table.rotateX(Math.PI * -0.4);
   table.position.y = 20;
   table.position.z = -10;
 
   arrowHelper.setDirection(new Vector3(0, 1, 0).applyQuaternion(table.quaternion));
-  arrowHelper.position.copy(table.position)
-  arrowHelper.setLength(100)
-
+  arrowHelper.position.copy(table.position);
+  arrowHelper.setLength(100);
 
   const tableParams = {
     rotationX: Math.PI * -0.5,
@@ -310,9 +308,44 @@ export function startSpectating() {
   });
 }
 
+/**
+ * @deprecated use dispatchEvent instead
+ */
 export function sendEvent(event) {
   event.clientID = provider.awareness.clientID;
+  event.locallyApplied = true;
+  console.log('sendEvent', event);
   gameLog.push([event]);
+}
+
+let batch: any[] = [];
+let flushScheduled = false;
+export let drainResolvers: (() => void)[] = [];
+
+export async function flushDispatchEventQueue() {
+  if (!batch.length) return;
+  const events = batch.splice(0);
+  flushScheduled = false;
+  return new Promise<void>(resolve => {
+    drainResolvers.push(resolve);
+    gameLog.push([
+      {
+        type: 'bulk',
+        timing: 25,
+        events,
+        clientID: events[0].clientID,
+      },
+    ]);
+  });
+}
+
+export function dispatchGameEvent(event) {
+  event.clientID = provider.awareness.clientID;
+  batch.push(event);
+  if (!flushScheduled) {
+    flushScheduled = true;
+    queueMicrotask(flushDispatchEventQueue);
+  }
 }
 
 export function cleanup() {

@@ -8,6 +8,7 @@ import * as Sentry from '@sentry/solidstart';
 import {
   applyPlayerTransform,
   cardsById,
+  drainResolvers,
   expect,
   gameLog,
   logs,
@@ -63,7 +64,7 @@ export async function processEvents() {
           Sentry.captureException(e, 'addLogMessage');
           console.error(e);
         }
-        if (event.clientID === provider.awareness.clientID) break;
+        if (event.clientID === provider.awareness.clientID && event.locallyApplied) break;
         let playArea = playAreas[event.clientID];
         await handleEvent(event, playArea);
         if (events.length > 0) {
@@ -73,12 +74,14 @@ export async function processEvents() {
     }
   } finally {
     processing = false;
+    drainResolvers.splice(0).forEach(r => r());
   }
 }
 
 export async function handleEvent(event, playArea: PlayArea) {
   expect(!!EVENTS[event.type], `${event.type} not implemented`);
   let card = cardsById.get(event.payload?.userData?.id);
+  console.log('handleEvents', ...arguments)
   await EVENTS[event.type](event, playArea, card);
 }
 
