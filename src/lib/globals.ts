@@ -314,7 +314,7 @@ export function startSpectating() {
 export function sendEvent(event) {
   event.clientID = provider.awareness.clientID;
   event.locallyApplied = true;
-  console.log('sendEvent', event);
+  console.warn('sendEvent', event);
   gameLog.push([event]);
 }
 
