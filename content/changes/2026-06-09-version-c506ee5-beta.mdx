@@ -1,0 +1,31 @@
+---
+date: "2026-06-09T20:27:39-07:00"
+target: beta
+title: "Installable App, Faster Deck Search, and Animation Crash Fix"
+keywords:
+  - pwa
+  - installable
+  - deck search
+  - peek
+  - performance
+  - animation
+  - stability
+  - staging
+description: "Arcanetable can now be installed as a PWA. Deck search is significantly faster thanks to a new batched event system. Fixed an animation failure mode that caused infinite loops."
+version: c506ee5
+changeCount:
+  bugfixes: 1
+  features: 2
+commitRange: https://github.com/odama626/arcanetable/compare/b323f91...c506ee5
+---
+
+> **Staging release** — try it at [staging.arcanetable.app](https://staging.arcanetable.app/).
+
+## Features
+
+- **Installable app** - Arcanetable now has a proper PWA manifest with name, description, and icon. You can add it to your home screen or install it as a desktop app from supported browsers.
+- **Faster deck search** - the start of a new unified event system with auto-batching means deck search dismissal is significantly faster. As this migration continues, it should also clean up some edge-case multiplayer bugs and make the overall system more predictable.
+
+## Fixes
+
+- **Animation crash loop** - when an animation failed due to missing position data, it would loop infinitely instead of giving up. It now cancels cleanly.
