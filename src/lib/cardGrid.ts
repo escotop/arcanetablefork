@@ -307,7 +307,7 @@ export class CardGrid implements CardZone {
     this.cards.splice(index, 1);
     this.cardMap.delete(cardMesh.userData.id);
     this.setObservable('cardCount', this.cards.length);
-    this.listeners.forEach(fn => fn(this.cards));
+    this.listeners.forEach(fn => fn(this.cards.slice()));
 
     if (this.cards.length < 1) {
       setHoverSignal();
