@@ -22,7 +22,9 @@ import {
   cardsById,
   clock,
   DEFAULT_CARD_BACK,
+  dispatchGameEvent,
   expect,
+  flushDispatchEventQueue,
   focusCamera,
   focusRayCaster,
   focusRenderer,
@@ -58,6 +60,7 @@ import { restackItems } from './lib/utils';
 import { processEvents } from './remoteEvents';
 import { getDeckStore } from './lib/deckStore';
 import { unwrap } from 'solid-js/store';
+import { createTapEvent } from './lib/createEvents';
 
 var container;
 
@@ -193,7 +196,10 @@ function onDocumentClick(event: PointerEvent) {
   if (target.userData.zone === 'battlefield') {
     setHoverSignal({ mouse });
   } else if (target.userData.location === 'battlefield') {
-    playArea.tap(target).then(() => {
+    console.log('dispatch tap event')
+    dispatchGameEvent(createTapEvent(target));
+
+    flushDispatchEventQueue().then(() => {
       setHoverSignal(signal => {
         focusOn(target);
         const tether = getCardMeshTetherPoint(target);
@@ -503,7 +509,7 @@ export function startAnimating() {
 
 let hover: THREE.Object3D;
 
-function hightlightHover(intersects: THREE.Intersection<THREE.Object3D<THREE.Object3DEventMap>>[]) {
+function highlightHover(intersects: THREE.Intersection<THREE.Object3D<THREE.Object3DEventMap>>[]) {
   let needsCleanup = false;
   let next;
   let target = intersects?.[0]?.object;
@@ -512,7 +518,9 @@ function hightlightHover(intersects: THREE.Intersection<THREE.Object3D<THREE.Obj
   if (target?.parent?.userData.zone === 'deck') {
     target = target.parent?.children[0];
     let zone = zonesById.get(target.userData.zoneId);
-    target = zone.cards[0].mesh;
+    if (zone) {
+      target = zone.cards[0].mesh;
+    }
   }
 
   if (!intersects.length) needsCleanup = true;
@@ -571,7 +579,7 @@ function render3d(delta: number) {
       return true;
     });
 
-    hightlightHover(intersects);
+    highlightHover(intersects);
   }
 
   let signal = hoverSignal();

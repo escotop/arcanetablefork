@@ -18,6 +18,8 @@ import {
   cardsById,
   dispatchGameEvent,
   doXTimes,
+  expect,
+  flushDispatchEventQueue,
   focusCamera,
   provider,
   zonesById,
@@ -63,7 +65,7 @@ export class PlayArea {
   public battlefieldZone: CardArea;
   public peekZone;
   public isLocalPlayArea: boolean;
-  public revealZone;
+  public revealZone: CardGrid;
   public tokenSearchZone;
   public availableTokens?: CardReference[];
   private inProgressActions = new Set<string>();
@@ -142,59 +144,33 @@ export class PlayArea {
     );
   }
 
-  async transferEntireZone<A, B>(fromZone: CardZone<A>, toZone: CardZone<B>) {
-    let events = fromZone.cards
-      .map(card => ({
-        type: 'transferCard',
-        payload: {
-          userData: card.mesh.userData,
-          toZoneId: toZone.id,
-          fromZoneId: fromZone.id,
-          extendedOptions: {
-            preventTransmit: true,
-          },
-        },
-      }))
-      .reverse();
+  async transferEntireZone(fromZone: CardZone, toZone: CardZone) {
+    if (this.inProgressActions.has(`dismissFromZone.${fromZone.id}`)) return;
+    this.inProgressActions.add(`dismissFromZone.${fromZone.id}`);
+    let addOptions = toZone.zone === 'deck' ? { location: 'bottom' } : undefined;
 
-    this.emitEvent({ type: 'bulk', timing: 50, events: events });
-    await doXTimes(
-      fromZone.cards.length,
-      () => {
-        let card = fromZone.cards.at(-1);
-        transferCard(card, fromZone, toZone, { preventTransmit: true });
-      },
-      50,
-    );
+    fromZone.cards.forEach(card => {
+      dispatchGameEvent(createTransferCardEvent(card, fromZone, toZone, { addOptions }));
+    });
+
+    await flushDispatchEventQueue();
+    this.inProgressActions.delete(`dismissFromZone.${fromZone.id}`);
   }
 
   async dismissFromZone(zone: CardZone) {
     if (this.inProgressActions.has(`dismissFromZone.${zone.id}`)) return;
     this.inProgressActions.add(`dismissFromZone.${zone.id}`);
-    let events = zone.cards
-      .map(card => ({
-        type: 'transferCard',
-        payload: {
-          userData: card.mesh.userData,
-          toZoneId: card.mesh.userData.previousZoneId,
-          fromZoneId: zone.id,
-          extendedOptions: {
-            preventTransmit: true,
-          },
-        },
-      }))
-      .reverse();
 
-    this.emitEvent({ type: 'bulk', timing: 25, events: events });
-    await doXTimes(
-      zone.cards.length,
-      () => {
-        let card = zone.cards.at(-1);
-        let previousZone = zonesById.get(card.mesh.userData.previousZoneId);
-        transferCard(card, zone, previousZone, { preventTransmit: true });
-      },
-      25,
-    );
+    zone.cards.forEach(card => {
+      const toZone = zonesById.get(card.mesh.userData.previousZoneId);
+      expect(!!toZone, `previous zone not found ${card.mesh.userData.previousZoneId}`);
+
+      dispatchGameEvent(
+        createTransferCardEvent(card, zone, toZone, { addOptions: { location: 'bottom' } }),
+      );
+    });
+
+    await flushDispatchEventQueue();
     this.inProgressActions.delete(`dismissFromZone.${zone.id}`);
   }
 
@@ -268,6 +244,15 @@ export class PlayArea {
 
   async mulligan(drawCount: number, existingOrder?: number[]) {
     let cardsInHand = this.hand.cards;
+
+    // for (const card of this.hand.cards) {
+    //   const event = createTransferCardEvent(card, this.hand, this.deck, {
+    //     addOptions: { location: 'bottom' },
+    //   });
+
+    //   dispatchGameEvent(event);
+    // }
+    // await flushDispatchEventQueue();
 
     await doXTimes(cardsInHand.length, () => {
       let card = this.hand.cards[0];
@@ -392,7 +377,10 @@ export class PlayArea {
     }
   }
 
-  tap(cardMesh: Mesh) {
+  /**
+   * @deprecated use tap
+   */
+  legacyTap(cardMesh: Mesh) {
     return new Promise<void>(onComplete => {
       let initialAngle = cardMesh.userData.isFlipped ? Math.PI : 0;
       let angleDelta = cardMesh.userData.isTapped ? 0 : -Math.PI / 2;
@@ -406,6 +394,25 @@ export class PlayArea {
       setCardData(cardMesh, 'isTapped', !cardMesh.userData.isTapped);
       this.emitEvent({ type: 'tap', payload: { userData: cardMesh.userData } });
 
+      animateObject(cardMesh, {
+        to: { rotation },
+        duration: 0.2,
+        onComplete,
+      });
+    });
+  }
+
+  tap(cardMesh: Mesh) {
+    let initialAngle = cardMesh.userData.isFlipped ? Math.PI : 0;
+    let angleDelta = cardMesh.userData.isTapped ? -Math.PI / 2 : 0;
+
+    if (cardMesh.userData.isFlipped) {
+      angleDelta = -angleDelta;
+    }
+    let rotation = cardMesh.rotation.clone();
+    rotation.z = angleDelta + initialAngle;
+
+    return new Promise<void>(onComplete => {
       animateObject(cardMesh, {
         to: { rotation },
         duration: 0.2,

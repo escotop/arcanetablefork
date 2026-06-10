@@ -319,6 +319,7 @@ export function sendEvent(event) {
 }
 
 let batch: any[] = [];
+let batchTiming: number = 0;
 let flushScheduled = false;
 export let drainResolvers: (() => void)[] = [];
 
@@ -328,19 +329,23 @@ export async function flushDispatchEventQueue() {
   flushScheduled = false;
   return new Promise<void>(resolve => {
     drainResolvers.push(resolve);
-    gameLog.push([
-      {
-        type: 'bulk',
-        timing: 25,
-        events,
-        clientID: events[0].clientID,
-      },
-    ]);
+    let event = {
+      type: 'bulk',
+      timing: batchTiming,
+      events,
+      clientID: events[0].clientID,
+    };
+    console.log('dispatchEvent', event)
+    gameLog.push([event]);
   });
 }
 
-export function dispatchGameEvent(event) {
+export function dispatchGameEvent(event: any, timing = 0) {
   event.clientID = provider.awareness.clientID;
+  if (batch.length > 0 && timing !== batchTiming) {
+    flushDispatchEventQueue();
+  }
+  batchTiming = timing;
   batch.push(event);
   if (!flushScheduled) {
     flushScheduled = true;

@@ -30,13 +30,18 @@ export class CardGrid implements CardZone {
   public observable: CardZone['observable'];
   private setObservable: SetStoreFunction<CardZone['observable']>;
   private destroyReactivity;
+  private listeners: ((cards: Card[]) => void)[] = [];
 
   constructor(
     isLocalPlayArea: boolean,
     public zone: string,
     public id: string = nanoid(),
   ) {
-    const POSITION = new Vector3(-((CARD_WIDTH + 1) * CARDS_PER_ROW) / 2 + CARD_WIDTH / 2, -100, 75);
+    const POSITION = new Vector3(
+      -((CARD_WIDTH + 1) * CARDS_PER_ROW) / 2 + CARD_WIDTH / 2,
+      -100,
+      75,
+    );
     this.mesh = new Group();
     zonesById.set(this.id, this);
     this.mesh.userData.isInteractive = true;
@@ -221,6 +226,16 @@ export class CardGrid implements CardZone {
     }
   }
 
+  subscribeToCardList(fn) {
+    this.listeners.push(fn);
+
+    return () => {
+      let indexOf = this.listeners.indexOf(fn);
+      if (indexOf > -1) this.listeners.splice(indexOf, 1);
+    };
+  }
+
+
   addCard(card: Card) {
     if (!card) return;
     let initialPosition = new Vector3();
@@ -245,6 +260,8 @@ export class CardGrid implements CardZone {
     this.maxScroll = (this.cards.length / CARDS_PER_ROW) * (CARD_HEIGHT + 1);
     this.cardMap.set(card.id, card);
     this.setObservable('cardCount', this.cards.length);
+
+    this.listeners.forEach(fn => fn(this.cards));
 
     this.adjustHandPosition();
 
@@ -290,6 +307,7 @@ export class CardGrid implements CardZone {
     this.cards.splice(index, 1);
     this.cardMap.delete(cardMesh.userData.id);
     this.setObservable('cardCount', this.cards.length);
+    this.listeners.forEach(fn => fn(this.cards));
 
     if (this.cards.length < 1) {
       setHoverSignal();

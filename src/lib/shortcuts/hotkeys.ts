@@ -1,19 +1,31 @@
 import hotkeys from 'hotkeys-js';
 import { createEffect, onMount } from 'solid-js';
-import { selection, cardsById, zonesById, playAreas, provider, hoverSignal } from '../globals';
+import {
+  selection,
+  cardsById,
+  zonesById,
+  playAreas,
+  provider,
+  hoverSignal,
+  dispatchGameEvent,
+} from '../globals';
 import { transferCard } from '../transferCard';
 import { drawCards, searchDeck } from './commands/deck';
 import { untapAll } from './commands/field';
+import { createTapEvent } from '../createEvents';
+import { Card } from '../constants';
 
 export function HotKeys() {
   const cardMesh = () => hoverSignal()?.mesh;
   const playArea = playAreas[provider?.awareness?.clientID];
   const cards = () => {
     let items = selection.selectedItems;
-    if (items.length) return items.map(item => cardsById.get(item.userData.id));
+    if (items.length) {
+      return items.map(item => cardsById.get(item.userData.id)).filter(Boolean) as Card[];
+    }
     if (!cardMesh()) return [];
 
-    return [cardsById.get(cardMesh().userData.id)];
+    return [cardsById.get(cardMesh().userData.id)].filter(Boolean) as Card[];
   };
   createEffect(() => {
     if (selection.selectedItems.length) {
@@ -112,7 +124,7 @@ export function HotKeys() {
 
     hotkeys('t', 'battlefield', function (e) {
       e.preventDefault();
-      cards().forEach(card => playArea.tap(card.mesh));
+      cards().forEach(card => dispatchGameEvent(createTapEvent(card.mesh)));
     });
 
     hotkeys('c', 'battlefield', function (e) {

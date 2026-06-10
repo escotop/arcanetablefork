@@ -28,11 +28,10 @@ import { PlayArea } from './lib/playArea';
 import { transferCard } from './lib/transferCard';
 import { setCounters } from './lib/ui/counterDialog';
 import { isLogMessageStackable } from './lib/ui/log';
+import * as EventCreators from './lib/createEvents';
 
-interface Event {
-  clientID: string;
-  payload: unknown;
-}
+type Events = ReturnType<(typeof EventCreators)[keyof typeof EventCreators]>;
+type Event = { clientID: string } & Events;
 
 let processing = false;
 let events = [];
@@ -49,10 +48,11 @@ export async function processEvents() {
         timing = srcEvent.timing;
         events = srcEvent.events.map(e => {
           e.clientID = srcEvent.clientID;
+          e.locallyApplied = srcEvent.locallyApplied;
           return e;
         });
       } else {
-        timing = 100;
+        timing = 25;
         events = [srcEvent];
       }
 
@@ -78,10 +78,18 @@ export async function processEvents() {
   }
 }
 
-export async function handleEvent(event, playArea: PlayArea) {
+function applyEventUserData(card: Card, userData: Record<string, unknown>) {
+  const { id, ...fields } = userData;
+  Object.entries(fields).forEach(([key, value]) => setCardData(card.mesh, key, value));
+}
+
+export async function handleEvent(event: Event, playArea: PlayArea) {
   expect(!!EVENTS[event.type], `${event.type} not implemented`);
   let card = cardsById.get(event.payload?.userData?.id);
-  console.log('handleEvents', ...arguments)
+  if (card && event.payload.userData) {
+    applyEventUserData(card, event.payload.userData);
+  }
+  console.log('handleEvents', ...arguments);
   await EVENTS[event.type](event, playArea, card);
 }
 

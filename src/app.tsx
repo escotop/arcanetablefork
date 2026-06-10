@@ -22,24 +22,28 @@ const App: Component = () => {
   return (
     <SentryRouter
       root={props => (
-        <SentryErrorBoundry fallback={(error, reset) => <div>Something went wrong</div>}>
-        <MetaProvider>
-          <CardSystemProviderClient>
-            <AnalyticsContext>
-              <script>
-                {`
+        <SentryErrorBoundry
+          fallback={(error, reset) => {
+            console.trace(error);
+            return <div>Something went wrong</div>;
+          }}>
+          <MetaProvider>
+            <CardSystemProviderClient>
+              <AnalyticsContext>
+                <script>
+                  {`
                   window.env = ${JSON.stringify(getBuildData())}
                 `}
-              </script>
-              <ColorModeScript storageType={storageManager.type} />
-              <ColorModeProvider storageManager={storageManager}>
-                <Suspense>{props.children}</Suspense>
-                <Toaster />
-              </ColorModeProvider>
-            </AnalyticsContext>
-          </CardSystemProviderClient>
-        </MetaProvider>
-      </SentryErrorBoundry>
+                </script>
+                <ColorModeScript storageType={storageManager.type} />
+                <ColorModeProvider storageManager={storageManager}>
+                  <Suspense>{props.children}</Suspense>
+                  <Toaster />
+                </ColorModeProvider>
+              </AnalyticsContext>
+            </CardSystemProviderClient>
+          </MetaProvider>
+        </SentryErrorBoundry>
       )}>
       <Route path='/' component={lazy(() => import('./routes/index'))} />
       <Route path='/changes' component={lazy(() => import('./routes/changes/index'))} />

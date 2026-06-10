@@ -1,4 +1,14 @@
-import { Component, createEffect, createMemo, createSignal, Match, Show, Switch } from 'solid-js';
+import {
+  Component,
+  createEffect,
+  createMemo,
+  createSignal,
+  Match,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+} from 'solid-js';
 import { Button } from '~/components/ui/button';
 import { Command, CommandInput } from '~/components/ui/command';
 import { Menubar, MenubarMenu } from '~/components/ui/menubar';
@@ -29,6 +39,15 @@ const PeekMenu: Component = props => {
   const card = () => cardsById.get(hoverSignal()?.mesh?.userData.id);
   const [viewField, setViewField] = createSignal(false);
   let inputRef;
+  const [peekCards, setPeekCards] = createSignal([]);
+
+  onMount(() => {
+    const unsub = playArea.peekZone.subscribeToCardList(setPeekCards);
+
+    onCleanup(() => {
+      unsub();
+    });
+  });
 
   function drawAfterRevealing(card: Card) {
     drawWithoutRevealing(card);
@@ -47,7 +66,7 @@ const PeekMenu: Component = props => {
 
   return (
     <>
-      <Show when={location() === 'peek' && isOwner()}>
+      <Show when={peekCards()?.length > 0}>
         <Show when={tether()}>
           <div class={styles.peekActions} style={`--x: ${tether().x}px; --y: ${tether().y}px;`}>
             <Menubar>
@@ -77,7 +96,8 @@ const PeekMenu: Component = props => {
         <div class={styles.searchContainer}>
           <div class={styles.search}>
             <h2 class='text-white text-xl text-left mb-4'>
-              Peek — from {userData().previousLocation} | {playArea.peekZone.observable.cardCount}
+              Peek — from {peekCards()[0]?.mesh?.userData?.previousLocation} |{' '}
+              {playArea.peekZone.observable.cardCount}
             </h2>
             <Command>
               <CommandInput
@@ -99,7 +119,8 @@ const PeekMenu: Component = props => {
                   <Button
                     variant='ghost'
                     onClick={async () => {
-                      await playArea.transferEntireZone(playArea.peekZone, playArea.deck);
+                      playArea.peekZone.cards;
+                      await playArea.dismissFromZone(playArea.peekZone);
                       await doAfter(100, () => playArea.shuffleDeck());
 
                       setHoverSignal();
