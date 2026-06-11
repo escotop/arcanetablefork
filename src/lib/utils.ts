@@ -174,6 +174,7 @@ function createRestackOps(
   });
 }
 
+// TODO: we should send a restack event with an anchor and list of items over the wire, and do this on each client
 export function createRestackAnimationEvents(items: Object3D[], anchor: Vector3) {
   if (!items[0]?.parent) return [];
   const targetWorldQuat = items[0].parent.getWorldQuaternion(new Quaternion());

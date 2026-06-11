@@ -4,7 +4,7 @@ import { createStore, SetStoreFunction } from 'solid-js/store';
 import { CatmullRomCurve3, Euler, Group, Object3D, Vector3 } from 'three';
 import { animateObject } from './animations';
 import { getSerializableCard, setCardData } from './card';
-import { Card, CARD_HEIGHT, CARD_WIDTH, CardZone } from './constants';
+import { Card, CARD_HEIGHT, CARD_WIDTH, CardZone, SCROLL_SPEED } from './constants';
 import {
   cardsById,
   peekFilterText,
@@ -31,6 +31,8 @@ export class CardGrid implements CardZone {
   private setObservable: SetStoreFunction<CardZone['observable']>;
   private destroyReactivity;
   private listeners: ((cards: Card[]) => void)[] = [];
+
+  const SCO
 
   constructor(
     isLocalPlayArea: boolean,
@@ -69,7 +71,7 @@ export class CardGrid implements CardZone {
         this.scrollContainer.addEventListener('scroll', event => {
           let position = this.scrollContainer.position
             .clone()
-            .add(new Vector3(0, event.event.deltaY * 2, 0));
+            .add(new Vector3(0, event.event.deltaY * SCROLL_SPEED, 0));
 
           position.y = Math.min(position.y, this.maxScroll);
           position.y = Math.max(position.y, this.minScroll);
