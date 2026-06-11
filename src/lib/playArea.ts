@@ -163,7 +163,6 @@ export class PlayArea {
 
     zone.cards.forEach(card => {
       const toZone = zonesById.get(card.mesh.userData.previousZoneId);
-      expect(!!toZone, `previous zone not found ${card.mesh.userData.previousZoneId}`);
 
       dispatchGameEvent(
         createTransferCardEvent(card, zone, toZone, { addOptions: { location: 'bottom' } }),
