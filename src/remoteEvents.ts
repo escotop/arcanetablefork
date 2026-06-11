@@ -131,6 +131,13 @@ const EVENTS = {
     let fromZone = zonesById.get(event.payload.fromZoneId)!;
     let toZone = zonesById.get(event.payload.toZoneId)!;
 
+    if (
+      event.clientID === provider.awareness.clientID &&
+      event.payload.extendedOptions?.addOptions?.skipLocalAnimation
+    ) {
+      event.payload.extendedOptions.addOptions.skipAnimation = true;
+    }
+
     await transferCard(card, fromZone, toZone, event.payload.extendedOptions);
   },
   createCard(event: Event, playArea: PlayArea) {

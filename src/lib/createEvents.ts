@@ -1,7 +1,8 @@
 import { Card, CardZone } from './constants';
 import * as Sentry from '@sentry/solidstart';
-import { expect } from './globals';
-import { Mesh, Object3D } from 'three';
+import { expect, zonesById } from './globals';
+import { Intersection, Mesh, Object3D } from 'three';
+import { AnimationOpts, serializeAnimation } from './animations';
 
 interface DefaultAddOptions {
   destroy?: boolean;
@@ -34,8 +35,8 @@ export function createTransferCardEvent<AddOptions extends {}>(
       toZoneId: toZone.id,
       extendedOptions: {
         addOptions: {
-          ...addOptions,
           skipAnimation: false,
+          ...addOptions,
         },
         userData,
         preventTransmit: true,
@@ -56,6 +57,31 @@ export function createTapEvent(object3D: Object3D) {
   } as const;
 }
 
-export function createAnimationEvent() {
+export function createAnimationEvent(target: Object3D, animation: AnimationOpts) {
+  return {
+    type: 'animateObject',
+    payload: {
+      userData: { id: target.userData.id },
+      animation: serializeAnimation(animation),
+    },
+  };
+}
 
+export function createRestackEvent(items: Object3D[], intersection: Intersection) {
+  const zone = zonesById.get(intersection.object.userData.zoneId)!;
+  expect(!!zone, `zone not found`);
+  const anchor = zone.mesh.worldToLocal(intersection.point.clone());
+
+  return {
+    type: 'restack',
+    payload: {
+      zoneId: intersection.object.userData.zoneId,
+      anchor: anchor.toArray(),
+      items: items.map(item => ({
+        id: item.userData.id,
+        dragOffset: item.userData.dragOffset,
+        dragQuat: item.userData.dragQuat,
+      })),
+    },
+  };
 }

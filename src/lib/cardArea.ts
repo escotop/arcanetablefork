@@ -115,6 +115,8 @@ export class CardArea implements CardZone<{ positionArray?: [number, number, num
     setCardData(card.mesh, `zone.${this.id}.position`, position.toArray());
     setCardData(card.mesh, `zone.${this.id}.rotation`, rotation.toArray());
 
+    console.log({ skipAnimation });
+
     if (skipAnimation) {
       card.mesh.position.copy(position);
       card.mesh.rotation.copy(rotation);
