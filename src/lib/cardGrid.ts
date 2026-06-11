@@ -32,8 +32,6 @@ export class CardGrid implements CardZone {
   private destroyReactivity;
   private listeners: ((cards: Card[]) => void)[] = [];
 
-  const SCO
-
   constructor(
     isLocalPlayArea: boolean,
     public zone: string,
