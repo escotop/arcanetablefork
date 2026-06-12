@@ -160,7 +160,7 @@ export async function init({ gameId }) {
     provider = new WebrtcProvider(gameId, ydoc, { signaling: [`signaling.arcanetable.app`] });
   }
 
-  loadingManager.onProgress = function (item, loaded, total) {
+  loadingManager.onProgress = function(item, loaded, total) {
     console.log(item, loaded, total);
   };
 
@@ -314,7 +314,7 @@ export function startSpectating() {
 export function sendEvent(event) {
   event.clientID = provider.awareness.clientID;
   event.locallyApplied = true;
-  console.warn('sendEvent', event);
+  console.warn('sendEvent', event.type);
   gameLog.push([event]);
 }
 

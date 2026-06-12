@@ -45,6 +45,6 @@ export default defineConfig(({ mode }) => {
       alias: { '~': path.resolve(__dirname, './src') },
     },
     server: { port: 3000, allowedHosts: true },
-    build: { target: 'esnext', sourcemap: true },
+    build: { target: 'esnext', sourcemap: true, minify: false },
   };
 });
