@@ -7,16 +7,11 @@ import { createRecordFromLoader } from '~/lib/spark/routes';
 
 export default function ChangesPage() {
   const params = useParams();
-  console.log('changed page');
 
   const [change] = createRecordFromLoader(
     params.slug,
     () => import(`~/../content/changes/${params.slug}.mdx`),
   );
-
-  createEffect(() => {
-    console.log(change, change());
-  });
 
   return (
     <div class='bg-gray-900 text-white font-sans' style={`min-height: 100dvh;`}>
