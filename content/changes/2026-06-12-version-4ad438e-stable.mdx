@@ -1,0 +1,38 @@
+---
+date: "2026-06-12T10:08:38-07:00"
+target: stable
+title: "Related Cards, Multi-Card Drag, Installable App, and More"
+keywords:
+  - related cards
+  - tokens
+  - drag
+  - drop
+  - multiplayer
+  - sync
+  - pwa
+  - installable
+  - deck search
+  - animation
+description: "Related Cards menu replaces Add Tokens and shows all associated card parts. Multi-card drag now syncs to all players. Arcanetable is now installable as a PWA. Deck search is faster. Several fixes including tapped state, game log stability, and animation polish."
+version: 4ad438e
+changeCount:
+  bugfixes: 6
+  features: 4
+commitRange: https://github.com/odama626/arcanetable/compare/c571a74...4ad438e
+---
+
+## Features
+
+- **Related Cards** - the "Add Tokens" menu is now "Related Cards" and shows all associated card parts, not just tokens. Meld targets, adventure cards, and other linked parts now appear here too.
+- **Multi-card drag syncs to all players** - dragging and dropping multiple cards now broadcasts a restack event over the network so everyone sees the same card positions after a drop.
+- **Installable app** - Arcanetable now has a proper PWA manifest with name, description, and icon. You can add it to your home screen or install it as a desktop app from supported browsers.
+- **Faster deck search** - dismissing cards from the deck search is significantly faster thanks to the new batched event system. As this migration continues it should also clean up some edge-case multiplayer bugs.
+
+## Fixes
+
+- **Tapped state on leave** - cards were retaining their tapped state when moved off the battlefield. They now reset to untapped when they leave.
+- **Game log stability** - the game log was crashing on malformed or incomplete network events. Now handles them gracefully.
+- **Animation crash loop** - when an animation failed due to missing position data, it would loop infinitely. It now cancels cleanly.
+- **Animations snap on interrupt** - animations cancelled mid-flight now snap to their destination instead of freezing in place.
+- **Deck export** - exporting a deck was including cards with a quantity of 0. Those are now filtered out.
+- **Card grid scroll speed** - scroll speed in the card grid has been tuned to a more comfortable pace.
