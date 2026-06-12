@@ -16,6 +16,8 @@ export const LOOK_EASE = 0.15;
 
 export const SCROLL_SPEED = 0.5;
 
+export const ANNOUNCEMENT_VISIBLE_DURATION = 3500;
+
 export const KEY = {
   Shift: '⇧',
   Mod: navigator?.userAgent?.platform === 'macOS' ? '⌘' : 'Ctrl',

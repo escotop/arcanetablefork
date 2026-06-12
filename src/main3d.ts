@@ -148,19 +148,28 @@ export async function localInit(gameOptions: GameOptions) {
 
 export function readjustPlayAreas() {
   let entries = Object.values(playAreas).sort((a, b) => a.index - b.index);
-  console.log({ sorted: entries });
+  console.log({ entries, playAreas });
 
-  let start = entries.splice(entries.findIndex(e => e.isLocalPlayArea));
-  start.push(...entries);
+  let selfIndex = entries.findIndex(e => e.isLocalPlayArea);
+
+  let sorted;
+
+  if (selfIndex > -1) {
+    sorted = entries.splice(selfIndex);
+    sorted.push(...entries);
+  } else {
+    sorted = [, ...entries];
+  }
 
   let mapIndex = {
-    1: [entries[0].isLocalPlayArea ? 0 : 2],
+    1: [0],
     2: [0, 2],
   };
 
-  let indexMap = mapIndex[start.length];
+  console.log(sorted.length);
+  let indexMap = mapIndex[sorted.length];
 
-  start.forEach((playArea, i) => {
+  sorted.forEach((playArea, i) => {
     let index = indexMap?.[i] ?? i;
     applyPlayerTransform(playArea.mesh, index);
   });
@@ -489,33 +498,6 @@ function onRendererMouseMove(event) {
   }
 }
 
-function checkSceneMaterials() {
-  scene.traverse((obj: any) => {
-    if (!obj.isMesh) return;
-
-    const mat = obj.material;
-
-    const bad =
-      mat == null ||
-      (Array.isArray(mat)
-        ? mat.some(m => !m || m.isMaterial !== true || typeof m.onBeforeRender !== 'function')
-        : mat.isMaterial !== true || typeof mat.onBeforeRender !== 'function');
-
-    if (bad) {
-      console.warn('BAD MATERIAL FOUND', {
-        name: obj.name,
-        uuid: obj.uuid,
-        object: obj,
-        material: mat,
-        materialType: mat?.type,
-        isArray: Array.isArray(mat),
-      });
-
-      throw new Error('Bad material detected (see console)');
-    }
-  });
-}
-
 let ticks = 0;
 let interval = 1 / 30;
 let isErrored = false;
@@ -529,7 +511,6 @@ export function animate() {
     time += delta;
 
     if (ticks >= interval) {
-      checkSceneMaterials();
       render3d(delta);
       ticks = ticks % interval;
     }

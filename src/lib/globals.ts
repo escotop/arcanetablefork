@@ -24,6 +24,7 @@ import { WebsocketProvider } from 'y-websocket';
 import { Doc } from 'yjs';
 import { YArray, YMap } from 'yjs/dist/src/internals';
 import {
+  ANNOUNCEMENT_VISIBLE_DURATION,
   Card,
   CARD_WIDTH,
   CardSystem,
@@ -49,7 +50,7 @@ export function expect(test: boolean, message: string, ...supplemental: any) {
   }
 }
 
-const enableLogger = !import.meta.env.PROD && false;
+const enableLogger = !import.meta.env.PROD;
 const emptyFunc = () => {};
 
 export const logger = {
@@ -93,6 +94,7 @@ export const [settings, setSettings] = createLocalStore('settings', { enableCame
 export let textureLoaderWorker: Comlink.Remote<TextureLoaderWorkerType>;
 export let gui: GUI = null;
 export let baseCameraQuaternion: THREE.Quaternion;
+export let [announcement, setAnnouncement] = createSignal<string | undefined>();
 
 export let selection: Selection;
 export let [capturedErrors, setCapturedErrors] = createSignal([]);
@@ -125,6 +127,14 @@ export function doAfter(x: number, callback: Function): Promise<void> {
       resolve();
     }, x);
   });
+}
+
+let announcmentTimeout: NodeJS.Timeout;
+
+export function createAnnouncement(message: string) {
+  setAnnouncement(message);
+  clearTimeout(announcmentTimeout);
+  announcmentTimeout = setTimeout(() => setAnnouncement(), ANNOUNCEMENT_VISIBLE_DURATION);
 }
 
 export function headlessInit(opts = {}) {

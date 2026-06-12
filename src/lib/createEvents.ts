@@ -1,7 +1,6 @@
 import { Card, CardZone } from './constants';
-import * as Sentry from '@sentry/solidstart';
 import { expect, zonesById } from './globals';
-import { Intersection, Mesh, Object3D } from 'three';
+import { Intersection, Object3D } from 'three';
 import { AnimationOpts, serializeAnimation } from './animations';
 
 interface DefaultAddOptions {
@@ -17,15 +16,13 @@ interface ExtendedOptions<AddOptions extends DefaultAddOptions = {}> {
 // TODO: need to handle skipAnimation, and use it correctly when clientId == self and skipAnimation in remoteEvents
 export function createTransferCardEvent<AddOptions extends {}>(
   card: Card,
-  fromZone: CardZone<any>,
-  toZone: CardZone<AddOptions>,
+  fromZone?: CardZone<any>,
+  toZone?: CardZone<AddOptions>,
   opts: ExtendedOptions<AddOptions> = {},
 ) {
   const { addOptions = {}, userData } = opts;
 
   expect(!!card, `card is undefined`);
-  expect(!!fromZone, `fromZone is undefined`);
-  expect(!!toZone, `toZone is undefined`);
 
   return {
     type: 'transferCard',
@@ -83,5 +80,11 @@ export function createRestackEvent(intersection: Intersection, items: Object3D[]
         // dragQuat: item.userData.dragQuat,
       })),
     },
+  };
+}
+
+export function createPassTurnEvent() {
+  return {
+    type: 'passTurn',
   };
 }

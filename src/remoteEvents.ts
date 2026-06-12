@@ -8,6 +8,7 @@ import * as Sentry from '@sentry/solidstart';
 import {
   applyPlayerTransform,
   cardsById,
+  createAnnouncement,
   drainResolvers,
   expect,
   gameLog,
@@ -15,6 +16,7 @@ import {
   logs,
   onConcede,
   playAreas,
+  players,
   processedEvents,
   provider,
   setLogs,
@@ -107,6 +109,14 @@ const EVENTS = {
   },
   concede(event: Event, playArea: PlayArea) {
     onConcede(event.clientID);
+  },
+  passTurn(event: ReturnType<typeof EventCreators.createPassTurnEvent>) {
+    if (event.clientID === provider.awareness.clientID) {
+      createAnnouncement(`You passed turn`);
+    } else {
+      let player = players().find(player => player.id === event.clientID);
+      createAnnouncement(`${player.entry.name} passed turn.`);
+    }
   },
   toggleTokenMenu(event: Event, playArea: PlayArea) {
     return playArea.toggleTokenMenu(event.payload);

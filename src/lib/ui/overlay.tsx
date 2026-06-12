@@ -22,6 +22,7 @@ import { Menubar, MenubarItem, MenubarMenu, MenubarShortcut } from '../../compon
 import { KEY } from '../constants';
 import {
   cardsById,
+  dispatchGameEvent,
   focusRenderer,
   hoverSignal,
   isSpectating,
@@ -48,6 +49,8 @@ import TokenSearchMenu from './tokenMenu';
 import { useSearchParams } from '@solidjs/router';
 import SettingsOverlay from './settingsOverlay';
 import { PlayArea } from '../playArea';
+import { createPassTurnEvent } from '../createEvents';
+import Announcement from './announcement';
 
 export default function Overlay() {
   let userData = () => hoverSignal()?.mesh?.userData;
@@ -140,6 +143,7 @@ export default function Overlay() {
       <RevealMenu />
       <TokenSearchMenu />
       <CounterDialog />
+      <Announcement />
       <CommandPalette playArea={playArea} />
     </div>
   );
@@ -249,6 +253,12 @@ export function MainMenu(props: { playArea?: PlayArea }) {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          <MenubarItem
+            onClick={() => {
+              dispatchGameEvent(createPassTurnEvent());
+            }}>
+            Pass Turn <MenubarShortcut>[ _ ]</MenubarShortcut>
+          </MenubarItem>
         </MenubarMenu>
       </Menubar>
       <Show when={isLogVisible()}>
