@@ -1,14 +1,12 @@
 import { A, useNavigate } from '@solidjs/router';
 import { nanoid } from 'nanoid';
 import { createSignal, For, onMount } from 'solid-js';
-import GithubIcon from '~/lib/icons/github.svg';
-import PatreonIcon from '~/lib/icons/patreon.svg';
-import DiscordIcon from '~/lib/icons/discord-brands-solid.svg';
 import MetaTags, { JsonLd } from '~/lib/meta-tags';
 import { SHORTCUTS, BATTLEFIELD_SHORTCUTS, OVERLAY_SHORTCUTS } from '~/lib/shortcuts/hotkeys-table';
 import { useClientCardSystemContext } from '~/lib/cardSystemProviderClient';
 import softwareLd from '~/lib/json-ld/software.json';
 import faqLd from '~/lib/json-ld/faq.json';
+import BrandingHeader from '~/components/branding/header';
 
 export default function Page(props) {
   const [startUrl, setStartUrl] = createSignal(`/game/${nanoid()}`);
@@ -70,23 +68,9 @@ function Hero(props: { startUrl: string }) {
     <header
       class='relative bg-cover bg-center bg-gray-800 rounded-lg'
       style="background-image: url('/cluster-1.jpeg'); filter: saturate(2.5);">
-      <div class='absolute inset-0 bg-black opacity-30'></div>
-      <div class='relative flex items-center justify-between p-6'>
-        <div class='flex items-center space-x-4'>
-          <img src='/icon.svg' alt='Arcanetable' class='w-12 h-12' />
-          <span class='text-xl font-bold text-white'>Arcanetable</span>
-        </div>
-        <nav class='space-x-4 flex'>
-          <a href='https://discord.gg/wzdj2W9vvf' target='_blank' aria-label='Discord'>
-            <DiscordIcon style='fill: currentColor;' class='h-8 w-8' />
-          </a>
-          <a href='https://github.com/odama626/arcanetable/' target='_blank' aria-label='GitHub'>
-            <GithubIcon style='fill: currentColor;' class='h-8 w-8' />
-          </a>
-          <a href='https://patreon.com/arcanetable' target='_blank' aria-label='Patreon'>
-            <PatreonIcon style='fill: currentColor' class='h-8 w-8' />
-          </a>
-        </nav>
+      <div class='absolute inset-0 bg-black opacity-30' />
+      <div class='max-w-7xl mx-auto px-6 lg:px-8 flex flex-col gap-8'>
+        <BrandingHeader />
       </div>
       <div class='relative flex flex-col items-center justify-center py-60 text-center'>
         <h1 class='text-4xl font-bold text-white mb-4'>Playtest your deck.</h1>

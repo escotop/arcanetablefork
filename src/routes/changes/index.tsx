@@ -1,5 +1,7 @@
+import { A } from '@solidjs/router';
 import { createEffect, For, Show } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
+import BrandingHeader from '~/components/branding/header';
 import MetaTags from '~/lib/meta-tags';
 import { createRecordsFromGlob } from '~/lib/spark/routes';
 
@@ -8,14 +10,12 @@ export default function Changes() {
     sort: '-date,-target',
   });
 
-  createEffect(() => {
-    console.log({ changes: changes() });
-  });
-
   return (
     <div class='bg-gray-900 text-white font-sans'>
       <div class='max-w-7xl mx-auto px-6 lg:px-8 flex flex-col gap-8'>
         <MetaTags />
+        <BrandingHeader />
+        <h1 class='text-3xl text-gray-200'>Changes</h1>
         <div class='mx-auto flex flex-col'>
           <For each={changes()}>{change => <ChangeEntry change={change} />}</For>
         </div>
@@ -44,7 +44,9 @@ function ChangeEntry(props: { change: any }) {
             </Show>
             <time class='text-sm text-gray-400'>{props.change.date}</time>
           </div>
-          <h2 class='text-xl font-bold text-white'>{props.change.title}</h2>
+          <A href={`/changes/${props.change.metadata.name}`}>
+            <h2 class='text-xl font-bold text-white'>{props.change.title}</h2>
+          </A>
           <p class='text-gray-400 text-sm max-w-2xl'>{props.change.description}</p>
         </div>
         {/* Change count badges */}
@@ -65,19 +67,8 @@ function ChangeEntry(props: { change: any }) {
           </Show>
         </div>
       </div>
-      {/* MDX body */}
       <Show when={props.change.Content}>
-        {/*<div
-          class='prose prose-invert prose-sm max-w-none
-          prose-headings:text-white prose-headings:font-semibold
-          prose-h2:text-base prose-h2:mt-6 prose-h2:mb-2
-          prose-h3:text-sm prose-h3:text-gray-300
-          prose-p:text-gray-400 prose-p:leading-relaxed
-          prose-li:text-gray-400
-          prose-code:text-indigo-300 prose-code:bg-gray-800 prose-code:px-1 prose-code:rounded
-          prose-a:text-indigo-400 prose-a:no-underline hover:prose-a:underline'>*/}
-          <Dynamic component={props.change.Content} />
-        {/*</div>*/}
+        <Dynamic component={props.change.Content} />
       </Show>
       {/* Commit range link */}
       <Show when={props.change.commitRange}>

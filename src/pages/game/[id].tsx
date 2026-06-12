@@ -1,8 +1,6 @@
-import { useBeforeLeave, useSearchParams } from '@solidjs/router';
-import { Component, createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
+import {  useSearchParams } from '@solidjs/router';
+import { Component,  createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { unwrap } from 'solid-js/store';
-import { hydrate } from 'solid-js/web';
-import { Button } from '~/components/ui/button';
 import CopyLinkButton from '~/components/ui/copy-link-button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '~/components/ui/dialog';
 import { useCardSystemContext } from '~/lib/cardSystemContext';

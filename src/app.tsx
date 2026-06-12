@@ -45,13 +45,11 @@ const App: Component = () => {
           </MetaProvider>
         </SentryErrorBoundry>
       )}>
-      <Route path='/' component={lazy(() => import('./routes/index'))} />
-      <Route path='/changes' component={lazy(() => import('./routes/changes/index'))} />
       <ClientOnly>
-        <Route path='/game/:gameId' component={lazy(() => import('./routes/game/[id]'))} />
-        <Route path='/table-view' component={lazy(() => import('./routes/table-view/index'))} />
+        <Route path='/game/:gameId' component={lazy(() => import('./pages/game/[id]'))} />
+        <Route path='/table-view' component={lazy(() => import('./pages/game/table-view/index'))} />
       </ClientOnly>
-      {/*<FileRoutes />*/}
+      <FileRoutes />
     </SentryRouter>
   );
 };
