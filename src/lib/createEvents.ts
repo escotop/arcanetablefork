@@ -67,8 +67,8 @@ export function createAnimationEvent(target: Object3D, animation: AnimationOpts)
   };
 }
 
-export function createRestackEvent(items: Object3D[], intersection: Intersection) {
-  const zone = zonesById.get(intersection.object.userData.zoneId)!;
+export function createRestackEvent(intersection: Intersection, items: Object3D[]) {
+  const zone = zonesById.get(intersection.object.userData.zoneId || intersection.object.id)!;
   expect(!!zone, `zone not found`);
   const anchor = zone.mesh.worldToLocal(intersection.point.clone());
 
@@ -80,7 +80,7 @@ export function createRestackEvent(items: Object3D[], intersection: Intersection
       items: items.map(item => ({
         id: item.userData.id,
         dragOffset: item.userData.dragOffset,
-        dragQuat: item.userData.dragQuat,
+        // dragQuat: item.userData.dragQuat,
       })),
     },
   };

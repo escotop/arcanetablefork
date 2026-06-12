@@ -41,6 +41,13 @@ export function expect(test: boolean, message: string, ...supplemental: any) {
   }
 }
 
+const enableLogger = !import.meta.env.PROD && false;
+const emptyFunc = () => { };
+
+export const logger = {
+  log: enableLogger ? console.log.bind(console) : emptyFunc,
+  warn: enableLogger ? console.warn.bind(console) : emptyFunc
+}
 export let clock: Clock;
 export let loadingManager: LoadingManager;
 export let textureLoader: TextureLoader;
@@ -160,7 +167,7 @@ export async function init({ gameId }) {
     provider = new WebrtcProvider(gameId, ydoc, { signaling: [`signaling.arcanetable.app`] });
   }
 
-  loadingManager.onProgress = function(item, loaded, total) {
+  loadingManager.onProgress = function (item, loaded, total) {
     console.log(item, loaded, total);
   };
 
@@ -314,7 +321,7 @@ export function startSpectating() {
 export function sendEvent(event) {
   event.clientID = provider.awareness.clientID;
   event.locallyApplied = true;
-  console.warn('sendEvent', event.type);
+  logger.warn('sendEvent', event.type);
   gameLog.push([event]);
 }
 
@@ -335,7 +342,7 @@ export async function flushDispatchEventQueue() {
       events,
       clientID: events[0].clientID,
     };
-    console.log('dispatchEvent', event)
+    logger.log('[dispatchGameEvent]', event);
     gameLog.push([event]);
   });
 }
@@ -405,8 +412,6 @@ export function onConcede(clientId?: string) {
   } else {
     setPlayerCount(count => count - 1);
   }
-  console.log(clientId);
-  console.log(playAreas);
   const playArea = playAreas[clientId];
   playArea.destroy();
   setPlayAreas(clientId, undefined);
@@ -438,6 +443,5 @@ export function mouseToScreen(mouse: THREE.Vector2): THREE.Vector2 {
     ((mouse.x + 1) / 2) * window.innerWidth,
     ((1 - mouse.y) / 2) * window.innerHeight,
   );
-  console.log({ result });
   return result;
 }

@@ -100,6 +100,7 @@ export class CardStack implements CardZone {
     }
 
     animateObject(card.mesh, {
+      completeOnCancel: true,
       duration: 0.2,
       path: new CatmullRomCurve3([
         initialPosition,

@@ -56,11 +56,16 @@ import { Hand } from './lib/hand';
 import { PlayArea } from './lib/playArea';
 import { transferCard } from './lib/transferCard';
 import { setCounters } from './lib/ui/counterDialog';
-import { createRestackAnimationEvents, restackItems } from './lib/utils';
+import { restackItems, restackItemsLocally } from './lib/utils';
 import { processEvents } from './remoteEvents';
 import { getDeckStore } from './lib/deckStore';
 import { unwrap } from 'solid-js/store';
-import { createAnimationEvent, createTapEvent, createTransferCardEvent } from './lib/createEvents';
+import {
+  createAnimationEvent,
+  createRestackEvent,
+  createTapEvent,
+  createTransferCardEvent,
+} from './lib/createEvents';
 
 var container;
 
@@ -196,7 +201,6 @@ function onDocumentClick(event: PointerEvent) {
   if (target.userData.zone === 'battlefield') {
     setHoverSignal({ mouse });
   } else if (target.userData.location === 'battlefield') {
-    console.log('dispatch tap event');
     dispatchGameEvent(createTapEvent(target));
 
     flushDispatchEventQueue().then(() => {
@@ -326,7 +330,7 @@ async function onDocumentDrop(event) {
   let toZone = zonesById.get(toZoneId)!;
   expect(!!toZone, `toZone is not found`, { toZone });
 
-  restackItems(dragTargets, intersections);
+  restackItemsLocally(dragTargets, intersections);
 
   for (const target of dragTargets ?? []) {
     setCardData(target, 'isDragging', false);
@@ -367,16 +371,8 @@ async function onDocumentDrop(event) {
 
   await flushDispatchEventQueue();
 
-  console.log({ dragTargets, intersection });
   if (intersection.object.userData.zone === 'battlefield') {
-    // const firstCard = cardsById.get(dragTargets[0].userData.id)!;
-    // firstCard.mesh.position.copy(toZone.mesh.worldToLocal(intersection.point.clone()));
-
-    const anchorPoint = toZone.mesh.worldToLocal(intersection.point.clone());
-
-    const restackEvents = createRestackAnimationEvents(dragTargets, anchorPoint);
-
-    restackEvents.forEach(event => dispatchGameEvent(event));
+    dispatchGameEvent(createRestackEvent(intersection, dragTargets));
   }
 
   if (shouldClearSelection) {
@@ -437,7 +433,7 @@ function onRendererMouseMove(event) {
 
     let intersections = raycaster.intersectObject(scene);
 
-    restackItems(dragTargets, intersections);
+    restackItemsLocally(dragTargets, intersections);
 
     if (hoverSignal()) {
       setHoverSignal(signal => {
@@ -487,7 +483,6 @@ function checkSceneMaterials() {
         isArray: Array.isArray(mat),
       });
 
-      // optional: throw to stop exactly when it first occurs
       throw new Error('Bad material detected (see console)');
     }
   });

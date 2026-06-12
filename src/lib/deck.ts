@@ -161,7 +161,8 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
       promises.push(this.flipTop());
     }
 
-    return Promise.all(promises).then(() => {
+    // don't await this, or it slows down add stacks to the deck
+    Promise.all(promises).then(() => {
       // this is a hack. the animation library should be able to get the cards where they belong
       this.cards.forEach((card, i) => {
         card.mesh.position.set(0, 0, i * CARD_THICKNESS);

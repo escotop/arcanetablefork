@@ -7,6 +7,7 @@ import { Euler, Intersection, Matrix4, Mesh, Object3D, Quaternion, Vector3 } fro
 import { CARD_STACK_OFFSET, CARD_THICKNESS, CARD_WIDTH } from './constants';
 import { cardsById, provider } from './globals';
 import { createAnimationEvent } from './createEvents';
+import { animateObject } from './animations';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -117,7 +118,7 @@ export function shuffleItems<T>(items: T[], order?: number[]) {
   return newOrder;
 }
 
-export function restackItems(items: Object3D[], intersections: Intersection[]) {
+export function restackItemsLocally(items: Object3D[], intersections: Intersection[]) {
   if (!intersections.length) return;
 
   let targetsById = Object.fromEntries(items.map(target => [target.userData.id, target]));
@@ -130,55 +131,40 @@ export function restackItems(items: Object3D[], intersections: Intersection[]) {
   if (!intersection) return;
   if (!items?.[0]?.parent) return;
 
-  console.log(items[0].parent);
-
   const anchor = items[0].parent.worldToLocal(intersection.point.clone());
   const targetWorldQuat = intersection.object.getWorldQuaternion(new Quaternion());
 
-  const ops = createRestackOps(items, anchor, targetWorldQuat, true);
-
-  ops.forEach(op => {
-    op.item.position.copy(op.to.position);
-    op.item.quaternion.copy(op.to.quaternion);
-  });
-}
-
-function createRestackOps(
-  items: Object3D[],
-  anchor: Vector3,
-  targetWorldQuat: Quaternion,
-  isDragging = false,
-) {
-  if (!items?.[0]?.parent) return [];
-  return items.flatMap((item, i) => {
-    if (!item.parent) return [];
+  return items.forEach((item, i) => {
+    if (!item.parent) return;
     const sourceWorldQuat = item.parent.getWorldQuaternion(new Quaternion());
     const localOffset = new Vector3().fromArray(item.userData.dragOffset);
 
-    let position: Vector3;
-    if (isDragging) {
-      const anchorWorld = item.parent.localToWorld(anchor.clone());
-      anchorWorld.add(localOffset.applyQuaternion(targetWorldQuat));
-      position = item.parent.worldToLocal(anchorWorld);
-    } else {
-      position = anchor.clone().add(localOffset);
-    }
+    const anchorWorld = item.parent
+      .localToWorld(anchor.clone())
+      .add(localOffset.applyQuaternion(targetWorldQuat));
+    let position = item.parent.worldToLocal(anchorWorld);
 
-    return {
-      item,
-      to: {
-        position,
-        quaternion: sourceWorldQuat.clone().invert().multiply(targetWorldQuat.clone()),
-      },
-    };
+    item.position.copy(position);
+    item.quaternion.copy(sourceWorldQuat.clone().invert().multiply(targetWorldQuat.clone()));
   });
 }
 
-// TODO: we should send a restack event with an anchor and list of items over the wire, and do this on each client
-export function createRestackAnimationEvents(items: Object3D[], anchor: Vector3) {
+export function restackItems(anchor: Vector3, items: Object3D[]) {
   if (!items[0]?.parent) return [];
-  const targetWorldQuat = items[0].parent.getWorldQuaternion(new Quaternion());
-  const ops = createRestackOps(items, anchor, targetWorldQuat);
 
-  return ops.map(op => createAnimationEvent(op.item, { to: op.to, duration: 0 }));
+  if (!items?.[0]?.parent) return [];
+  return Promise.all(
+    items.flatMap((item, i) => {
+      if (!item.parent) return [];
+      const localOffset = new Vector3().fromArray(item.userData.dragOffset);
+
+      let position = anchor.clone().add(localOffset);
+
+      return animateObject(item, {
+        completeOnCancel: true,
+        duration: 0,
+        to: { position, quarternion: new Quaternion() },
+      });
+    }),
+  );
 }

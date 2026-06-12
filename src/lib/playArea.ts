@@ -163,6 +163,7 @@ export class PlayArea {
 
     zone.cards.forEach(card => {
       const toZone = zonesById.get(card.mesh.userData.previousZoneId);
+      // toZone is exected to be undefined when dismissing tokens
 
       dispatchGameEvent(
         createTransferCardEvent(card, zone, toZone, { addOptions: { location: 'bottom' } }),
@@ -357,6 +358,7 @@ export class PlayArea {
     setCardData(cardMesh, `zone.${zone.id}.rotation`, rotation.toArray());
 
     animateObject(cardMesh, {
+      completeOnCancel: true,
       duration: 0.4,
       path: new CatmullRomCurve3([
         cardMesh.position.clone(),
@@ -376,31 +378,6 @@ export class PlayArea {
     }
   }
 
-  /**
-   * @deprecated use tap
-   */
-  legacyTap(cardMesh: Mesh) {
-    return new Promise<void>(onComplete => {
-      let initialAngle = cardMesh.userData.isFlipped ? Math.PI : 0;
-      let angleDelta = cardMesh.userData.isTapped ? 0 : -Math.PI / 2;
-
-      if (cardMesh.userData.isFlipped) {
-        angleDelta = -angleDelta;
-      }
-
-      let rotation = cardMesh.rotation.clone();
-      rotation.z = angleDelta + initialAngle;
-      setCardData(cardMesh, 'isTapped', !cardMesh.userData.isTapped);
-      this.emitEvent({ type: 'tap', payload: { userData: cardMesh.userData } });
-
-      animateObject(cardMesh, {
-        to: { rotation },
-        duration: 0.2,
-        onComplete,
-      });
-    });
-  }
-
   tap(cardMesh: Mesh) {
     let initialAngle = cardMesh.userData.isFlipped ? Math.PI : 0;
     let angleDelta = cardMesh.userData.isTapped ? -Math.PI / 2 : 0;
@@ -413,6 +390,7 @@ export class PlayArea {
 
     return new Promise<void>(onComplete => {
       animateObject(cardMesh, {
+        completeOnCancel: true,
         to: { rotation },
         duration: 0.2,
         onComplete,
