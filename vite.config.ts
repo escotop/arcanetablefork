@@ -12,21 +12,53 @@ import yaml from '@modyfi/vite-plugin-yaml';
 import remarkHasBody from './src/lib/spark/remark-has-body';
 import { sentryVitePlugin } from '@sentry/vite-plugin';
 import sitemapPlugin from 'vite-plugin-sitemap';
+import { writeFileSync } from 'node:fs';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const hostname = env.VITE_SITE_URL;
+  let nitro;
 
   return {
     plugins: [
       solidStart(),
       sentryVitePlugin(),
       sitemapPlugin({
-        hostname: env.VITE_SITE_URL,
+        hostname,
       }),
       nitroV2Plugin({
         preset: 'static',
         prerender: {
+          crawlLinks: true,
           routes: ['/', '/changes'],
+        },
+        hooks: {
+          'prerender:generate'(_route, _nitro) {
+            nitro = _nitro; // main nitro; gives us the output dir
+          },
+          'prerender:done'({ prerenderedRoutes }) {
+            if (!nitro) return;
+            const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+            const urls = [
+              ...new Set(
+                prerenderedRoutes
+                  .filter(
+                    r =>
+                      !r.error &&
+                      (r.contentType?.includes('html') || r.fileName?.endsWith('.html')),
+                  )
+                  .map(r => new URL(r.route, hostname).href),
+              ),
+            ];
+
+            const xml =
+              `<?xml version="1.0" encoding="UTF-8"?>\n` +
+              `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+              urls.map(u => `  <url><loc>${esc(u)}</loc></url>`).join('\n') +
+              `\n</urlset>\n`;
+
+            writeFileSync(path.join(nitro.options.output.publicDir, 'sitemap.xml'), xml);
+          },
         },
       }),
       {
