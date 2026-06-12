@@ -3,7 +3,8 @@ import { Hono } from 'hono';
 // ── CONFIG ────────────────────────────────────────────────────────────────────
 
 const SCRYFALL = 'https://api.scryfall.com';
-export const CACHE_TTL = 12 * 3600; // 12hr in seconds
+export const CACHE_TTL = 12 * 3600;
+export const STALE_TTL = 24 * 3600 * 5;
 const SCRY_SERVER_ID = 'scry-server-mtg';
 
 const TYPE_ALIASES: Record<string, string> = {
