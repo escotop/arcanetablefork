@@ -87,7 +87,6 @@ export function HotKeys() {
       e.preventDefault();
 
       cards().forEach(card => {
-        console.log({ card });
         const previousZone = zonesById.get(card.mesh.userData.zoneId);
         transferCard(card, previousZone, playArea.deck, { addOptions: { location: 'bottom' } });
       });
@@ -133,7 +132,6 @@ export function HotKeys() {
     });
 
     hotkeys('f', 'battlefield', function (e) {
-      console.log('f');
       e.preventDefault();
       cards().forEach(card => playArea.flip(card.mesh));
     });

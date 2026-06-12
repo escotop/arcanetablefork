@@ -58,7 +58,6 @@ export default function CommandPalette(props: { playArea: PlayArea }) {
   }
 
   function onValueChange(value, search) {
-    console.log(value, search);
   }
 
   function onActionComplete() {

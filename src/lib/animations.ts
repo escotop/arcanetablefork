@@ -211,10 +211,6 @@ function renderAnimation(animation, delta: number): boolean {
 
   if (animation.to?.position) {
     let from = animation.from?.position ?? animation.to?.position;
-    if (!from) {
-      console.log({ animation });
-      return true;
-    }
     animation.obj.position.copy(from.clone().lerp(animation.to.position, delta));
   }
   if (animation.to?.rotation) {

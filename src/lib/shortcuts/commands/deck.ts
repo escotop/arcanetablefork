@@ -33,7 +33,6 @@ export function exileFromTop(playArea: PlayArea, count = 1) {
 
 export function getNextLandIndex(cards: Card[]) {
   const count = cards.findIndex(card => card.detail.type_line.toLowerCase().includes('land'));
-  console.log(count);
   return count;
 }
 
