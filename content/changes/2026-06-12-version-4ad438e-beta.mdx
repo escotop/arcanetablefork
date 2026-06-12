@@ -1,0 +1,30 @@
+---
+date: "2026-06-12T10:08:38-07:00"
+target: beta
+title: "Multi-Card Drag Sync and Animation Polish"
+keywords:
+  - drag
+  - drop
+  - multi-select
+  - restack
+  - multiplayer
+  - sync
+  - animation
+  - staging
+description: "Dragging and dropping multiple cards now syncs correctly to all players. Animations that get interrupted now snap to their end position instead of getting stuck."
+version: 4ad438e
+changeCount:
+  bugfixes: 1
+  features: 1
+commitRange: https://github.com/odama626/arcanetable/compare/c506ee5...4ad438e
+---
+
+> **Staging release** — try it at [staging.arcanetable.app](https://staging.arcanetable.app/).
+
+## Features
+
+- **Multi-card drag syncs to all players** - dragging and dropping multiple cards at once now broadcasts a restack event over the network, so everyone sees the same card positions after a drop. Card grid scroll speed has also been tuned down to a more comfortable pace.
+
+## Fixes
+
+- **Animations snap on interrupt** - animations that were cancelled mid-flight (e.g. a card getting moved while already animating) now snap to their destination instead of freezing in place.
