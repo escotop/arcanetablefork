@@ -24,7 +24,8 @@ import { cardsById, doXTimes, scene, selection } from '../globals';
 import { PlayArea } from '../playArea';
 import { counters, setIsCounterDialogOpen } from './counterDialog';
 import MoveMenu from './moveMenu';
-import { restackItems, shuffleItems } from '../utils';
+import { shuffleItems } from '../utils';
+import { setCardData } from '../card';
 
 const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = props => {
   const [cardModifiers, setCardModifiers] = createSignal(props.cardMesh?.userData.modifiers ?? {});
@@ -44,7 +45,7 @@ const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = 
 
   createEffect(() => {
     setCardModifiers(props.cardMesh?.userData.modifiers ?? {});
-  })
+  });
 
   let cardText = () => {
     let count = selection.selectedItems.length;
@@ -77,20 +78,23 @@ const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = 
               Flip<MenubarShortcut>F</MenubarShortcut>
             </MenubarItem>
 
-            <MenubarItem
+            {/*<MenubarItem
               onClick={() => {
                 if (!selection.selectedItems?.length) return;
-                selection._setSelectedItems(items => {
-                  let newItems = [...items];
-                  let itemPositions = items.map(item => item.position.toArray());
-                  const newOrder = shuffleItems(newItems);
-                  newItems.forEach((item, i) => {
-                    item.position.fromArray(itemPositions[i]);
-                  });
-                  return newItems;
-                });
+                // selection._setSelectedItems(items => {
+                //   let newItems = [...items];
+                //   let itemPositions = items.map(item => item.position.toArray());
+                //   const newOrder = shuffleItems(newItems);
+                //   newItems.forEach((item, i) => {
+                //     item.position.fromArray(itemPositions[i]);
+                //   });
+                //   return newItems;
+                // });
                 meshes().forEach(mesh => {
-                  props.playArea.flip(mesh);
+                  if (!mesh?.userData.isFlipped) {
+                    props.playArea.flip(mesh);
+                  }
+                  setCardData(mesh, 'isPublic', false)
                 });
                 // const raycaster = new Raycaster();
                 // let direction = selection.selectedItems[0].parent
@@ -101,7 +105,7 @@ const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = 
                 // console.log(intersections);
               }}>
               Shuffle<MenubarShortcut>S</MenubarShortcut>
-            </MenubarItem>
+            </MenubarItem>*/}
             <MenubarSub overlap>
               <MenubarSubTrigger>Counters</MenubarSubTrigger>
               <MenubarSubContent>
@@ -181,7 +185,7 @@ const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = 
         />
       </Menubar>
       <div>
-          <CounterRow
+        <CounterRow
           onChangeCounter={(counterId, fn) => {
             updateCardModifiers(modifiers => ({
               ...modifiers,

@@ -120,6 +120,7 @@ export class CardArea implements CardZone<{ positionArray?: [number, number, num
       card.mesh.rotation.copy(rotation);
     } else {
       animateObject(card.mesh, {
+        completeOnCancel: true,
         duration: 0.2,
         from: {
           rotation: initialRotation,

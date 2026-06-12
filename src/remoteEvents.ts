@@ -1,6 +1,6 @@
 import uniqBy from 'lodash-es/uniqBy';
 import { nanoid } from 'nanoid';
-import { Vector3 } from 'three';
+import {  Vector3 } from 'three';
 import { animateObject, queueAnimationGroup, rehydrateAnimation } from './lib/animations';
 import { cloneCard, splitUserdata, setCardData } from './lib/card';
 import { Card } from './lib/constants';
@@ -11,6 +11,7 @@ import {
   drainResolvers,
   expect,
   gameLog,
+  logger,
   logs,
   onConcede,
   playAreas,
@@ -29,6 +30,7 @@ import { transferCard } from './lib/transferCard';
 import { setCounters } from './lib/ui/counterDialog';
 import { isLogMessageStackable } from './lib/ui/log';
 import * as EventCreators from './lib/createEvents';
+import { restackItems } from './lib/utils';
 
 type Events = ReturnType<(typeof EventCreators)[keyof typeof EventCreators]>;
 type Event = { clientID: string } & Events;
@@ -89,7 +91,7 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
   if (card && event.payload.userData) {
     applyEventUserData(card, event.payload.userData);
   }
-  console.log('handleEvents', ...arguments);
+  logger.log('handleEvents', ...arguments);
   await EVENTS[event.type](event, playArea, card);
 }
 
@@ -131,7 +133,19 @@ const EVENTS = {
     let fromZone = zonesById.get(event.payload.fromZoneId)!;
     let toZone = zonesById.get(event.payload.toZoneId)!;
 
+    if (
+      event.clientID === provider.awareness.clientID &&
+      event.payload.extendedOptions?.addOptions?.skipLocalAnimation
+    ) {
+      event.payload.extendedOptions.addOptions.skipAnimation = true;
+    }
+
     await transferCard(card, fromZone, toZone, event.payload.extendedOptions);
+  },
+  async restack(event: ReturnType<typeof EventCreators.createRestackEvent>) {
+    const items = event.payload.items.map(item => cardsById.get(item.id)?.mesh).filter(Boolean);
+
+    await restackItems(new Vector3().fromArray(event.payload.anchor), items);
   },
   createCard(event: Event, playArea: PlayArea) {
     let card = cloneCard({ detail: event.payload.userData.card.detail }, event.payload.userData.id);

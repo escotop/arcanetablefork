@@ -1,6 +1,7 @@
 import { setCardData, updateModifiers } from './card';
 import { Card, CardZone } from './constants';
 import { cardsById, sendEvent } from './globals';
+import * as Sentry from '@sentry/solidstart';
 
 interface DefaultAddOptions {
   destroy?: boolean;
@@ -12,6 +13,7 @@ interface ExtendedOptions<AddOptions extends DefaultAddOptions = {}> {
   preventTransmit?: boolean;
 }
 
+// toZone and fromZone being undefined are actually valid in cases like tokens
 export async function transferCard<AddOptions extends {}>(
   card: Card,
   fromZone?: CardZone<any>,
@@ -22,10 +24,9 @@ export async function transferCard<AddOptions extends {}>(
     preventTransmit = false,
   }: ExtendedOptions<AddOptions> = {},
 ) {
-  if (!card || !fromZone) {
+  if (!card) {
     console.warn(`card is undefined`, new Error().stack);
-    console.log({ card, fromZone, toZone });
-    return;
+    Sentry.captureException(new Error(`card is undefined`));
   }
 
   await fromZone?.removeCard?.(card.mesh);

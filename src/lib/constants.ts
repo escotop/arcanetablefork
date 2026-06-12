@@ -3,7 +3,7 @@ import { EulerTuple, Mesh, Object3D, Vector2, Vector3, Vector3Tuple } from 'thre
 export const CARD_WIDTH = 63 / 4;
 export const CARD_HEIGHT = 88 / 4;
 export const CARD_THICKNESS = 0.3 / 4;
-export const CARD_STACK_OFFSET = 2;
+export const CARD_STACK_OFFSET = 2.4;
 
 export const ZONE_OUTLINE_COLOR = 0x000;
 export const CARD_ZONE_COLOR = 0x1a1533;
@@ -13,6 +13,8 @@ export const TABLE_COLOR = 0x2c1b4e;
 export const LOOK_STRENGTH_X = 0.15;
 export const LOOK_STRENGTH_Y = 0.125 / 2;
 export const LOOK_EASE = 0.15;
+
+export const SCROLL_SPEED = 0.5;
 
 export const KEY = {
   Shift: '⇧',

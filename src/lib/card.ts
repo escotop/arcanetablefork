@@ -324,7 +324,7 @@ export function cleanupCard(card: card) {
   cardsById.delete(card.id);
 }
 
-export function setCardData(cardMesh: Mesh, field: string, value: unknown) {
+export function setCardData(cardMesh: Object3D, field: string, value: unknown) {
   let modifiersNeedUpdate = false;
   // before setting value
   if (field === 'isPublic') {
@@ -523,35 +523,6 @@ export function updateModifiers(card: Card) {
     .forEach((modifier, index) => {
       updateCounter(card, modifier.counter, modifier.value, index);
     });
-}
-
-let raycaster = new Raycaster();
-
-export function getYOffsetForTopOfStack(obj: Mesh) {
-  let maxZ = obj.position.z - CARD_THICKNESS;
-  let pointData = obj.geometry.attributes.position;
-  let vector = new Vector3();
-  let direction = obj.getWorldDirection(new Vector3()).normalize().multiplyScalar(-1);
-  let intersections = [];
-
-  for (
-    let pointOffset = 0;
-    pointOffset < pointData.array.length;
-    pointOffset += pointData.itemSize
-  ) {
-    vector.fromArray(pointData.array, pointOffset);
-    obj.localToWorld(vector);
-    raycaster.set(vector.clone().add(direction.clone().multiplyScalar(-1000)), direction);
-    intersections.push(...raycaster.intersectObject(scene).filter(i => i.object.id !== obj.id));
-    if (intersections.length) {
-      maxZ = Math.max(intersections[0].object.position.z, maxZ);
-    }
-  }
-
-  let stack = uniqBy(intersections, intersection => intersection.object.id);
-  let stackCount = stack.length - 1;
-
-  return stackCount * CARD_THICKNESS;
 }
 
 export function getSerializableCard(cardMesh: Object3D) {

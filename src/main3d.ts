@@ -56,11 +56,16 @@ import { Hand } from './lib/hand';
 import { PlayArea } from './lib/playArea';
 import { transferCard } from './lib/transferCard';
 import { setCounters } from './lib/ui/counterDialog';
-import { restackItems } from './lib/utils';
+import { restackItems, restackItemsLocally } from './lib/utils';
 import { processEvents } from './remoteEvents';
 import { getDeckStore } from './lib/deckStore';
 import { unwrap } from 'solid-js/store';
-import { createTapEvent } from './lib/createEvents';
+import {
+  createAnimationEvent,
+  createRestackEvent,
+  createTapEvent,
+  createTransferCardEvent,
+} from './lib/createEvents';
 
 var container;
 
@@ -196,7 +201,6 @@ function onDocumentClick(event: PointerEvent) {
   if (target.userData.zone === 'battlefield') {
     setHoverSignal({ mouse });
   } else if (target.userData.location === 'battlefield') {
-    console.log('dispatch tap event')
     dispatchGameEvent(createTapEvent(target));
 
     flushDispatchEventQueue().then(() => {
@@ -282,25 +286,25 @@ function onDocumentDragStart(event: PointerEvent) {
       .distanceTo(origin);
   });
 
-  targets
-    .sort((a, b) => {
-      return b.userData.mouseDistance - a.userData.mouseDistance;
-    })
-    .forEach((target, i) => {
+  targets.sort((a, b) => {
+    return b.userData.mouseDistance - a.userData.mouseDistance;
+  });
+
+  if (targets.length > 0) {
+    const primaryWorldPosition = targets[0].getWorldPosition(new THREE.Vector3());
+
+    targets.forEach((target, i) => {
+      const dragOffset = new THREE.Vector3(
+        0,
+        CARD_STACK_OFFSET * (targets.length - i - 1),
+        CARD_THICKNESS * (i + 1),
+      );
+
       setCardData(target, 'isDragging', true);
-
-      let dragOffset = [0, 0, 0];
-      if (target.userData.location !== 'hand') {
-        dragOffset = targets
-          .at(-1)
-          .worldToLocal(intersection.point.clone())
-          .multiplyScalar(-1)
-          .add(new THREE.Vector3(0, CARD_STACK_OFFSET * (targets.length - i), i * CARD_THICKNESS))
-          .toArray();
-      }
-
-      setCardData(target, 'dragOffset', dragOffset);
+      setCardData(target, 'dragOffset', dragOffset.toArray());
+      setCardData(target, 'dragQuat', target.quaternion.toArray());
     });
+  }
 
   dragTargets = targets;
 }
@@ -319,47 +323,56 @@ async function onDocumentDrop(event) {
       !targetsById[i.object.userData.id] &&
       (i.object.userData.isInteractive || i.object.userData.zone),
   )!;
+  if (!intersection) return;
 
   let shouldClearSelection = false;
+  let toZoneId = intersection.object.userData.zoneId;
+  let toZone = zonesById.get(toZoneId)!;
+  expect(!!toZone, `toZone is not found`, { toZone });
 
-  for await (const target of dragTargets ?? []) {
+  restackItemsLocally(dragTargets, intersections);
+
+  for (const target of dragTargets ?? []) {
     setCardData(target, 'isDragging', false);
 
-    let toZoneId = intersection.object.userData.zoneId;
     let fromZoneId = target.userData.zoneId;
-    let fromZone = zonesById.get(fromZoneId);
-    let toZone = zonesById.get(toZoneId);
+    let fromZone = zonesById.get(fromZoneId)!;
+    expect(!!fromZone, `fromZone not found `, { fromZone });
 
     if (fromZoneId && fromZoneId === toZoneId) {
       setCardData(target, `zone.${toZone.id}.position`, target.position.toArray());
       setCardData(target, `zone.${toZone.id}.rotation`, target.rotation.toArray());
-      sendEvent({
-        type: 'animateObject',
-        payload: {
-          userData: target.userData,
-          animation: serializeAnimation({
-            duration: 0.2,
-            to: {
-              position: target.position,
-              rotation: target.rotation,
-            },
-          }),
-        },
-      });
+      dispatchGameEvent(
+        createAnimationEvent(target, {
+          duration: 0.2,
+          to: {
+            position: target.position,
+            rotation: target.rotation,
+          },
+        }),
+      );
       continue;
     }
 
-    let card = cardsById.get(target.userData.id);
-    let position = toZone.mesh.worldToLocal(intersection.point);
+    let card = cardsById.get(target.userData.id)!;
+    let position = toZone.mesh.worldToLocal(intersection.point.clone());
     expect(!!card, `card not found`, { card });
 
-    await transferCard(card, fromZone, toZone, {
-      addOptions: {
-        skipAnimation: true,
-        positionArray: position.toArray(),
-      },
-    });
+    dispatchGameEvent(
+      createTransferCardEvent(card, fromZone, toZone, {
+        addOptions: {
+          skipLocalAnimation: true,
+          positionArray: position.toArray(),
+        },
+      }),
+    );
     shouldClearSelection = true;
+  }
+
+  await flushDispatchEventQueue();
+
+  if (intersection.object.userData.zone === 'battlefield') {
+    dispatchGameEvent(createRestackEvent(intersection, dragTargets));
   }
 
   if (shouldClearSelection) {
@@ -420,7 +433,7 @@ function onRendererMouseMove(event) {
 
     let intersections = raycaster.intersectObject(scene);
 
-    restackItems(dragTargets, intersections);
+    restackItemsLocally(dragTargets, intersections);
 
     if (hoverSignal()) {
       setHoverSignal(signal => {
@@ -470,7 +483,6 @@ function checkSceneMaterials() {
         isArray: Array.isArray(mat),
       });
 
-      // optional: throw to stop exactly when it first occurs
       throw new Error('Bad material detected (see console)');
     }
   });

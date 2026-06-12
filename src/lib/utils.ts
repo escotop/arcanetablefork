@@ -4,8 +4,10 @@ import get from 'lodash-es/get';
 import set from 'lodash-es/set';
 import { twMerge } from 'tailwind-merge';
 import { Euler, Intersection, Matrix4, Mesh, Object3D, Quaternion, Vector3 } from 'three';
-import { CARD_THICKNESS, CARD_WIDTH } from './constants';
-import { provider } from './globals';
+import { CARD_STACK_OFFSET, CARD_THICKNESS, CARD_WIDTH } from './constants';
+import { cardsById, provider } from './globals';
+import { createAnimationEvent } from './createEvents';
+import { animateObject } from './animations';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -116,7 +118,7 @@ export function shuffleItems<T>(items: T[], order?: number[]) {
   return newOrder;
 }
 
-export function restackItems(items: Object3D[], intersections: Intersection[]) {
+export function restackItemsLocally(items: Object3D[], intersections: Intersection[]) {
   if (!intersections.length) return;
 
   let targetsById = Object.fromEntries(items.map(target => [target.userData.id, target]));
@@ -127,29 +129,42 @@ export function restackItems(items: Object3D[], intersections: Intersection[]) {
   )!;
 
   if (!intersection) return;
+  if (!items?.[0]?.parent) return;
 
-  const intersectionWorldQuat = new Quaternion();
-  intersection.object.getWorldQuaternion(intersectionWorldQuat);
+  const anchor = items[0].parent.worldToLocal(intersection.point.clone());
+  const targetWorldQuat = intersection.object.getWorldQuaternion(new Quaternion());
 
-  for (const target of items) {
-    let pointTarget = intersection.point.clone();
+  return items.forEach((item, i) => {
+    if (!item.parent) return;
+    const sourceWorldQuat = item.parent.getWorldQuaternion(new Quaternion());
+    const localOffset = new Vector3().fromArray(item.userData.dragOffset);
 
-    if (['hand', 'peek', 'tokenSearch'].includes(target.userData.location)) {
-      let parentWorldQuat = new Quaternion();
-      target.parent?.getWorldQuaternion(parentWorldQuat);
-      const localQuat = parentWorldQuat.clone().invert().multiply(intersectionWorldQuat);
-      target.quaternion.copy(localQuat);
-    }
+    const anchorWorld = item.parent
+      .localToWorld(anchor.clone())
+      .add(localOffset.applyQuaternion(targetWorldQuat));
+    let position = item.parent.worldToLocal(anchorWorld);
 
-    target.parent.worldToLocal(pointTarget);
+    item.position.copy(position);
+    item.quaternion.copy(sourceWorldQuat.clone().invert().multiply(targetWorldQuat.clone()));
+  });
+}
 
-    let rotationMatrix = new Matrix4().makeRotationFromEuler(target.rotation);
-    pointTarget.add(
-      new Vector3().fromArray(target.userData.dragOffset).applyMatrix4(rotationMatrix),
-    );
+export function restackItems(anchor: Vector3, items: Object3D[]) {
+  if (!items[0]?.parent) return [];
 
-    pointTarget.add(new Vector3(0, 0, CARD_THICKNESS / 2));
+  if (!items?.[0]?.parent) return [];
+  return Promise.all(
+    items.flatMap((item, i) => {
+      if (!item.parent) return [];
+      const localOffset = new Vector3().fromArray(item.userData.dragOffset);
 
-    target.position.copy(pointTarget);
-  }
+      let position = anchor.clone().add(localOffset);
+
+      return animateObject(item, {
+        completeOnCancel: true,
+        duration: 0,
+        to: { position, quarternion: new Quaternion() },
+      });
+    }),
+  );
 }

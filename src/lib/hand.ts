@@ -27,7 +27,7 @@ export class Hand implements CardZone {
     this.mesh = new Group();
     this.mesh.userData.isInteractive = true;
     this.mesh.userData.zone = 'hand';
-    this.mesh.setRotationFromEuler(HAND_ROTATION.clone())
+    this.mesh.setRotationFromEuler(HAND_ROTATION.clone());
     this.mesh.position.set(0, -105, 10);
     this.mesh.userData.id = id;
     this.mesh.userData.resting = this.mesh.position.clone();
@@ -89,7 +89,7 @@ export class Hand implements CardZone {
 
     setCardData(card.mesh, 'resting', {
       position: restingPosition,
-      rotation: new Euler()
+      rotation: new Euler(),
     });
 
     let initialRotation = getGlobalRotation(card.mesh);
