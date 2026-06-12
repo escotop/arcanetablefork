@@ -22,8 +22,16 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { WebrtcProvider } from 'y-webrtc';
 import { WebsocketProvider } from 'y-websocket';
 import { Doc } from 'yjs';
-import { YArray } from 'yjs/dist/src/internals';
-import { Card, CARD_WIDTH, CardSystem, CardZone, HoverSignal, TABLE_COLOR } from './constants';
+import { YArray, YMap } from 'yjs/dist/src/internals';
+import {
+  Card,
+  CARD_WIDTH,
+  CardSystem,
+  CardZone,
+  GameState,
+  HoverSignal,
+  TABLE_COLOR,
+} from './constants';
 import type { PlayArea } from './playArea';
 import TextureLoaderWorker from './textureLoaderWorker?worker';
 import { type TextureLoaderWorkerType } from './textureLoaderWorker';
@@ -42,12 +50,12 @@ export function expect(test: boolean, message: string, ...supplemental: any) {
 }
 
 const enableLogger = !import.meta.env.PROD && false;
-const emptyFunc = () => { };
+const emptyFunc = () => {};
 
 export const logger = {
   log: enableLogger ? console.log.bind(console) : emptyFunc,
-  warn: enableLogger ? console.warn.bind(console) : emptyFunc
-}
+  warn: enableLogger ? console.warn.bind(console) : emptyFunc,
+};
 export let clock: Clock;
 export let loadingManager: LoadingManager;
 export let textureLoader: TextureLoader;
@@ -64,6 +72,7 @@ export let [peekFilterText, setPeekFilterText] = createSignal('');
 export let ydoc = new Doc();
 export let table: Object3D;
 export let gameLog: YArray<any>;
+export let gameState: YMap<GameState>;
 export let [animating, setAnimating] = createSignal(false);
 export let [players, setPlayers] = createSignal([]);
 export let [isInitialized, setIsIntitialized] = createSignal(false);
@@ -125,6 +134,8 @@ export function headlessInit(opts = {}) {
   textureLoader = new TextureLoader(loadingManager);
   textureLoaderWorker = Comlink.wrap(new TextureLoaderWorker());
   gameLog = opts.gameLog ?? ydoc.getArray('gameLog');
+  gameState = opts.gameState ?? ydoc.getMap('gameState');
+
   provider = opts?.provider;
 }
 
@@ -286,15 +297,17 @@ export async function init({ gameId }) {
 }
 
 export function applyPlayerTransform(group: THREE.Group, index: number) {
+  group.position.set(0, 0, 0);
+  group.rotation.set(0, 0, 0);
   switch (index) {
     case 0:
       return;
     case 1:
-      group.rotateZ(Math.PI);
-      return;
-    case 2:
       group.rotateZ(Math.PI / 2);
       group.position.setX(100);
+      return;
+    case 2:
+      group.rotateZ(Math.PI);
       return;
     case 3:
       group.rotateZ(Math.PI / 2 + Math.PI);

@@ -17,6 +17,7 @@ import {
 } from './lib/constants';
 import {
   animating,
+  applyPlayerTransform,
   baseCameraQuaternion,
   camera,
   cardsById,
@@ -34,6 +35,7 @@ import {
   initClock,
   isSpectating,
   playAreas,
+  players,
   provider,
   renderer,
   scene,
@@ -144,6 +146,26 @@ export async function localInit(gameOptions: GameOptions) {
   startAnimating();
 }
 
+export function readjustPlayAreas() {
+  let entries = Object.values(playAreas).sort((a, b) => a.index - b.index);
+  console.log({ sorted: entries });
+
+  let start = entries.splice(entries.findIndex(e => e.isLocalPlayArea));
+  start.push(...entries);
+
+  let mapIndex = {
+    1: [entries[0].isLocalPlayArea ? 0 : 2],
+    2: [0, 2],
+  };
+
+  let indexMap = mapIndex[start.length];
+
+  start.forEach((playArea, i) => {
+    let index = indexMap?.[i] ?? i;
+    applyPlayerTransform(playArea.mesh, index);
+  });
+}
+
 export async function loadDeckAndJoin(settings: LoadSettings) {
   let deck = settings.deck;
 
@@ -152,6 +174,10 @@ export async function loadDeckAndJoin(settings: LoadSettings) {
   await setCardBackTexture(unwrap(settings.cardSystem.cardBack) ?? DEFAULT_CARD_BACK);
 
   playArea = await PlayArea.FromDeck(provider.awareness.clientID, deck);
+  playArea.index = players().length;
+
+  console.log(playArea.index);
+
   setPlayAreas(provider.awareness.clientID, playArea);
   setIsIntitialized(true);
   setCounters(existing => uniqBy([...counters, ...existing], 'id'));
@@ -165,6 +191,8 @@ export async function loadDeckAndJoin(settings: LoadSettings) {
   hand = playArea.hand;
 
   table.add(playArea.mesh);
+
+  readjustPlayAreas();
   renderer.compile(scene, camera);
 }
 

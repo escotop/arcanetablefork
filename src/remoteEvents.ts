@@ -1,6 +1,6 @@
 import uniqBy from 'lodash-es/uniqBy';
 import { nanoid } from 'nanoid';
-import {  Vector3 } from 'three';
+import { Vector3 } from 'three';
 import { animateObject, queueAnimationGroup, rehydrateAnimation } from './lib/animations';
 import { cloneCard, splitUserdata, setCardData } from './lib/card';
 import { Card } from './lib/constants';
@@ -15,7 +15,6 @@ import {
   logs,
   onConcede,
   playAreas,
-  playerCount,
   processedEvents,
   provider,
   setLogs,
@@ -31,6 +30,7 @@ import { setCounters } from './lib/ui/counterDialog';
 import { isLogMessageStackable } from './lib/ui/log';
 import * as EventCreators from './lib/createEvents';
 import { restackItems } from './lib/utils';
+import { readjustPlayAreas } from './main3d';
 
 type Events = ReturnType<(typeof EventCreators)[keyof typeof EventCreators]>;
 type Event = { clientID: string } & Events;
@@ -103,7 +103,7 @@ const EVENTS = {
     setPlayAreas(event.clientID, playArea);
     setPlayerCount(count => count + 1);
 
-    applyPlayerTransform(playArea.mesh, playerCount());
+    readjustPlayAreas();
   },
   concede(event: Event, playArea: PlayArea) {
     onConcede(event.clientID);

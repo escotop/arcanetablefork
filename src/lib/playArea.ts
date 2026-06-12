@@ -69,6 +69,7 @@ export class PlayArea {
   public tokenSearchZone;
   public availableTokens?: CardReference[];
   private inProgressActions = new Set<string>();
+  public index: number;
 
   constructor(
     public clientId: number,
@@ -78,6 +79,7 @@ export class PlayArea {
   ) {
     this.mesh = new Group();
     this.isLocalPlayArea = !!state.isLocalPlayer;
+    this.index = state.index ?? 0;
 
     this.battlefieldZone = new CardArea('battlefield', state.battlefield?.id);
 
@@ -415,6 +417,7 @@ export class PlayArea {
       hand: this.hand.getSerializable(),
       deck: this.deck.getSerializable(),
       cards: this.cards.map(card => ({ ...card, mesh: undefined })),
+      index: this.index,
     };
 
     return localState;

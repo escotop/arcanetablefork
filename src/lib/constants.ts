@@ -21,6 +21,12 @@ export const KEY = {
   Mod: navigator?.userAgent?.platform === 'macOS' ? '⌘' : 'Ctrl',
 };
 
+export interface GameState {
+  turnCount: number;
+  currentTurn: string;
+  id: string;
+}
+
 interface CardDetailPart {
   name: string;
   component: 'token' | unknown;

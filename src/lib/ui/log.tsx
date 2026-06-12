@@ -1,14 +1,19 @@
 import { Component, ErrorBoundary, For, Show } from 'solid-js';
 import { cardsById, logs, players, zonesById } from '../globals';
 import style from './overlay.module.css';
-import { withSentryErrorBoundary } from '@sentry/solidstart';
+import { captureException, withSentryErrorBoundary } from '@sentry/solidstart';
 
 const SentryErrorBoundry = withSentryErrorBoundary(ErrorBoundary);
 
 const Log: Component = props => {
   return (
     <div class={`${style.log} bg-slate-800 text-white p-4 bg-opacity-75`}>
-      <SentryErrorBoundry fallback={<p>Sorry, something went wrong</p>}>
+      <SentryErrorBoundry
+        fallback={error => {
+          console.error(error, logs);
+          captureException(error, logs);
+          return <p>Sorry, something went wrong</p>;
+        }}>
         <For each={logs}>
           {log => {
             let player = players().find(p => p.id === log.clientID);
