@@ -95,6 +95,7 @@ export let textureLoaderWorker: Comlink.Remote<TextureLoaderWorkerType>;
 export let gui: GUI = null;
 export let baseCameraQuaternion: THREE.Quaternion;
 export let [announcement, setAnnouncement] = createSignal<string | undefined>();
+export let tearingDown = false;
 
 export let selection: Selection;
 export let [capturedErrors, setCapturedErrors] = createSignal([]);
@@ -384,6 +385,7 @@ export function dispatchGameEvent(event: any, timing = 0) {
 }
 
 export function cleanup() {
+  tearingDown = true;
   cardsById.clear();
   zonesById.clear();
   setPeekFilterText('');

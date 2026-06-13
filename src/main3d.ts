@@ -51,6 +51,7 @@ import {
   setPlayers,
   settings,
   table,
+  tearingDown,
   updateFocusCamera,
   zonesById,
 } from './lib/globals';
@@ -503,6 +504,7 @@ let interval = 1 / 30;
 let isErrored = false;
 
 export function animate() {
+  if (tearingDown) return;
   try {
     if (isErrored) return;
     if (animating()) requestAnimationFrame(animate);

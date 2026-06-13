@@ -30,7 +30,6 @@ import styles from './peekMenu.module.css';
 
 const PeekMenu: Component = props => {
   let userData = () => hoverSignal()?.mesh?.userData;
-  const isPublic = () => userData()?.isPublic;
   const isOwner = createMemo(() => userData()?.clientId === provider.awareness.clientID);
   const location = createMemo(() => userData()?.location);
   const tether = () => hoverSignal()?.tether;

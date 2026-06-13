@@ -1,32 +1,25 @@
-import { Component, createEffect, createMemo, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { Command, CommandInput } from '~/components/ui/command';
-import {
-  Menubar,
-  MenubarContent,
-  MenubarItem,
-  MenubarMenu,
-  MenubarTrigger,
-} from '~/components/ui/menubar';
-import {
-  cardsById,
-  hoverSignal,
-  playAreas,
-  provider,
-  setHoverSignal,
-  setPeekFilterText,
-} from '../globals';
+import { Menubar, MenubarItem, MenubarMenu } from '~/components/ui/menubar';
+import { hoverSignal, playAreas, provider, setHoverSignal, setPeekFilterText } from '../globals';
 import styles from './peekMenu.module.css';
 import { cleanupCard } from '../card';
 
-const RevealMenu: Component = props => {
+export default function RevealMenu() {
   let userData = () => hoverSignal()?.mesh?.userData;
-  const isPublic = () => userData()?.isPublic;
-  const isOwner = createMemo(() => userData()?.clientId === provider.awareness.clientID);
   const location = createMemo(() => userData()?.location);
-  const cardMesh = () => hoverSignal()?.mesh;
-  const tether = () => hoverSignal()?.tether;
   const playArea = playAreas[provider.awareness.clientID];
   let inputRef;
+
+  const [peekCards, setPeekCards] = createSignal([]);
+
+  onMount(() => {
+    const unsub = playArea.peekZone.subscribeToCardList(setPeekCards);
+
+    onCleanup(() => {
+      unsub();
+    });
+  });
 
   createEffect(() => {
     if (location() === 'reveal' && inputRef) inputRef.focus();
@@ -34,11 +27,7 @@ const RevealMenu: Component = props => {
 
   return (
     <>
-      <Show when={location() === 'reveal'}>
-        <Show when={tether()}>
-          {/* <div class={styles.peekActions} style={`--x: ${tether().x}px; --y: ${tether().y}px;`}>
-          </div> */}
-        </Show>
+      <Show when={peekCards()?.length > 0}>
         <div class={styles.search}>
           <Command>
             <CommandInput
@@ -74,6 +63,4 @@ const RevealMenu: Component = props => {
       </Show>
     </>
   );
-};
-
-export default RevealMenu;
+}
