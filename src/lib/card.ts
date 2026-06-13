@@ -9,6 +9,7 @@ import {
   Mesh,
   MeshStandardMaterial,
   Object3D,
+  Quaternion,
   Raycaster,
   SRGBColorSpace,
   Texture,
@@ -112,7 +113,7 @@ export async function loadCardTextures(
 ) {
   const [front, back] = card.mesh.userData.card_face_urls;
 
-  if (!cache.has(front)) {
+  if (!cache.has(front) && front) {
     cache.set(
       front,
       textureLoaderWorker.loadTexture(front).then(image => {
@@ -132,11 +133,13 @@ export async function loadCardTextures(
     );
   }
 
-  let frontPromise = cache.get(front)!;
+  let frontPromise = cache.get(front);
 
-  frontPromise.then(mat => {
-    card.mesh.material[4] = mat.clone();
-  });
+  if (frontPromise) {
+    frontPromise.then(mat => {
+      card.mesh.material[4] = mat.clone();
+    });
+  }
 
   if (back) {
     if (!cache.has(back)) {
@@ -222,6 +225,26 @@ export function cloneCard(card: Card, newId: string): Card {
   cardsById.set(newCard.id, newCard);
   loadCardTextures(newCard);
   return newCard;
+}
+
+const Z_AXIS = new Vector3(0, 0, 1);
+const Y_AXIS = new Vector3(0, 1, 0);
+
+export function getRotationFromCardState(userData) {
+  const q = new Quaternion();
+
+  // tap: in-plane spin about Z
+  if (userData.isTapped) {
+    q.setFromAxisAngle(Z_AXIS, -Math.PI / 2);
+  }
+
+  // flip: turn the card over about Y, applied in world space on top of the tap
+  if (userData.isFlipped) {
+    const flip = new Quaternion().setFromAxisAngle(Y_AXIS, Math.PI);
+    q.multiply(flip);
+  }
+
+  return q;
 }
 
 export function splitUserdata(userData: CardUserData) {

@@ -4,6 +4,7 @@ import { CatmullRomCurve3, Euler, Group, Mesh, MeshStandardMaterial, Vector3 } f
 import { animateObject } from './animations';
 import {
   cloneCard,
+  getRotationFromCardState,
   initializeCardMesh,
   loadCardTextures,
   setCardData,
@@ -351,6 +352,7 @@ export class PlayArea {
     this.emitEvent({ type: 'flip', payload: { userData: cardMesh.userData } });
 
     const zone = zonesById.get(cardMesh.userData.zoneId)!;
+
 
     let rotation = new Euler().fromArray(cardMesh.userData.zone[zone.id].rotation);
     let vec = new Vector3();

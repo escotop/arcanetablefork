@@ -215,9 +215,7 @@ function renderAnimation(animation, delta: number): boolean {
   }
   if (animation.to?.rotation) {
     let from = animation.from?.quarternion ?? animation.to?.quarternion;
-    animation.obj.rotation.setFromQuaternion(
-      from.clone().slerp(animation.to.quarternion!.clone(), delta),
-    );
+    animation.obj.quaternion.copy(from.clone().slerp(animation.to.quarternion!.clone(), delta));
   }
 
   if (delta >= 1) {

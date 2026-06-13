@@ -2,6 +2,7 @@ import { Card, CardZone } from './constants';
 import { expect, zonesById } from './globals';
 import { Intersection, Object3D } from 'three';
 import { AnimationOpts, serializeAnimation } from './animations';
+import { resolveStackAnchor } from './footprintOverlap';
 
 interface DefaultAddOptions {
   destroy?: boolean;
@@ -68,6 +69,7 @@ export function createRestackEvent(intersection: Intersection, items: Object3D[]
   const zone = zonesById.get(intersection.object.userData.zoneId || intersection.object.id)!;
   expect(!!zone, `zone not found`);
   const anchor = zone.mesh.worldToLocal(intersection.point.clone());
+  anchor.copy(resolveStackAnchor(anchor, zone.mesh, items));
 
   return {
     type: 'restack',

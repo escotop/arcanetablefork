@@ -8,6 +8,8 @@ import { CARD_STACK_OFFSET, CARD_THICKNESS, CARD_WIDTH } from './constants';
 import { cardsById, provider } from './globals';
 import { createAnimationEvent } from './createEvents';
 import { animateObject } from './animations';
+import { resolveStackAnchor } from './footprintOverlap';
+import { getRotationFromCardState } from './card';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -125,7 +127,11 @@ export function restackItemsLocally(items: Object3D[], intersections: Intersecti
   if (!intersection) return;
   if (!items?.[0]?.parent) return;
 
-  const anchor = items[0].parent.worldToLocal(intersection.point.clone());
+
+  const destZone = intersection.object;
+  const localAnchor = destZone.worldToLocal(intersection.point.clone());
+  const resolvedLocal = resolveStackAnchor(localAnchor, destZone, items);
+  const anchor = items[0].parent.worldToLocal(destZone.localToWorld(resolvedLocal));
   const targetWorldQuat = intersection.object.getWorldQuaternion(new Quaternion());
 
   return items.forEach((item, i) => {
@@ -138,8 +144,12 @@ export function restackItemsLocally(items: Object3D[], intersections: Intersecti
       .add(localOffset.applyQuaternion(targetWorldQuat));
     let position = item.parent.worldToLocal(anchorWorld);
 
+    const localQuat = sourceWorldQuat.clone().invert().multiply(targetWorldQuat.clone())
+
+    localQuat.multiply(getRotationFromCardState(item.userData))
+
     item.position.copy(position);
-    item.quaternion.copy(sourceWorldQuat.clone().invert().multiply(targetWorldQuat.clone()));
+    item.quaternion.copy(localQuat);
   });
 }
 

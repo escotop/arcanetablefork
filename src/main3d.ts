@@ -329,8 +329,6 @@ function onDocumentDragStart(event: PointerEvent) {
   });
 
   if (targets.length > 0) {
-    const primaryWorldPosition = targets[0].getWorldPosition(new THREE.Vector3());
-
     targets.forEach((target, i) => {
       const dragOffset = new THREE.Vector3(
         0,
@@ -410,7 +408,7 @@ async function onDocumentDrop(event) {
   await flushDispatchEventQueue();
 
   if (intersection.object.userData.zone === 'battlefield') {
-    dispatchGameEvent(createRestackEvent(intersection, dragTargets));
+    dispatchGameEvent(createRestackEvent(intersection, dragTargets), 25);
   }
 
   if (shouldClearSelection) {
