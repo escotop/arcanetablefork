@@ -24,6 +24,15 @@ spec:
           name: scry-server-mtg
           ports:
             - containerPort: 8788
+          env:
+            - name: KV_PATH
+              value: /data/cache.sqlite
+          volumeMounts:
+            - name: cache
+              mountPath: /data
+      volumes:
+        - name: cache
+          persistentVolumeClaim: scry-server-mtg-cache
       restartPolicy: Always
 ---
 apiVersion: v1
@@ -65,3 +74,15 @@ spec:
                 name: scry-server-mtg # The name of the service
                 port:
                   number: 80 # Service Portnumber
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: scry-server-mtg-cache
+  namespace: arcanetable
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi   # arbitrary headroom — bump to whatever you want

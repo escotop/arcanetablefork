@@ -6,7 +6,7 @@ app.get('/_cache/stats', c => c.json(cacheMetrics.snapshot()));
 
 const args = parseArgs(Deno.args, { default: { port: 8788 } });
 const PORT = Number(args.port);
-const kv = await Deno.openKv();
+const kv = await Deno.openKv(Deno.env.get('KV_PATH') || undefined);
 
 type CachedEntry = { body: Uint8Array; headers: Record<string, string>; cachedAt: number };
 
