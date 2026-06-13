@@ -8,4 +8,4 @@ RUN deno cache main.ts
 VOLUME /app/data
 EXPOSE 8788
 
-CMD ["deno", "run", "--allow-net", "--allow-env", "--unstable-kv", "main.ts"]
+CMD ["deno", "run", "--allow-net", "--allow-env", "--allow-read", "--allow-write", "--unstable-kv", "main.ts"]

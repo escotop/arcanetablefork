@@ -32,7 +32,8 @@ spec:
               mountPath: /data
       volumes:
         - name: cache
-          persistentVolumeClaim: scry-server-mtg-cache
+          persistentVolumeClaim:
+            claimName: scry-server-mtg-cache
       restartPolicy: Always
 ---
 apiVersion: v1
