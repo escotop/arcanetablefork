@@ -12,7 +12,7 @@ import {
 import { transferCard } from '../transferCard';
 import { drawCards, searchDeck } from './commands/deck';
 import { untapAll } from './commands/field';
-import { createTapEvent } from '../createEvents';
+import { createPassTurnEvent, createTapEvent } from '../createEvents';
 import { Card } from '../constants';
 
 export function HotKeys() {
@@ -36,6 +36,10 @@ export function HotKeys() {
   onMount(() => {
     hotkeys('shift+r', function () {
       untapAll(playArea);
+    });
+
+    hotkeys('space', function () {
+      dispatchGameEvent(createPassTurnEvent());
     });
 
     hotkeys('d', function () {

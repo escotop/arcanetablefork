@@ -65,6 +65,7 @@ const ShortcutTable: Component<{ name: string; shortcuts: typeof SHORTCUTS }> = 
 export const SHORTCUTS = [
   { shortcuts: [['shift', 'R']], action: 'Untap all cards' },
   { shortcuts: [['D']], action: 'Draw a card' },
+  { shortcuts: [['space']], action: 'Pass turn' },
   {
     shortcuts: [
       ['ctrl', 'space'],
