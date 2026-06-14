@@ -120,7 +120,9 @@ const EVENTS = {
       createAnnouncement(`You passed turn`);
     } else {
       let player = players().find(player => player.id === event.clientID);
-      createAnnouncement(`${player.entry.name} passed turn.`);
+      if (player) {
+        createAnnouncement(`${player.entry.name} passed turn.`);
+      }
     }
   },
   toggleTokenMenu(event: Event, playArea: PlayArea) {

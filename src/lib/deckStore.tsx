@@ -4,10 +4,7 @@ import { createContext, onMount, ParentProps, useContext } from 'solid-js';
 import { CardEntry, Deck, DetailedCardEntry, CardSystem } from './constants';
 import { loadCardList, fetchCardInfo } from './deck';
 import { getCardArtImage } from './card';
-import {
-  DEFAULT_CARD_SYSTEM_URI,
-  setCardSystem as setGlobalCardSystem,
-} from './globals';
+import { DEFAULT_CARD_SYSTEM_URI, setCardSystem as setGlobalCardSystem } from './globals';
 import { useSearchParams } from '@solidjs/router';
 import { CardSystemContext } from './cardSystemContext';
 
@@ -42,12 +39,21 @@ export function getDeckStore(): DeckStore {
   let store = JSON.parse(storeString) as DeckStore;
 
   if (Array.isArray(store.decks)) {
-    let deckEntries = store.decks.map<[string, Deck]>(deck => [deck.id ?? nanoid(), deck]);
+    let deckEntries = store.decks.map<[string, Deck]>(deck => {
+      const id = deck.id ?? nanoid();
+      return [deck.id ?? nanoid(), { ...deck, id }];
+    });
     store.decks = Object.fromEntries(deckEntries);
     store.systems ??= { unsorted: [] };
     store.systems.unsorted.push(...deckEntries.map(entry => entry[0]));
     localStorage.setItem('decks', JSON.stringify(store));
   }
+
+  Object.entries(store.decks ?? {}).forEach(([id, deck]) => {
+    if (!deck.id) {
+      store.decks[id] = { ...deck, id };
+    }
+  });
 
   return store;
 }
@@ -78,9 +84,6 @@ export async function hydrateDeck(originalDeck: Deck) {
 
     deck.cards = Object.fromEntries(cards);
 
-    // if (!deck.system) {
-    //   deck.system = 'scry-server-mtg';
-    // }
     if (deck.inPlay && Array.isArray(deck.inPlay)) {
       const cards = await Promise.all(
         deck.inPlay.map(card => fetchCardInfo(card, cache).then(card => [getCardKey(card), card])),
@@ -91,7 +94,7 @@ export async function hydrateDeck(originalDeck: Deck) {
   }
 
   let deckCards = Object.values(deck.cards);
-  let inPlayCards = Object.values(deck.inPlay);
+  let inPlayCards = Object.values(deck.inPlay ?? {});
   deck.cards = {};
   deck.inPlay = {};
 
@@ -144,7 +147,7 @@ function getCardSystemStore() {
   let state = JSON.parse(stateString);
   for (const [name, system] of Object.entries(state.systems)) {
     if (!system) {
-      delete state.systems[name]
+      delete state.systems[name];
     }
   }
   return state;
@@ -179,7 +182,7 @@ export function CardSystemProvider(props: ParentProps) {
     let systemUri = searchParams.system;
     if (systemUri && typeof systemUri === 'string') {
       await initCardSystem(systemUri);
-      setSearchParams({ system: undefined }, { replace: true});
+      setSearchParams({ system: undefined }, { replace: true });
     } else {
       systemUri = store.systems[store.system]?.uri;
       await initCardSystem(systemUri);
@@ -195,7 +198,8 @@ export function CardSystemProvider(props: ParentProps) {
   }
 
   return (
-    <CardSystemContext.Provider value={[store, { update: updateStore, setCardSystem, initCardSystem }]}>
+    <CardSystemContext.Provider
+      value={[store, { update: updateStore, setCardSystem, initCardSystem }]}>
       {props.children}
     </CardSystemContext.Provider>
   );

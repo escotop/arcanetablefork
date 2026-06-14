@@ -20,9 +20,9 @@ import {
   TextFieldInput,
   TextFieldLabel,
 } from '~/components/ui/text-field';
-import { createDeckStore} from '../deckStore';
+import { createDeckStore } from '../deckStore';
 import { useCardSystemContext } from '../cardSystemContext';
-import {  colorHashDark,  startSpectating } from '../globals';
+import { colorHashDark, startSpectating } from '../globals';
 import PencilIcon from 'lucide-solid/icons/pencil';
 import { cn } from '../cnUtil';
 import { Deck, DeckEditor } from './deckEditor';
@@ -38,15 +38,10 @@ interface Props {
 
 export default function DeckPicker(props: Props) {
   const [deckStore, setDeckStore] = createDeckStore();
-  const [searchParams] = useSearchParams();
   const [cardSystemStore, { setCardSystem }] = useCardSystemContext();
   const [selectedDeckId, setSelectedDeckId] = createSignal<string>();
   const [editingDeck, setEditingDeck] = createSignal<Deck>();
   const [startingLife, setStartingLife] = createSignal(40);
-
-  // onMount(() => {
-  //   setSelectedDeckId(Object.values(deckStore.decks)[0]?.id);
-  // });
 
   createEffect(() => {
     const deck = deckStore.decks[selectedDeckId()];
@@ -62,9 +57,6 @@ export default function DeckPicker(props: Props) {
     const data = Object.fromEntries(formData.entries());
 
     e.currentTarget.reset();
-
-    // todo: fix picking a deck that is not default system here
-    const deck = deckStore.decks[data.deckId];
 
     props.onStart(data);
   }
