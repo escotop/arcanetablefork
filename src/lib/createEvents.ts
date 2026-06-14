@@ -29,8 +29,8 @@ export function createTransferCardEvent<AddOptions extends {}>(
     type: 'transferCard',
     payload: {
       userData: card.mesh.userData,
-      fromZoneId: fromZone.id,
-      toZoneId: toZone.id,
+      fromZoneId: fromZone?.id,
+      toZoneId: toZone?.id,
       extendedOptions: {
         addOptions: {
           skipAnimation: false,
