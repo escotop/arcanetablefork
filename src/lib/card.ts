@@ -113,7 +113,11 @@ export async function loadCardTextures(
 ) {
   const [front, back] = card.mesh.userData.card_face_urls;
 
-  if (!cache.has(front) && front) {
+  // TODO: it would be nice to make a placeholder card
+  // the worker here like we do in the deck editor
+  if (!front) throw new Error('front texture not found')
+
+  if (!cache.has(front)) {
     cache.set(
       front,
       textureLoaderWorker.loadTexture(front).then(image => {
