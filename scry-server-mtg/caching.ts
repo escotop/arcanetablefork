@@ -86,7 +86,7 @@ export function withCaching(app: Hono, cacheKeyPrefix: string) {
       const age = (Date.now() - hit.value.cachedAt) / 1000;
       if (age > CACHE_TTL) {
         console.log(`[cache stale] ${localURL}, refreshing in background`);
-        fetchAndCache(app, req, key).catch(console.error);
+        fetchAndCache(app, req.clone(), key).catch(console.error);
       }
       const stream = await decompress(hit.value.body);
 
