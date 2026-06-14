@@ -87,13 +87,12 @@ export function resolveStackAnchor(anchor: Vector3, parent: Object3D, items: Obj
     return dx * dx + dy * dy < REACH2;
   };
 
-  // cards the dropped footprint directly touches
   const pile = new Set<C>();
   for (const c of cands)
     if (near(anchor.x, anchor.y, c) && footprintsOverlap(anchor.x, anchor.y, dragRot, c.x, c.y, c.rot))
       pile.add(c);
 
-  // flood-fill: anything overlapping the pile is part of the same stack (e.g. Putrefy on Simic)
+  // flood-fill
   let grew = true;
   while (grew) {
     grew = false;
