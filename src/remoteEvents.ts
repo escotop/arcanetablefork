@@ -82,9 +82,14 @@ export async function processEvents() {
   }
 }
 
+const USERDATA_BLOCK_LIST = ['cardBack', 'publicCardBack'];
+
 function applyEventUserData(card: Card, userData: Record<string, unknown>) {
   const { id, ...fields } = userData;
-  Object.entries(fields).forEach(([key, value]) => setCardData(card.mesh, key, value));
+  Object.entries(fields).forEach(([key, value]) => {
+    if (USERDATA_BLOCK_LIST.includes(key)) return;
+    setCardData(card.mesh, key, value);
+  });
 }
 
 export async function handleEvent(event: Event, playArea: PlayArea) {

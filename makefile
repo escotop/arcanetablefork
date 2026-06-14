@@ -24,14 +24,35 @@ build:
 		-t $(docker_container):$(BUILD_DATE) \
 		-t $(docker_container):beta \
 		-t $(docker_container):staging
-		
+
+push: build
+	docker push $(docker_container):latest
+	docker push $(docker_container):$(BUILD_ID)
+	docker push $(docker_container):$(BUILD_DATE)
+	docker push $(docker_container):beta
+	docker push $(docker_container):staging
+
+deploy: build push
+	kubectl apply -f secrets.yml -f deployment.yml -f staging.yaml
+	kubectl rollout restart deployment -n arcanetable
+
+build_all:
+	pnpm build
+	docker build . \
+		--label $(github_repo) \
+		-t $(docker_container):latest \
+		-t $(docker_container):$(BUILD_ID) \
+		-t $(docker_container):$(BUILD_DATE) \
+		-t $(docker_container):beta \
+		-t $(docker_container):staging
+
 	$(MAKE) -C yjs-signaling-server build
 	$(MAKE) -C websocket-server build
 	$(MAKE) -C scry-server-mtg build
 	$(MAKE) -C scry-server-yugioh build
 	$(MAKE) -C scry-server-pokemon build
-	
-push: build
+
+push_all: build_all
 	docker push $(docker_container):latest
 	docker push $(docker_container):$(BUILD_ID)
 	docker push $(docker_container):$(BUILD_DATE)
@@ -44,21 +65,21 @@ push: build
 	$(MAKE) -C scry-server-yugioh push
 	$(MAKE) -C scry-server-pokemon push
 
-deploy: build push
+deploy_all: build_all push_all
 	$(MAKE) -C scry-server-mtg apply
 	$(MAKE) -C scry-server-yugioh apply
 	$(MAKE) -C scry-server-pokemon apply
 	kubectl apply -f secrets.yml -f deployment.yml -f staging.yaml
 	kubectl rollout restart deployment -n arcanetable
-	
+
 promote_staging:
 	docker pull $(docker_container):staging
 	docker tag $(docker_container):staging $(docker_container):production
 	docker tag $(docker_container):staging $(docker_container):stable
-	
+
 	docker push $(docker_container):production
 	docker push $(docker_container):stable
 	docker push $(docker_container):staging
-	
+
 	kubectl apply -f secrets.yml -f deployment.yml
 	kubectl rollout restart deployment -n arcanetable

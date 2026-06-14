@@ -182,6 +182,7 @@ export function initClock() {
 export const DEFAULT_CARD_SYSTEM_URI = 'https://scry-server-mtg.arcanetable.app';
 
 export async function init({ gameId }) {
+  tearingDown = false;
   headlessInit();
   if (import.meta.env.PROD) {
     provider = new WebsocketProvider('wss://ws.arcanetable.app', gameId, ydoc);
