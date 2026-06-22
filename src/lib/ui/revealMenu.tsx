@@ -34,7 +34,7 @@ export default function RevealMenu() {
 
   return (
     <>
-      <Show when={peekCards()?.length > 0 && peekCards()?.[0]?.mesh.userData.location === 'reveal'}>
+      <Show when={peekCards()?.length > 0}>
         <div class={styles.searchContainer}>
           <div class={styles.search}>
             <h2 class='text-white text-xl text-left mb-4'>

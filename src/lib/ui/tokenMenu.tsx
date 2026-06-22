@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { Component, createEffect, createMemo, createSignal, Match, Show, Switch } from 'solid-js';
+import { Component, createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { Button } from '~/components/ui/button';
 import { Command, CommandInput } from '~/components/ui/command';
 import { Menubar, MenubarContent, MenubarMenu, MenubarTrigger } from '~/components/ui/menubar';
@@ -19,14 +19,29 @@ import styles from './peekMenu.module.css';
 
 const TokenSearchMenu: Component = props => {
   let userData = () => hoverSignal()?.mesh?.userData;
-  const isPublic = () => userData()?.isPublic;
-  const isOwner = createMemo(() => userData()?.clientId === provider.awareness.clientID);
+  const playArea = playAreas[provider.awareness.clientID];
+  const [peekCards, setPeekCards] = createSignal<Card[]>([]);
+  let inputRef;
+
+  
+  onMount(() => {
+    const unsub = playArea.tokenSearchZone.subscribeToCardList(cardList => {
+      setPeekCards(cardList)
+      if (cardList?.length > 0 && inputRef) {
+        inputRef.focus()
+      }
+    });
+
+    onCleanup(() => {
+      unsub();
+    });
+  });
+
+  
   const location = createMemo(() => userData()?.location);
   const cardMesh = () => hoverSignal()?.mesh;
   const tether = () => hoverSignal()?.tether;
-  const playArea = playAreas[provider.awareness.clientID];
   const [viewField, setViewField] = createSignal(false);
-  let inputRef;
 
   function addToBattlefield(referenceCard: Card) {
     let card = cloneCard(referenceCard, nanoid());
@@ -45,13 +60,9 @@ const TokenSearchMenu: Component = props => {
     });
   }
 
-  createEffect(() => {
-    if (location() === 'tokenSearch' && inputRef) inputRef.focus();
-  });
-
   return (
     <>
-      <Show when={location() === 'tokenSearch'}>
+      <Show when={peekCards()?.length > 0}>
         <Show when={tether()}>
           <div class={styles.peekActions} style={`--x: ${tether().x}px; --y: ${tether().y}px;`}>
             <Menubar>
@@ -82,7 +93,7 @@ const TokenSearchMenu: Component = props => {
         <div class={styles.searchContainer}>
           <div class={styles.search}>
             <h2 class='text-white text-xl text-left mb-4'>
-              Add Tokens | {playArea.tokenSearchZone.observable.cardCount}
+              Related Cards | {playArea.tokenSearchZone.observable.cardCount}
             </h2>
             <Command>
               <CommandInput

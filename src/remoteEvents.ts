@@ -98,7 +98,7 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
   if (card && event.payload.userData) {
     applyEventUserData(card, event.payload.userData);
   }
-  logger.log('handleEvents', ...arguments);
+  logger.log('[handleEvents]', ...arguments);
   await EVENTS[event.type](event, playArea, card);
 }
 
