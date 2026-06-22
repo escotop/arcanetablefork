@@ -1,0 +1,25 @@
+---
+date: "2026-06-22T16:52:45-07:00"
+target: stable
+title: "Shuffle-Into-Deck Fix and Reveal Menu Reliability"
+keywords:
+  - shuffle
+  - deck
+  - reveal
+  - related cards
+  - tokens
+  - peek
+  - stability
+description: "Shuffling into the deck from a peek search now correctly sends cards to the deck instead of the wrong zone. The reveal menu now reliably shows when a card is revealed, and the Related Cards menu is more consistent."
+version: a1044af
+changeCount:
+  bugfixes: 3
+  features: 0
+commitRange: https://github.com/odama626/arcanetable/compare/d904440...a1044af
+---
+
+## Fixes
+
+- **Shuffle into deck** - dismissing cards from a peek search and shuffling into the deck could send cards to the wrong zone instead of the deck. It now explicitly transfers them to the bottom of the deck before shuffling.
+- **Reveal menu reliability** - the reveal menu wasn't always showing up when a card was revealed. It's been reworked to track the reveal zone directly, now appears reliably and shows who revealed the card along with the count.
+- **Related Cards menu** - the menu still showed its old "Add Tokens" name in its header and could be unreliable about showing, hiding, and focusing search. Both are now fixed.
