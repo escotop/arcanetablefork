@@ -1,0 +1,28 @@
+---
+date: "2026-06-14T13:32:57-07:00"
+target: stable
+title: "Pass Turn Shortcut, Card Art Fallback, and Stability"
+keywords:
+  - pass turn
+  - keyboard shortcut
+  - card art
+  - fallback
+  - stability
+  - cache
+description: "Pass Turn now has a keyboard shortcut. Cards with missing art now fall back to the generic card correctly. Card image cache survives deployments. Several stability fixes on game teardown."
+version: d904440
+changeCount:
+  bugfixes: 3
+  features: 1
+commitRange: https://github.com/odama626/arcanetable/compare/03bed5e...d904440
+---
+
+## Features
+
+- **Pass Turn shortcut** - Pass Turn is now available via keyboard shortcut in addition to the in-game menu.
+
+## Fixes
+
+- **Card art fallback** - when a specific printing's art couldn't be found, the card was broken instead of showing the generic card face. Now falls back correctly.
+- **Card cache survives deploys** - the MTG card image cache now persists across server deployments, so you won't get a slow first load after an update.
+- **Rendering stops on teardown** - the renderer now shuts down cleanly when leaving a game instead of continuing to run in the background.

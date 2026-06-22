@@ -33,7 +33,7 @@ const NumberFieldLabel = <T extends ValidComponent = 'label'>(
   return (
     <NumberFieldPrimitive.Label
       class={cn(
-        'text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70',
+        'font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70',
         local.class,
       )}
       {...others}

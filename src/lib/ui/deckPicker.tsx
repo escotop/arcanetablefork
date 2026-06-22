@@ -120,7 +120,7 @@ export default function DeckPicker(props: Props) {
               </div>
             </NumberField>
             <div>
-              <label class={cn(labelVariants())}>Select a deck</label>
+              <div class={cn(labelVariants(), 'text-xl mb-4')}>Select a deck</div>
               <input type='hidden' name='deckId' value={selectedDeckId()} />
               <h2>{cardSystemStore.systems[cardSystemStore.system]?.name}</h2>
               <div class='grid grid-cols-3 gap-4 my-2'>
