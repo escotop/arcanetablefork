@@ -1,0 +1,24 @@
+---
+date: "2026-07-07T10:09:51-07:00"
+target: stable
+title: "Sentry-Driven Stability Fixes"
+keywords:
+  - stability
+  - crash
+  - spectator
+  - deck editor
+  - error handling
+description: "First round of fixes driven by real error data from Sentry. Several crashes now fail gracefully instead of breaking the session. Spectator mode and deck editor pagination also fixed."
+version: ea3b6fc
+changeCount:
+  bugfixes: 4
+  features: 0
+commitRange: https://github.com/odama626/arcanetable/compare/a1044af...ea3b6fc
+---
+
+## Fixes
+
+- **Session crash on unknown card** - when a client received a network event referencing a card it didn't know about, it could crash the whole session. It now fails gracefully and continues instead.
+- **Spectator mode** - player areas weren't being positioned correctly when entering spectator mode. Fixed.
+- **Deck editor pagination** - the deck editor was trying to fetch pages beyond the last page of results. It now stops at the correct page.
+- **Multi-card drop stability** - dropping multiple cards onto the battlefield could crash if drag offset data was missing. Now handled gracefully.
