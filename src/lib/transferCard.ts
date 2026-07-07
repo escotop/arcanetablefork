@@ -27,6 +27,7 @@ export async function transferCard<AddOptions extends {}>(
   if (!card) {
     console.warn(`card is undefined`, new Error().stack);
     Sentry.captureException(new Error(`card is undefined`));
+    return;
   }
 
   await fromZone?.removeCard?.(card.mesh);
