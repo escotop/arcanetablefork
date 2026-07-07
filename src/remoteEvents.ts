@@ -94,7 +94,17 @@ function applyEventUserData(card: Card, userData: Record<string, unknown>) {
 
 export async function handleEvent(event: Event, playArea: PlayArea) {
   expect(!!EVENTS[event.type], `${event.type} not implemented`);
-  let card = cardsById.get(event.payload?.userData?.id);
+  let cardId = event.payload?.userData?.id;
+  let card = cardsById.get(cardId);
+
+  if (cardId && !card) {
+    Sentry.captureException(new Error('card is undefined'), {
+      tags: { event_type: event.type },
+      extra: { missingId: cardId, knownIdCount: cardsById.size, payload: event.payload }
+    })
+  }
+
+
   if (card && event.payload.userData) {
     applyEventUserData(card, event.payload.userData);
   }
