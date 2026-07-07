@@ -37,6 +37,7 @@ export async function decompress(data: BufferSource) {
 export async function handleRequest(app: Hono, req: Request, key: string[]): Promise<Response> {
   cacheMetrics.fetchedUpstream();
   const res = await app.fetch(req);
+
   const headers = Object.fromEntries(res.headers.entries());
   if (res.ok && headers['content-type']?.includes('application/json')) {
     const buffer = await res.arrayBuffer();
@@ -48,6 +49,9 @@ export async function handleRequest(app: Hono, req: Request, key: string[]): Pro
     );
     console.log(`[cache set] ${key[1]} (${compressed.byteLength}b)`);
     return new Response(buffer, { headers, status: res.status });
+  } else {
+    const r = res.clone();
+    console.log('[error]', r.status, await r.text(), r.url)
   }
   return res;
 }

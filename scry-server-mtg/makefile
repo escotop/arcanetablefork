@@ -6,6 +6,7 @@ GIT_SHA        ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown
 GIT_SHA_FULL   ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 GIT_DIRTY      ?= $(shell git diff --quiet || echo -dirty)
 BUILD_DATE     ?= $(shell date -u +"%Y-%m-%dT%H.%M.%SZ")
+BUILD_DATE     := $(BUILD_DATE)
 BUILD_ID       ?= $(GIT_SHA)$(GIT_DIRTY)
 BUILD_VERSION  ?= $(BUILD_DATE)-$(BUILD_ID)
 
@@ -23,3 +24,6 @@ push:
 
 apply:
 	kubectl apply -f manifest.yaml
+
+
+pushapply: build push apply

@@ -207,7 +207,7 @@ app.get('/cards/named', async c => {
     const res = await scryfallFetch(`/cards/${encodeURIComponent(id)}`);
     if (res.status === 404) return errorResponse('not_found', `No card with id "${id}"`, 404);
     if (res.status === 429) return errorResponse('rate_limited', 'Scryfall rate limit hit', 503);
-    if (!res.ok) return errorResponse('upstream_error', `Scryfall returned ${res.status}`, 502);
+    if (!res.ok) return errorResponse('upstream_error', `Scryfall returned ${res.status}`, 503);
     const card = (await res.json()) as ScryfallCard;
     return new Response(JSON.stringify(mapCard(card, baseUrl)), {
       status: 200,
@@ -223,7 +223,7 @@ app.get('/cards/named', async c => {
   const res = await scryfallFetch(`/cards/named?${params}`);
   if (res.status === 404) return errorResponse('not_found', `No card found for "${exact}"`, 404);
   if (res.status === 429) return errorResponse('rate_limited', 'Scryfall rate limit hit', 503);
-  if (!res.ok) return errorResponse('upstream_error', `Scryfall returned ${res.status}`, 502);
+  if (!res.ok) return errorResponse('upstream_error', `Scryfall returned ${res.status}`, 503);
 
   const card = (await res.json()) as ScryfallCard;
   return new Response(JSON.stringify(mapCard(card, baseUrl)), {
@@ -259,7 +259,7 @@ app.get('/cards/search', async c => {
     });
 
   if (res.status === 429) return errorResponse('rate_limited', 'Scryfall rate limit hit', 503);
-  if (!res.ok) return errorResponse('upstream_error', `Scryfall returned ${res.status}`, 502);
+  if (!res.ok) return errorResponse('upstream_error', `Scryfall returned ${res.status}`, 503);
 
   const list = (await res.json()) as ScryfallList;
   const totalCards = list.total_cards ?? list.data.length;
@@ -307,7 +307,7 @@ app.get('/draft', async c => {
   const page = (Math.abs(seed) % 10) + 1;
   const params = new URLSearchParams({ q: '*', order: 'name', page: String(page) });
   const res = await scryfallFetch(`/cards/search?${params}`);
-  if (!res.ok) return errorResponse('upstream_error', `Scryfall returned ${res.status}`, 502);
+  if (!res.ok) return errorResponse('upstream_error', `Scryfall returned ${res.status}`, 503);
 
   const list = (await res.json()) as ScryfallList;
   const pool = seededShuffle(list.data, seed).slice(0, count);
@@ -339,7 +339,7 @@ async function handleImageRequest(c) {
     if (!res.ok) return errorResponse('not_found', 'Image not found', 404);
 
     const contentType = res.headers.get('Content-Type');
-    if (!contentType) return errorResponse('upstream_error', 'No content type from upstream', 502);
+    if (!contentType) return errorResponse('upstream_error', 'No content type from upstream', 503);
 
     const headers: Record<string, string> = {
       ...imageCacheHeaders(),
@@ -351,7 +351,7 @@ async function handleImageRequest(c) {
     return new Response(res.body, { status: 200, headers });
   } catch (e) {
     console.error('Image fetch failed:', uri, e);
-    return errorResponse('upstream_error', 'Failed to fetch image', 502);
+    return errorResponse('upstream_error', 'Failed to fetch image', 503);
   }
 }
 
