@@ -233,8 +233,13 @@ export const DeckEditor: Component<Props> = props => {
     const q = (unwrap(searchParams.q) ?? '') as string;
     const t = unwrap(searchParams.type);
     const page = unwrap(searchParams.page) as string;
+    const totalPages = unwrap(searchParams.totalPages) as string;
     if (!q?.length && !t?.length) return;
     if (!page?.length) return;
+
+    if (totalPages && parseInt(page) >= parseInt(totalPages)) {
+      return;
+    }
 
     debouncedOnSearch(q, t, parseInt(page) + 1);
   }
@@ -333,7 +338,7 @@ export const DeckEditor: Component<Props> = props => {
     let cards = Object.values(deck.cards)
       .filter(card => card.qty)
       .map(card => [card.qty, card.name, card.set && `[${card.set}]`].filter(Boolean).join(' '));
-      
+
     let content = [cards].flat().join('\n');
 
     const blob = new Blob([content], { type: 'text/plain' });
