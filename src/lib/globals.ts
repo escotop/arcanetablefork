@@ -335,7 +335,7 @@ export function startSpectating() {
   orbitControls = new OrbitControls(camera, renderer.domElement);
   orbitControls.target = table.position;
 
-  Object.values(playAreas).forEach(playArea => {
+  Object.values(playAreas).forEach((playArea, i)=> {
     applyPlayerTransform(playArea.mesh, i);
   });
 }
