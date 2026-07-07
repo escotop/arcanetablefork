@@ -1,3 +1,4 @@
+// @sync context=vite remark-has-body.ts sha=767ddc363b4080ca5f818709fff19a416c5bfc8f
 export default function remarkHasBody() {
 	return tree => {
 		const hasBody = tree.children.some(n => n.type !== 'yaml');

@@ -1,3 +1,4 @@
+// @sync context=vite routes.ts sha=5bb3e2a02ca351258af2b1d5e7b30230b9540b55
 // version 0.1
 import { createMemo, createResource, lazy, ResourceSource } from 'solid-js';
 import { ImportGlobFunction } from 'vite';

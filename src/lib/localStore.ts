@@ -1,3 +1,4 @@
+// @sync context=solid localStore.ts sha=cdded32ba5470ee2df3d05bf9ccd6ea81cdbd286
 import { onMount } from "solid-js";
 import { createStore, SetStoreFunction, unwrap } from "solid-js/store";
 
