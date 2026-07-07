@@ -160,7 +160,11 @@ export function restackItems(anchor: Vector3, items: Object3D[]) {
   return Promise.all(
     items.flatMap((item, i) => {
       if (!item.parent) return [];
-      const localOffset = new Vector3().fromArray(item.userData.dragOffset);
+      let localOffset = new Vector3();
+
+      if (item.userData.dragOffset) {
+        localOffset.fromArray(item.userData.dragOffset)
+      }
 
       let position = anchor.clone().add(localOffset);
 
