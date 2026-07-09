@@ -166,7 +166,7 @@ export class PlayArea {
 
     zone.cards.forEach(card => {
       const toZone = zonesById.get(card.mesh.userData.previousZoneId);
-      // toZone is exected to be undefined when dismissing tokens
+      // toZone is expected to be undefined when dismissing tokens
 
       dispatchGameEvent(
         createTransferCardEvent(card, zone, toZone, { addOptions: { location: 'bottom' } }),

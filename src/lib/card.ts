@@ -38,7 +38,7 @@ import {
 import { counters } from './ui/counterDialog';
 import { cleanupFromNode, isValidMaterial } from './utils';
 
-interface CardUserData {
+export interface CardUserData {
   cardBack?: Material;
   publicCardBack?: Material;
   resting?: Vector3Like;
@@ -115,7 +115,7 @@ export async function loadCardTextures(
 
   // TODO: it would be nice to make a placeholder card
   // the worker here like we do in the deck editor
-  if (!front) throw new Error('front texture not found')
+  if (!front) throw new Error('front texture not found');
 
   if (!cache.has(front)) {
     cache.set(
@@ -351,7 +351,11 @@ export function cleanupCard(card: card) {
   cardsById.delete(card.id);
 }
 
-export function setCardData(cardMesh: Object3D, field: string, value: unknown) {
+export function setCardData<Field extends keyof CardUserData>(
+  cardMesh: Object3D,
+  field: Field,
+  value: CardUserData[Field],
+) {
   let modifiersNeedUpdate = false;
   // before setting value
   if (field === 'isPublic') {

@@ -317,6 +317,9 @@ function onDocumentDragStart(event: PointerEvent) {
     targets = selection.selectedItems.slice();
   }
 
+  // prevent dragging targets in the reveal zone
+  targets = targets.filter(target => target.userData.location !== 'reveal');
+
   let origin = new THREE.Vector3(0, 0, 0);
   targets.forEach(target => {
     target.userData.mouseDistance = target

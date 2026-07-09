@@ -58,12 +58,7 @@ export default function RevealMenu() {
                 <MenubarMenu>
                   <MenubarItem
                     onClick={() => {
-                      let cards = playArea.revealZone.cards;
-
-                      cards.forEach(card => {
-                        playArea.revealZone.removeCard(card.mesh);
-                        cleanupCard(card);
-                      });
+                      playArea.dismissFromZone(playArea.revealZone)
                       setHoverSignal();
                     }}>
                     Dismiss

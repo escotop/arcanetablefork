@@ -97,13 +97,16 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
   let cardId = event.payload?.userData?.id;
   let card = cardsById.get(cardId);
 
+  if (event.payload?.userData?.isLocalOnly && event.clientID !== provider.awareness.clientID) {
+    return;
+  }
+
   if (cardId && !card) {
     Sentry.captureException(new Error('card is undefined'), {
       tags: { event_type: event.type },
-      extra: { missingId: cardId, knownIdCount: cardsById.size, payload: event.payload }
-    })
+      extra: { missingId: cardId, knownIdCount: cardsById.size, payload: event.payload },
+    });
   }
-
 
   if (card && event.payload.userData) {
     applyEventUserData(card, event.payload.userData);
@@ -199,9 +202,10 @@ const EVENTS = {
   reveal(event: Event, remotePlayArea: PlayArea, card: Card) {
     expect(!!card, 'card not found');
     let cardProxy = cloneCard(card, nanoid());
-    // remotePlayArea.peek();
-    setCardData(cardProxy.mesh, 'isPublic', true);
     const playArea = playAreas[provider.awareness.clientID];
+    setCardData(cardProxy.mesh, 'zoneId', undefined);
+    setCardData(cardProxy.mesh, 'isLocalOnly', true);
+
     playArea.reveal(cardProxy);
   },
   deckFlipTop(event: Event, playArea: PlayArea) {
