@@ -1,0 +1,23 @@
+---
+date: "2026-07-09T16:46:35-07:00"
+target: stable
+title: "Reveal Menu Fixes and Root Cause of Session Crashes Found"
+keywords:
+  - reveal
+  - dismiss
+  - crash
+  - stability
+  - card is undefined
+description: "Dismissing from the reveal menu now correctly returns cards. Dragging from the reveal zone is prevented. The root cause of the recurring session crash when a card ID couldn't be found has been identified and fixed."
+version: 1acf5bf
+changeCount:
+  bugfixes: 3
+  features: 0
+commitRange: https://github.com/odama626/arcanetable/compare/ea3b6fc...1acf5bf
+---
+
+## Fixes
+
+- **Reveal menu dismiss** - the Dismiss button in the reveal menu was only cleaning up cards locally without properly returning them to their zones. It now goes through the proper dismiss path.
+- **Session crash root cause** - the recurring "card not found" crash tracked down in the last release has been identified. Revealed cards are local clones that don't exist on other clients, but they were incorrectly broadcasting network events that other clients couldn't process. They're now marked as local-only and filtered before hitting the network.
+- **Dragging from reveal zone** - cards in the reveal zone could be accidentally dragged, which caused problems. Dragging is now prevented while a reveal is open.
