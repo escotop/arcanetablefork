@@ -32,7 +32,7 @@ push: build
 	docker push $(docker_container):beta
 	docker push $(docker_container):staging
 
-deploy: build push
+deploy: push
 	kubectl apply -f secrets.yml -f deployment.yml -f staging.yaml
 	kubectl rollout restart deployment -n arcanetable
 
@@ -65,7 +65,7 @@ push_all: build_all
 	$(MAKE) -C scry-server-yugioh push
 	$(MAKE) -C scry-server-pokemon push
 
-deploy_all: build_all push_all
+deploy_all: push_all
 	$(MAKE) -C scry-server-mtg apply
 	$(MAKE) -C scry-server-yugioh apply
 	$(MAKE) -C scry-server-pokemon apply
