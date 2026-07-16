@@ -313,7 +313,7 @@ export function expandCardEntries(cardEntries: DetailedCardEntry[]) {
 }
 
 export function loadCardList(cardList: string): CardEntry[] {
-  return deckParser.run(cardList).result;
+  return deckParser.run(cardList).result.filter(card => card.name.length);
 }
 
 export async function fetchCardInfo(
@@ -360,6 +360,7 @@ export async function fetchCardInfo(
 
 export function populateCardInfo(detail: CardEntryDetail, entry?: Card) {
   let fields = {
+    found: !!(detail?.id ?? detail?.name),
     id: entry?.id || detail?.id,
     set: entry?.set || detail?.set,
     name: entry?.name || detail.name,
