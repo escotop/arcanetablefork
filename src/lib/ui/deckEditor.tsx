@@ -5,11 +5,12 @@ import {
   createMemo,
   createSignal,
   For,
+  Match,
   on,
   onCleanup,
   onMount,
   Show,
-  splitProps,
+  Switch,
 } from 'solid-js';
 import { Button } from '~/components/ui/button';
 import {
@@ -22,29 +23,14 @@ import {
   ComboboxTrigger,
 } from '~/components/ui/combobox';
 import {
-  NumberField,
-  NumberFieldDecrementTrigger,
-  NumberFieldIncrementTrigger,
-  NumberFieldInput,
-  NumberFieldLabel,
-} from '~/components/ui/number-field';
-import {
   labelVariants,
   TextField,
   TextFieldInput,
   TextFieldLabel,
-  TextFieldTextArea,
 } from '~/components/ui/text-field';
-import { getCardArtImage, getCardImage } from '../card';
-import {
-  CardEntry,
-  CardEntryDetail,
-  DetailedCardEntry,
-  Deck,
-  FORMATS,
-  CardSystem,
-} from '../constants';
-import { fetchCardInfo, loadCardList, populateCardInfo } from '../deck';
+import { getCardImage } from '../card';
+import { DetailedCardEntry, Deck, FORMATS, CardSystem } from '../constants';
+import { populateCardInfo } from '../deck';
 import { cardSystem, colorHashDark } from '../globals';
 import { cn } from '../utils';
 import styles from './deckEditor.module.css';
@@ -53,7 +39,7 @@ import random from 'lodash-es/random';
 import { Command, CommandInput } from '~/components/ui/command';
 import { ToggleGroup, ToggleGroupItem } from '~/components/ui/toggle-group';
 import { capitalize, debounce } from 'lodash-es';
-import { createStore, SetStoreFunction, unwrap } from 'solid-js/store';
+import { createStore, reconcile, SetStoreFunction, unwrap } from 'solid-js/store';
 import { getCardKey, hydrateDeck, serializeDeck } from '../deckStore';
 import { useCardSystemContext } from '../cardSystemContext';
 import AddIcon from 'lucide-solid/icons/plus';
@@ -85,6 +71,18 @@ import intersectionObserver from '../intersectionObserver';
 import CopyIcon from 'lucide-solid/icons/copy';
 import CheckIcon from 'lucide-solid/icons/check';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
+import DeckImportDialog from './deckEditor/deckImportDialog';
+import useCardGrouping from './deckEditor/cardGroupings';
+import OverflowMenuIcon from 'lucide-solid/icons/ellipsis';
+import DeleteIcon from 'lucide-solid/icons/trash-2';
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '~/components/ui/dropdown-menu';
 
 interface Props {
   onClose(): void;
@@ -92,8 +90,6 @@ interface Props {
   onDelete(): void;
   deck: Deck;
 }
-
-let cache = new Map();
 
 export const DeckEditor: Component<Props> = props => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -155,6 +151,12 @@ export const DeckEditor: Component<Props> = props => {
 
   let isEditing = () => !!props?.deck?.id;
 
+  onMount(() => {
+    if (!isEditing()) {
+      setSearchParams({ dialog: 'import' });
+    }
+  });
+
   function onSaveDeck(e: SubmitEvent & { currentTarget: HTMLFormElement }) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -171,28 +173,7 @@ export const DeckEditor: Component<Props> = props => {
     e.currentTarget.reset();
   }
 
-  async function parseDeckList(cardListText: string) {
-    let newCardEntries = loadCardList(cardListText);
-    let newCardList = await Promise.all(newCardEntries.map(entry => fetchCardInfo(entry, cache)));
-
-    for (const card of newCardList) {
-      const key = getCardKey(card);
-      if (card?.id && deck.cards?.[key]) {
-        updateDeck('cards', key, 'qty', qty => qty + card.qty);
-      } else {
-        updateDeck('cards', key, card);
-      }
-    }
-  }
-
-  onMount(() => {
-    window.addEventListener('drop', handleDrop, { passive: false });
-    window.addEventListener('paste', handlePaste, { passive: false });
-  });
-
   onCleanup(() => {
-    window.removeEventListener('drop', handleDrop);
-    window.removeEventListener('paste', handlePaste);
     setSearchParams(
       {
         page: undefined,
@@ -205,25 +186,6 @@ export const DeckEditor: Component<Props> = props => {
       { replace: true },
     );
   });
-
-  function handlePaste(event) {
-    const text = event.clipboardData.getData('text');
-    parseDeckList(text);
-  }
-
-  function handleDrop(event: DragEvent) {
-    event.preventDefault();
-    if (!event.dataTransfer) return;
-    let { files } = event.dataTransfer;
-    if (files.length > 0) {
-      let file = files[0];
-      let name = file.name.slice(0, file.name.lastIndexOf('.')).replace(/^Deck\s\-\s/, '');
-      updateDeck('name', name);
-      file.text().then(result => {
-        parseDeckList(result);
-      });
-    }
-  }
 
   function getSearchString(systemId: string, params: URLSearchParams) {
     return [systemId, params.get('q'), params.getAll('type').sort()].join(':');
@@ -314,6 +276,8 @@ export const DeckEditor: Component<Props> = props => {
   }
   let debouncedOnSearch = debounce(onSearch, 750, { trailing: true });
 
+  const isSearching = () => (searchParams.q || searchParams.type)?.length > 0;
+
   createEffect(() => {
     cardSystem.uri;
     const q = unwrap(searchParams.q) ?? '';
@@ -341,6 +305,8 @@ export const DeckEditor: Component<Props> = props => {
 
     let content = [cards].flat().join('\n');
 
+    if (!cards.length) return;
+
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -349,6 +315,7 @@ export const DeckEditor: Component<Props> = props => {
     a.click();
     URL.revokeObjectURL(url);
   }
+  const cardGrouping = useCardGrouping(cardSystem.types ?? [], getDeckList);
 
   return (
     <>
@@ -356,7 +323,24 @@ export const DeckEditor: Component<Props> = props => {
         <div class={styles.container} onDragOver={e => e.preventDefault()}>
           <div
             style='grid-area: header;'
-            class='px-7 p-4 text-2xl flex flex-row gap-2 items-center bg-background'>
+            class='pr-7 pl-4 p-4  flex flex-row gap-2 items-center bg-background'>
+            <div class='flex flex-wrap gap-2 items-center'>
+              <label>Card Counts</label>
+              <div class='flex gap-1 border-1 px-2 py-1  rounded'>
+                <span>Total</span>
+                <span>{cardGrouping().totalCount}</span>
+              </div>
+              <For each={Object.values(cardGrouping().types)}>
+                {grouping => (
+                  <Show when={grouping.count > 0}>
+                    <div class='flex gap-1 border-1 px-2 py-1 rounded'>
+                      <span>{grouping.name}</span>
+                      <span>{grouping.count}</span>
+                    </div>
+                  </Show>
+                )}
+              </For>
+            </div>
             <div class='ml-auto' />
             <Button
               class='cursor-pointer'
@@ -404,17 +388,6 @@ export const DeckEditor: Component<Props> = props => {
               <SelectContent />
             </Select>
 
-            <NumberField
-              class='px-4'
-              value={deck?.startingLife ?? 40}
-              onChange={value => updateDeck('startingLife', parseInt(value) || 0)}>
-              <NumberFieldLabel for='startingLife'>Starting Life Total</NumberFieldLabel>
-              <div class='relative'>
-                <NumberFieldInput required id='startingLife' name='startingLife' />
-                <NumberFieldIncrementTrigger />
-                <NumberFieldDecrementTrigger />
-              </div>
-            </NumberField>
             <div class='px-4'>
               <label class={cn(labelVariants())}>Deck Tags</label>
               <Combobox
@@ -484,6 +457,9 @@ export const DeckEditor: Component<Props> = props => {
 
             <div class='px-4'>
               <label class={cn(labelVariants())}>Start in play</label>
+              <div class='text-muted-foreground'>
+                useful for commanders, or other cards that should start on the table
+              </div>
               <Combobox
                 multiple
                 options={getDeckList()}
@@ -535,18 +511,37 @@ export const DeckEditor: Component<Props> = props => {
                 <ComboboxContent style='max-height: 50lvh; overflow: auto;' />
               </Combobox>
             </div>
-            <div class='flex gap-1 justify-end px-4 pb-4'>
-              <Button variant='ghost' size='icon' class='mr-auto' onClick={onDownloadDeckList}>
-                <DownloadIcon />
+
+            <div class='flex gap-4 justify-end px-2 pb-4'>
+              <Button variant='ghost' onClick={() => setSearchParams({ dialog: 'import' })}>
+                Import Card List
               </Button>
-              <Show when={isEditing()}>
-                <Button
-                  variant='ghost'
-                  onClick={() => setSearchParams({ dialog: 'editor-confirm-delete' })}>
-                  Delete Deck
-                </Button>
-              </Show>
               <Button type='submit'>{isEditing() ? 'Update Deck' : 'Create Deck'}</Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger as={Button<'button'>} variant='ghost'>
+                  <OverflowMenuIcon />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent class='w-48'>
+                  <DropdownMenuItem
+                    disabled={Object.values(deck.cards).filter(card => card.qty).length < 1}
+                    onClick={onDownloadDeckList}>
+                    <div class='flex gap-2'>
+                      <DownloadIcon class='text-muted-foreground' />
+                      <span>Download Deck</span>
+                    </div>
+                  </DropdownMenuItem>
+                  <Show when={isEditing()}>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => setSearchParams({ dialog: 'editor-confirm-delete' })}>
+                      <div class='flex gap-2'>
+                        <DeleteIcon class='text-muted-foreground' />
+                        <span>Delete Deck</span>
+                      </div>
+                    </DropdownMenuItem>
+                  </Show>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
           <div class={styles.cardListScrollContainer} aria-hidden='false'>
@@ -557,7 +552,7 @@ export const DeckEditor: Component<Props> = props => {
                 <CommandInput
                   wrapperStyle='border-bottom-color: var(--color-gray-400);'
                   style='background: transparent;'
-                  placeholder='Type a command or search...'
+                  placeholder='Search'
                   value={searchParams.q ?? ''}
                   onValueChange={q => setSearchParams({ q })}
                 />
@@ -583,7 +578,9 @@ export const DeckEditor: Component<Props> = props => {
               </ToggleGroup>
             </div>
             <div class={`p-4 ${styles.cardList}`}>
-              <For each={searchResults() || getDeckList()} fallback={EmptyGridContainer}>
+              <For
+                each={searchResults() || getDeckList()}
+                fallback={<EmptyGridContainer isSearching={isSearching()} />}>
                 {(card, i) => {
                   const deckCard = () => deck.cards?.[getCardKey(card)];
                   return (
@@ -706,6 +703,15 @@ export const DeckEditor: Component<Props> = props => {
       </form>
 
       <Portal>
+        <Show when={searchParams.dialog === 'import'}>
+          <DeckImportDialog
+            onClose={closeCurrentDialog}
+            onImport={deck => {
+              setDeck(reconcile(deck));
+              setSearchParams({ dialog: undefined });
+            }}
+          />
+        </Show>
         <Show when={searchParams.dialog === 'editor-confirm-close'}>
           <Dialog open onOpenChange={isOpen => !isOpen && closeCurrentDialog()}>
             <DialogContent>
@@ -755,25 +761,39 @@ export const DeckEditor: Component<Props> = props => {
   );
 };
 
-function EmptyGridContainer() {
+function EmptyGridContainer(props: { isSearching: boolean; hasSearchResults: boolean }) {
   return (
     <div class='p-8 flex-col flex gap-4'>
-      <Alert class='inline-block'>
-        <AlertTitle>Welcome to the Deck Editor</AlertTitle>
-        <AlertDescription>
-          <p>
-            If you already have a deck list you can paste it here, or drop the file in the window.
-          </p>
-          <p>Or start fresh by searching for cards above</p>
-        </AlertDescription>
-      </Alert>
-      {/*<Alert>
-        <AlertTitle>Paste your deck list here or drag and drop</AlertTitle>
-        <TextField>
-          <TextFieldTextArea rows={20} />
-        </TextField>
-        <Button>Submit Deck List</Button>
-      </Alert>*/}
+      <Switch>
+        <Match when={props.hasSearchResults}>
+          <Alert class='inline-block'>
+            <AlertTitle>Searching</AlertTitle>
+            <AlertDescription>
+              <p>Loading Search Results</p>
+            </AlertDescription>
+          </Alert>
+        </Match>
+        <Match when={props.isSearching}>
+          <Alert class='inline-block'>
+            <AlertTitle>No Results Found</AlertTitle>
+            <AlertDescription>
+              <p>Sorry, we couldn't find any results for that search</p>
+            </AlertDescription>
+          </Alert>
+        </Match>
+        <Match when>
+          <Alert class='inline-block'>
+            <AlertTitle>Welcome to the Deck Editor</AlertTitle>
+            <AlertDescription>
+              <p>
+                If you already have a deck list you can paste it here, or drop the file in the
+                window.
+              </p>
+              <p>Or start fresh by searching for cards above</p>
+            </AlertDescription>
+          </Alert>
+        </Match>
+      </Switch>
     </div>
   );
 }
@@ -824,7 +844,7 @@ function ConfirmDeleteDialog(props: { name: string; onClose(): void; onDelete():
             disabled={value()?.toLowerCase() !== props.name?.toLowerCase()}
             variant='destructive'
             onClick={props.onDelete}>
-            Delete {props.name}
+            Delete Deck
           </Button>
         </DialogFooter>
       </DialogContent>

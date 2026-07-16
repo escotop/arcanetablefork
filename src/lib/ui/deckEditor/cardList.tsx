@@ -7,6 +7,8 @@ import { Button } from '~/components/ui/button';
 import { cardSystem } from '~/lib/globals';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '~/components/ui/hover-card';
 import { getCardImage } from '~/lib/card';
+import useCardGrouping from './cardGroupings';
+import { ImportsNotUsedAsValues } from 'typescript';
 
 interface Props {
   entries: DetailedCardEntry[];
@@ -14,48 +16,9 @@ interface Props {
   removeCard(entry: DetailedCardEntry): void;
 }
 
-interface GroupedEntry {
-  name: string;
-  items: DetailedCardEntry[];
-  count: number;
-}
-
-interface Grouped {
-  types: Record<string, GroupedEntry>;
-  unsorted: GroupedEntry;
-  totalCount: number;
-}
-
 export default function CardList(props: Props) {
   const lowerTypes = createMemo(() => (cardSystem.types ?? []).map(type => type.toLowerCase()));
-
-  const grouped = createMemo(() => {
-    const types = lowerTypes().map(t => [t, { items: [], name: capitalize(t), count: 0 }]);
-    const result = {
-      types: Object.fromEntries(types),
-      unsorted: {
-        name: 'Unsorted',
-        items: [],
-        count: 0,
-      },
-      totalCount: 0,
-    } as Grouped;
-
-    for (const entry of props.entries) {
-      const simpleType = getSimpleType(entry);
-      const type = lowerTypes().find(type => simpleType?.endsWith(type));
-      if (type) {
-        result.types[type].items.push(entry);
-        result.types[type].count += entry.qty;
-      } else {
-        result.unsorted.items.push(entry);
-        result.unsorted.count += entry.qty;
-      }
-      result.totalCount += entry.qty;
-    }
-
-    return result;
-  });
+  const grouped = useCardGrouping(cardSystem.types ?? [], () => props.entries);
 
   return (
     <>
@@ -103,22 +66,6 @@ export default function CardList(props: Props) {
         </Show>
       </div>
       <hr class='mx-4 mt-auto' />
-      <div class='flex flex-wrap gap-2 px-4 mt-4'>
-        <div class='flex gap-1 border-1 px-2 py-1 rounded'>
-          <span>Total</span>
-          <span>{grouped().totalCount}</span>
-        </div>
-        <For each={lowerTypes()}>
-          {cardType => (
-            <Show when={grouped().types[cardType].count > 0}>
-              <div class='flex gap-1 border-1 px-2 py-1 rounded'>
-                <span>{capitalize(cardType)}</span>
-                <span>{grouped().types[cardType].count}</span>
-              </div>
-            </Show>
-          )}
-        </For>
-      </div>
     </>
   );
 }
@@ -143,8 +90,4 @@ function CardEntry(props: { entry: DetailedCardEntry; addCard(): void; removeCar
       </HoverCardContent>
     </HoverCard>
   );
-}
-
-function getSimpleType(entry: DetailedCardEntry) {
-  return entry?.detail?.type?.toLowerCase()?.split('—')?.[0]?.trim();
 }
