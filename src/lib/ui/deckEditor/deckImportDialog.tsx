@@ -140,16 +140,12 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
                   </SelectTrigger>
                   <SelectContent />
                 </Select>
-                <label>Cards Found</label>
+                <label>{cardGrouping().totalCount} Cards Found</label>
                 <div class='flex flex-wrap gap-2 my-2'>
-                  <div class='flex gap-1 border-1 px-2 py-1 rounded'>
-                    <span>Total</span>
-                    <span>{cardGrouping().totalCount}</span>
-                  </div>
                   <For each={Object.values(cardGrouping().types)}>
                     {grouping => (
                       <Show when={grouping.count > 0}>
-                        <div class='flex gap-1 border-1 px-2 py-1 rounded'>
+                        <div class='flex gap-1 border-l-2 px-2 py-1'>
                           <span>{grouping.name}</span>
                           <span>{grouping.count}</span>
                         </div>
@@ -158,13 +154,15 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
                   </For>
                 </div>
 
-                <hr class='my-4' />
-                <label>Cards not found</label>
-                <For
-                  each={notFoundList()}
-                  fallback={<p class='text-muted-foreground'>All cards found</p>}>
-                  {card => <div class='text-error-foreground'>{card.name}</div>}
-                </For>
+                <Show when={notFoundList()?.length > 0}>
+                  <hr class='my-4' />
+                  <label>Cards not found</label>
+                  <For
+                    each={notFoundList()}
+                    fallback={<p class='text-muted-foreground'>All cards found</p>}>
+                    {card => <div class='text-error-foreground'>{card.name}</div>}
+                  </For>
+                </Show>
               </div>
             </Show>
           </div>

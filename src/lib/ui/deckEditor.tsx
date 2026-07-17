@@ -325,15 +325,11 @@ export const DeckEditor: Component<Props> = props => {
             style='grid-area: header;'
             class='pr-7 pl-4 p-4  flex flex-row gap-2 items-center bg-background'>
             <div class='flex flex-wrap gap-2 items-center'>
-              <label>Card Counts</label>
-              <div class='flex gap-1 border-1 px-2 py-1  rounded'>
-                <span>Total</span>
-                <span>{cardGrouping().totalCount}</span>
-              </div>
+              <label>{cardGrouping().totalCount} Cards Added</label>
               <For each={Object.values(cardGrouping().types)}>
                 {grouping => (
                   <Show when={grouping.count > 0}>
-                    <div class='flex gap-1 border-1 px-2 py-1 rounded'>
+                    <div class='flex gap-1 border-l-2 px-2 py-1'>
                       <span>{grouping.name}</span>
                       <span>{grouping.count}</span>
                     </div>
