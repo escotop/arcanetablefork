@@ -580,7 +580,13 @@ export const DeckEditor: Component<Props> = props => {
             <div class={`p-4 ${styles.cardList}`}>
               <For
                 each={searchResults() || getDeckList()}
-                fallback={<EmptyGridContainer isSearching={isSearching()} />}>
+                fallback={
+                  <EmptyGridContainer
+                    hasSearchResults={searchParams.totalPages > 0}
+                    isSearching={isSearching()}
+                    importCardList={() => setSearchParams({ dialog: 'import' })}
+                  />
+                }>
                 {(card, i) => {
                   const deckCard = () => deck.cards?.[getCardKey(card)];
                   return (
@@ -761,7 +767,11 @@ export const DeckEditor: Component<Props> = props => {
   );
 };
 
-function EmptyGridContainer(props: { isSearching: boolean; hasSearchResults: boolean }) {
+function EmptyGridContainer(props: {
+  isSearching: boolean;
+  hasSearchResults: boolean;
+  importCardList(): void;
+}) {
   return (
     <div class='p-8 flex-col flex gap-4'>
       <Switch>
@@ -783,13 +793,12 @@ function EmptyGridContainer(props: { isSearching: boolean; hasSearchResults: boo
         </Match>
         <Match when>
           <Alert class='inline-block'>
-            <AlertTitle>Welcome to the Deck Editor</AlertTitle>
+            <AlertTitle>Your deck doesn't have any cards</AlertTitle>
             <AlertDescription>
-              <p>
-                If you already have a deck list you can paste it here, or drop the file in the
-                window.
-              </p>
-              <p>Or start fresh by searching for cards above</p>
+              <p>Add cards by searching above or import a card list</p>
+              <Button class='mt-4' onClick={props.importCardList}>
+                Import Card List
+              </Button>
             </AlertDescription>
           </Alert>
         </Match>

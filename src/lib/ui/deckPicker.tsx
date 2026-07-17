@@ -1,4 +1,4 @@
-import { Component, createEffect, createSignal, For, onMount, Show } from 'solid-js';
+import { Component, createEffect, createSignal, For, Match, onMount, Show, Switch } from 'solid-js';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -22,13 +22,13 @@ import {
 } from '~/components/ui/text-field';
 import { createDeckStore } from '../deckStore';
 import { useCardSystemContext } from '../cardSystemContext';
-import { colorHashDark, startSpectating } from '../globals';
+import { colorHashDark, setIsSpectating, startSpectating } from '../globals';
 import PencilIcon from 'lucide-solid/icons/pencil';
 import { cn } from '../cnUtil';
-import { Deck, DeckEditor } from './deckEditor';
+import { DeckEditor } from './deckEditor';
 import styles from './deckPicker.module.css';
 import CopyLinkButton from '~/components/ui/copy-link-button';
-import { LoadSettings } from '../constants';
+import { Deck, LoadSettings } from '../constants';
 import { useSearchParams } from '@solidjs/router';
 import { unwrap } from 'solid-js/store';
 
@@ -38,18 +38,13 @@ interface Props {
 
 export default function DeckPicker(props: Props) {
   const [deckStore, setDeckStore] = createDeckStore();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [cardSystemStore, { setCardSystem }] = useCardSystemContext();
-  const [selectedDeckId, setSelectedDeckId] = createSignal<string>();
+  const [selectedDeckId, setSelectedDeckId] = createSignal<string>(
+    deckStore?.systems[cardSystemStore.system]?.[0],
+  );
   const [editingDeck, setEditingDeck] = createSignal<Deck>();
-  const [startingLife, setStartingLife] = createSignal(40);
-
-  createEffect(() => {
-    const deck = deckStore.decks[selectedDeckId()];
-    let startingLife = deck?.startingLife;
-    if (startingLife) {
-      setStartingLife(parseInt(startingLife));
-    }
-  });
+  const [sessionOptions, setSessionOptions] = createSignal();
 
   async function onSubmit(e: SubmitEvent & { currentTarget: HTMLFormElement }) {
     e.preventDefault();
@@ -58,7 +53,9 @@ export default function DeckPicker(props: Props) {
 
     e.currentTarget.reset();
 
-    props.onStart(data);
+    const startOptions = { ...(sessionOptions() ?? {}), ...data };
+
+    props.onStart(startOptions);
   }
 
   function shouldShowSystem(system: string) {
@@ -99,95 +96,146 @@ export default function DeckPicker(props: Props) {
           />
         )}
       </Show>
-      <Dialog open={!editingDeck()}>
-        <DialogContent class='max-w-3xl' hideClose>
-          <DialogHeader>
-            <DialogTitle>Start Session</DialogTitle>
-          </DialogHeader>
-          <form class='flex flex-col gap-5' onSubmit={onSubmit}>
-            <TextField
-              defaultValue={localStorage.getItem('arcanetable-name') ?? ''}
-              onChange={value => localStorage.setItem('arcanetable-name', value)}>
-              <TextFieldLabel for='name'>Name</TextFieldLabel>
-              <TextFieldInput required type='text' id='name' name='name' />
-            </TextField>
-            <NumberField value={startingLife()} onChange={setStartingLife}>
-              <NumberFieldLabel>Starting Life</NumberFieldLabel>
-              <div class='relative'>
-                <NumberFieldInput name='startingLife' />
-                <NumberFieldIncrementTrigger />
-                <NumberFieldDecrementTrigger />
-              </div>
-            </NumberField>
-            <div>
-              <div class={cn(labelVariants(), 'text-xl mb-4')}>Select a deck</div>
-              <input type='hidden' name='deckId' value={selectedDeckId()} />
-              <h2>{cardSystemStore.systems[cardSystemStore.system]?.name}</h2>
-              <div class='grid grid-cols-3 gap-4 my-2'>
-                <For each={deckStore.systems[cardSystemStore.system]}>
-                  {(deckId, i) => {
-                    let deck = () => deckStore.decks[deckId];
-                    return (
-                      <Show when={deck()}>
-                        <DeckOption
-                          deck={deck()}
-                          isSelected={deck().id === selectedDeckId()}
-                          onSelect={() => setSelectedDeckId(deck().id)}
-                          onEdit={() => setEditingDeck(deck())}
-                        />
-                      </Show>
-                    );
-                  }}
-                </For>
-              </div>
-
-              <For each={Object.entries(deckStore.systems)}>
-                {([system, deckIds]) => (
-                  <Show when={shouldShowSystem(system) && deckIds.length > 0}>
-                    <h2>{cardSystemStore.systems[system]?.name ?? system}</h2>
+      <Show when={!editingDeck()}>
+        <Switch>
+          <Match when={!sessionOptions()}>
+            <SessionOptions
+              onSubmit={session => {
+                setSessionOptions(session);
+              }}
+              onSpectate={() => setIsSpectating(true)}
+            />
+          </Match>
+          <Match when>
+            <Dialog open={!editingDeck()}>
+              <DialogContent class='max-w-3xl' hideClose>
+                <DialogHeader>
+                  <DialogTitle>Select A Deck</DialogTitle>
+                </DialogHeader>
+                <form class='flex flex-col gap-5' onSubmit={onSubmit}>
+                  <div>
+                    <input type='hidden' name='deckId' value={selectedDeckId()} />
+                    <h2>{cardSystemStore.systems[cardSystemStore.system]?.name}</h2>
                     <div class='grid grid-cols-3 gap-4 my-2'>
-                      <For each={deckIds}>
+                      <For each={deckStore.systems[cardSystemStore.system]}>
                         {(deckId, i) => {
-                          let deck = deckStore.decks[deckId];
+                          let deck = () => deckStore.decks[deckId];
                           return (
-                            <Show when={deck}>
+                            <Show when={deck()}>
                               <DeckOption
-                                deck={deck}
-                                isSelected={deck.id === selectedDeckId()}
-                                onSelect={() => setSelectedDeckId(deck.id)}
-                                onEdit={() => setEditingDeck(deck)}
+                                deck={deck()}
+                                isSelected={deck().id === selectedDeckId()}
+                                onSelect={() => setSelectedDeckId(deck().id)}
+                                onEdit={() => setEditingDeck(deck())}
                               />
                             </Show>
                           );
                         }}
                       </For>
                     </div>
-                  </Show>
-                )}
-              </For>
-            </div>
-            <DialogFooter>
-              <CopyLinkButton variant='ghost' class='mr-auto' />
-              <Button onClick={() => startSpectating()} variant='ghost'>
-                Spectate
-              </Button>
-              <Button
-                disabled={!selectedDeckId()}
-                variant='ghost'
-                onClick={() => setEditingDeck(deckStore.decks[selectedDeckId()])}>
-                Edit Deck
-              </Button>
-              <Button variant='outline' type='button' onClick={() => setEditingDeck({})}>
-                Create Deck
-              </Button>
-              <Button type='submit' disabled={!selectedDeckId()}>
-                Start Playtest
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+
+                    <For each={Object.entries(deckStore.systems)}>
+                      {([system, deckIds]) => (
+                        <Show when={shouldShowSystem(system) && deckIds.length > 0}>
+                          <h2>{cardSystemStore.systems[system]?.name ?? system}</h2>
+                          <div class='grid grid-cols-3 gap-4 my-2'>
+                            <For each={deckIds}>
+                              {(deckId, i) => {
+                                let deck = deckStore.decks[deckId];
+                                return (
+                                  <Show when={deck}>
+                                    <DeckOption
+                                      deck={deck}
+                                      isSelected={deck.id === selectedDeckId()}
+                                      onSelect={() => setSelectedDeckId(deck.id)}
+                                      onEdit={() => setEditingDeck(deck)}
+                                    />
+                                  </Show>
+                                );
+                              }}
+                            </For>
+                          </div>
+                        </Show>
+                      )}
+                    </For>
+                  </div>
+                  <DialogFooter>
+                    <Button variant='ghost' onClick={() => setSessionOptions()}>
+                      Back
+                    </Button>
+                    {
+                      // <Button
+                      //   disabled={!selectedDeckId()}
+                      //   variant='ghost'
+                      //   onClick={() => setEditingDeck(deckStore.decks[selectedDeckId()])}>
+                      //   Edit Deck
+                      // </Button>
+                    }{' '}
+                    <Button variant='outline' type='button' onClick={() => setEditingDeck({})}>
+                      Create Deck
+                    </Button>
+                    <Button type='submit' disabled={!selectedDeckId()}>
+                      Start Playtest
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </Match>
+        </Switch>
+      </Show>
     </>
+  );
+}
+
+interface SessionOptionsProps {
+  onSubmit(data: any): void;
+  onSpectate(): void;
+}
+
+function SessionOptions(props: SessionOptionsProps) {
+  async function onSubmit(e: SubmitEvent & { currentTarget: HTMLFormElement }) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const data = Object.fromEntries(formData.entries());
+
+    e.currentTarget.reset();
+
+    props.onSubmit({ ...data, startingLife: parseInt(data.startingLife) });
+  }
+
+  return (
+    <Dialog open>
+      <DialogContent class='max-w-3xl' hideClose>
+        <DialogHeader>
+          <DialogTitle>Start Session</DialogTitle>
+        </DialogHeader>
+        <form class='flex flex-col gap-5' onSubmit={onSubmit}>
+          <TextField
+            defaultValue={localStorage.getItem('arcanetable-name') ?? ''}
+            onChange={value => localStorage.setItem('arcanetable-name', value)}>
+            <TextFieldLabel for='name'>Name</TextFieldLabel>
+            <TextFieldInput required type='text' id='name' name='name' />
+          </TextField>
+          <NumberField value={40}>
+            <NumberFieldLabel>Starting Life</NumberFieldLabel>
+            <div class='relative'>
+              <NumberFieldInput name='startingLife' />
+              <NumberFieldIncrementTrigger />
+              <NumberFieldDecrementTrigger />
+            </div>
+          </NumberField>
+
+          <DialogFooter>
+            <CopyLinkButton variant='ghost' class='mr-auto' />
+            <Button onClick={props.onSpectate} variant='ghost'>
+              Spectate
+            </Button>
+            <Button type='submit'>Next</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
