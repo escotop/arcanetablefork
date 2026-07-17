@@ -148,13 +148,12 @@ export class CardGrid implements CardZone {
           animateObject(cardMesh, {
             path: new CatmullRomCurve3([
               cardMesh.position.clone(),
-              cardMesh.position.clone().add(new Vector3(0, 0, -2.5)),
               position,
             ]),
             to: {
               rotation,
             },
-            duration: 0.2,
+            duration: 0.1,
           });
         }
         missed++;
@@ -171,13 +170,12 @@ export class CardGrid implements CardZone {
         animateObject(cardMesh, {
           path: new CatmullRomCurve3([
             cardMesh.position.clone(),
-            cardMesh.position.clone().add(new Vector3(0, 0, -2.5)),
             position,
           ]),
           to: {
             rotation,
           },
-          duration: 0.2,
+          duration: 0.1,
         });
       }
     }
@@ -272,8 +270,6 @@ export class CardGrid implements CardZone {
 
     const path = new CatmullRomCurve3([
       initialPosition,
-      new Vector3((this.cards.length / 2) * 5, 100, 10),
-      new Vector3((this.cards.length / 2) * 5, 50, indexPosition * -0.25),
       position,
     ]);
 
@@ -287,7 +283,7 @@ export class CardGrid implements CardZone {
       from: {
         rotation: initialRotation,
       },
-      duration: 0.5,
+      duration: 0.2,
     });
   }
 

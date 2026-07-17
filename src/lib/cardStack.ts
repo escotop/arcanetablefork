@@ -104,7 +104,6 @@ export class CardStack implements CardZone {
       duration: 0.2,
       path: new CatmullRomCurve3([
         initialPosition,
-        new Vector3(0, 0, (skipAnimation ? 20 : 400) * 0.125),
         new Vector3(0, 0, CARD_THICKNESS * this.mesh.children.length),
       ]),
       from: {

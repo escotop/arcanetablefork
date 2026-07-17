@@ -101,14 +101,11 @@ export class Hand implements CardZone {
         this.removeCard(card.mesh);
         cleanupCard(card);
         setHoverSignal();
-      }
-    } else {
+      }    } else {
       this.isInteractive = false;
       animateObject(card.mesh, {
         path: new CatmullRomCurve3([
           initialPosition,
-          new Vector3((this.cards.length / 2) * 5, 100, 10),
-          new Vector3((this.cards.length / 2) * 5, 50, index * -0.25),
           restingPosition,
         ]),
         to: {
@@ -117,7 +114,7 @@ export class Hand implements CardZone {
         from: {
           rotation: initialRotation,
         },
-        duration: 0.5,
+        duration: 0.25,
         onComplete: () => {
           if (destroy) {
             this.removeCard(card.mesh);
@@ -179,7 +176,7 @@ export class Hand implements CardZone {
       cardMesh.userData.resting.position = new Vector3(i * 5, 0, i * -0.125);
       animateObject(cardMesh, {
         to: cardMesh.userData.resting,
-        duration: 0.2,
+        duration: 0.1,
       });
     }
   }
@@ -206,13 +203,13 @@ function animateFocusCard(handMesh: Group, cards: Card[], index: number) {
       ),
       rotation: cards[index].mesh.userData.resting.rotation,
     },
-    duration: 0.2,
+    duration: 0.1,
   });
   animateObject(handMesh, {
     to: {
       position: handMesh.userData.resting.position.clone().add(new Vector3(-10, 0, 0)),
     },
-    duration: 0.2,
+    duration: 0.1,
   });
 
   for (let i = index + 1; i < cards.length; i++) {
@@ -224,7 +221,7 @@ function animateFocusCard(handMesh: Group, cards: Card[], index: number) {
         position: resting.position.clone().add(new Vector3(20, 0, 0)),
         rotation: resting.rotation,
       },
-      duration: 0.2,
+      duration: 0.1,
     });
   }
 }
@@ -234,15 +231,15 @@ function animateUnfocusCard(handMesh: Group, cards: Card[], index: number) {
 
   animateObject(card.mesh, {
     to: card.mesh.userData.resting,
-    duration: 0.2,
+    duration: 0.1,
   });
   animateObject(handMesh, {
     to: handMesh.userData.resting,
-    duration: 0.2,
+    duration: 0.1,
   });
   for (let i = index + 1; i < cards.length; i++) {
     let cardMesh = cards[i].mesh;
     if (cardMesh.userData.location !== 'hand') continue;
-    animateObject(cardMesh, { to: cardMesh.userData.resting, duration: 0.2 });
+    animateObject(cardMesh, { to: cardMesh.userData.resting, duration: 0.1 });
   }
 }

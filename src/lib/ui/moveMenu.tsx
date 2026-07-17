@@ -21,6 +21,7 @@ interface Props {
   text: string;
   onComplete?(): void;
   showShortcuts?: boolean;
+  vertical?: true;
 }
 
 const MoveMenu: Component<Props> = props => {
@@ -51,8 +52,7 @@ const MoveMenu: Component<Props> = props => {
   return (
     <MenubarMenu orientation='vertical'>
       <MenubarTrigger
-        class='whitespace-nowrap font-normal px-2 flex gap-2 w-full'
-        as={Button<'button'>}
+        class={`whitespace-nowrap font-normal px-2 flex gap-2 ${props.vertical ? 'w-full' : ''}`}
         variant='ghost'>
         {props.text ?? 'Move to'}
         <DropdownIcon class='ml-auto' stroke-width={1} />

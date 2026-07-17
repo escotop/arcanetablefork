@@ -11,7 +11,7 @@ import {
 } from 'solid-js';
 import { Button } from '~/components/ui/button';
 import { Command, CommandInput } from '~/components/ui/command';
-import { Menubar, MenubarMenu } from '~/components/ui/menubar';
+import { Menubar, MenubarItem, MenubarMenu } from '~/components/ui/menubar';
 import { Card } from '../constants';
 import {
   cardsById,
@@ -70,12 +70,11 @@ const PeekMenu: Component = props => {
           <div class={styles.peekActions} style={`--x: ${tether().x}px; --y: ${tether().y}px;`}>
             <Menubar>
               <MenubarMenu>
-                <Button
-                  variant='ghost'
+                <MenubarItem
                   class='whitespace-nowrap'
                   onClick={() => drawAfterRevealing(card())}>
                   Reveal & Draw
-                </Button>
+                </MenubarItem>
                 <Button
                   variant='ghost'
                   class='whitespace-nowrap'
@@ -115,31 +114,33 @@ const PeekMenu: Component = props => {
               />
               <Menubar>
                 <MenubarMenu>
-                  <Button
-                    variant='ghost'
+                  <MenubarItem
+                    class='whitespace-nowrap'
                     onClick={async () => {
                       playArea.peekZone.cards;
-                      await playArea.transferEntireZone(playArea.peekZone, playArea.deck, { location: 'bottom'});
+                      await playArea.transferEntireZone(playArea.peekZone, playArea.deck, {
+                        location: 'bottom',
+                      });
                       await doAfter(100, () => playArea.shuffleDeck());
 
                       setHoverSignal();
                     }}>
                     Shuffle into deck
-                  </Button>
-                  <Button
-                    variant='ghost'
+                  </MenubarItem>
+                  <MenubarItem
+                    class='whitespace-nowrap'
                     onClick={() =>
                       doXTimes(cardCount(), () => drawAfterRevealing(playArea.peekZone.cards[0]))
                     }>
                     Reveal & Draw All
-                  </Button>
-                  <Button
-                    variant='ghost'
+                  </MenubarItem>
+                  <MenubarItem
+                    class='whitespace-nowrap'
                     onClick={() =>
                       doXTimes(cardCount(), () => drawWithoutRevealing(playArea.peekZone.cards[0]))
                     }>
                     Draw All
-                  </Button>
+                  </MenubarItem>
                   <MoveMenu
                     text='Move All To'
                     cards={playArea.peekZone.cards}
@@ -148,33 +149,34 @@ const PeekMenu: Component = props => {
                   />
                   <Switch>
                     <Match when={viewField()}>
-                      <Button
-                        variant='ghost'
+                      <MenubarItem
+                        class='whitespace-nowrap'
                         onClick={() => {
                           playArea.peekZone.viewGrid();
                           setViewField(false);
                         }}>
                         View Grid
-                      </Button>
+                      </MenubarItem>
                     </Match>
                     <Match when>
-                      <Button
+                      <MenubarItem
                         variant='ghost'
+                        class='whitespace-nowrap'
                         onClick={() => {
                           playArea.peekZone.viewField();
                           setViewField(true);
                         }}>
                         View Field
-                      </Button>
+                      </MenubarItem>
                     </Match>
                   </Switch>
-                  <Button
-                    variant='ghost'
+                  <MenubarItem
+                    class='whitespace-nowrap ml-auto'
                     onClick={() => {
                       playArea.dismissFromZone(playArea.peekZone);
                     }}>
                     Dismiss
-                  </Button>
+                  </MenubarItem>
                 </MenubarMenu>
               </Menubar>
             </Command>

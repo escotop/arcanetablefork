@@ -71,7 +71,6 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
 
     let path = new CatmullRomCurve3([
       initialPosition,
-      new Vector3(CARD_WIDTH, 0, yPos * 0.125),
       position,
     ]);
 
@@ -83,7 +82,6 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
       completeOnCancel: true,
       path: new CatmullRomCurve3([
         curPosition,
-        restingPosition.clone().add(new Vector3(0, 0, 5)),
         restingPosition,
       ]),
       duration: 0.5,
@@ -123,7 +121,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
     this.mesh.add(card.mesh);
 
     let position = new Vector3(0, 0, 0);
-    let path = new CatmullRomCurve3([initialPosition, new Vector3(0, 0, -5), position]);
+    let path = new CatmullRomCurve3([initialPosition, position]);
 
     this.mesh.position.setZ(this.cards.length * CARD_THICKNESS + 2.5);
 
@@ -264,7 +262,6 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
         duration: 0.2,
         path: new CatmullRomCurve3([
           card.mesh.position.clone(),
-          new Vector3(0, 0, card.mesh.position.z - 15),
           card.mesh.position.clone(),
         ]),
         to: {

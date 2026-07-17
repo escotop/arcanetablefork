@@ -188,12 +188,14 @@ export function MainMenu(props: { playArea?: PlayArea }) {
                   Related Cards
                 </MenubarItem>
                 <MoveMenu
+                  vertical
                   text={`Battlefield (${props.playArea.battlefieldZone.observable.cardCount})`}
                   cards={props.playArea.battlefieldZone.cards}
                   playArea={props.playArea}
                   fromZone={props.playArea.battlefieldZone}
                 />
                 <MoveMenu
+                  vertical
                   text={`Hand (${props.playArea.hand.observable.cardCount})`}
                   cards={props.playArea.hand?.cards}
                   playArea={props.playArea}
