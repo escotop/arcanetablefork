@@ -10,8 +10,8 @@ export default function SettingsOverlay(props: { isOpen: boolean;  onClose():voi
     <Dialog
       open={props.isOpen}
       onOpenChange={isOpen => isOpen ? props.onOpen() : props.onClose()}>
-      <DialogTrigger>
-        <MenubarItem>Settings</MenubarItem>
+      <DialogTrigger as={MenubarItem} class='w-full'>
+        Settings
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>Settings</DialogHeader>

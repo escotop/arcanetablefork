@@ -11,6 +11,8 @@ import { Card, CardZone, KEY } from '../constants';
 import { doXTimes } from '../globals';
 import { PlayArea } from '../playArea';
 import { transferCard } from '../transferCard';
+import DropdownIcon from 'lucide-solid/icons/chevron-right';
+import { Button } from '~/components/ui/button';
 
 interface Props {
   cards: Card[];
@@ -47,8 +49,14 @@ const MoveMenu: Component<Props> = props => {
   }
 
   return (
-    <MenubarMenu>
-      <MenubarTrigger class='whitespace-nowrap'>{props.text ?? 'Move to'}</MenubarTrigger>
+    <MenubarMenu orientation='vertical'>
+      <MenubarTrigger
+        class='whitespace-nowrap font-normal px-2 flex gap-2 w-full'
+        as={Button<'button'>}
+        variant='ghost'>
+        {props.text ?? 'Move to'}
+        <DropdownIcon class='ml-auto' stroke-width={1} />
+      </MenubarTrigger>
       <MenubarContent>
         <MenubarItem onClick={() => moveTo(props.playArea.peekZone)}>Search</MenubarItem>
         <Show when={props.fromZone !== props.playArea.hand}>

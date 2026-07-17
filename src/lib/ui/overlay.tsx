@@ -18,7 +18,13 @@ import {
   DialogHeader,
   DialogTrigger,
 } from '~/components/ui/dialog';
-import { Menubar, MenubarItem, MenubarMenu, MenubarShortcut } from '../../components/ui/menubar';
+import {
+  Menubar,
+  MenubarItem,
+  MenubarMenu,
+  MenubarSeparator,
+  MenubarShortcut,
+} from '../../components/ui/menubar';
 import { KEY } from '../constants';
 import {
   cardsById,
@@ -170,6 +176,14 @@ export function MainMenu(props: { playArea?: PlayArea }) {
                 <MenubarItem class='w-full flex' onClick={() => untapAll(props.playArea)}>
                   Untap All <MenubarShortcut>{KEY.Shift}R</MenubarShortcut>
                 </MenubarItem>
+                <MenubarItem
+                  class='w-full'
+                  onClick={() => {
+                    dispatchGameEvent(createPassTurnEvent());
+                  }}>
+                  Pass Turn <MenubarShortcut>[ _ ]</MenubarShortcut>
+                </MenubarItem>
+                <MenubarSeparator class='w-full' />
                 <MenubarItem class='w-full flex' onClick={() => props.playArea.toggleTokenMenu()}>
                   Related Cards
                 </MenubarItem>
@@ -188,8 +202,8 @@ export function MainMenu(props: { playArea?: PlayArea }) {
                 <Dialog
                   open={isDialogVisible('concede')}
                   onOpenChange={isOpen => setVisibleDialog(isOpen ? 'concede' : undefined)}>
-                  <DialogTrigger>
-                    <MenubarItem class='width-full'>Concede</MenubarItem>
+                  <DialogTrigger as={MenubarItem} class='w-full'>
+                    Concede
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>Are you sure you want to concede?</DialogHeader>
@@ -207,14 +221,15 @@ export function MainMenu(props: { playArea?: PlayArea }) {
               </>
             </Show>
           </Show>
-          <MenubarItem class='width-full' onClick={() => setIsLogVisible(visible => !visible)}>
+          <MenubarItem class='w-full' onClick={() => setIsLogVisible(visible => !visible)}>
             {isLogVisible() ? 'Hide Log' : 'Show Log'}
           </MenubarItem>
+        <MenubarSeparator />
           <Dialog
             open={isDialogVisible('shortcuts')}
             onOpenChange={isOpen => setVisibleDialog(isOpen ? 'shortcuts' : undefined)}>
-            <DialogTrigger>
-              <MenubarItem class='width-full'>Shortcuts</MenubarItem>
+            <DialogTrigger as={MenubarItem} class='w-full'>
+              Shortcuts
             </DialogTrigger>
             <DialogContent class='max-w-xl'>
               <DialogHeader>Shortcuts</DialogHeader>
@@ -235,8 +250,8 @@ export function MainMenu(props: { playArea?: PlayArea }) {
           <Dialog
             open={isDialogVisible('donate')}
             onOpenChange={isOpen => setVisibleDialog(isOpen ? 'donate' : undefined)}>
-            <DialogTrigger>
-              <MenubarItem class='width-full'>Support Us</MenubarItem>
+            <DialogTrigger as={MenubarItem} class='w-full'>
+              Support Us
             </DialogTrigger>
             <DialogContent class='max-w-xl'>
               <DialogHeader>Support Arcanetable Development</DialogHeader>
@@ -253,12 +268,6 @@ export function MainMenu(props: { playArea?: PlayArea }) {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          <MenubarItem
-            onClick={() => {
-              dispatchGameEvent(createPassTurnEvent());
-            }}>
-            Pass Turn <MenubarShortcut>[ _ ]</MenubarShortcut>
-          </MenubarItem>
         </MenubarMenu>
       </Menubar>
       <Show when={isLogVisible()}>
