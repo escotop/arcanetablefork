@@ -52,15 +52,10 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
       let file = files[0];
       let name = file.name.slice(0, file.name.lastIndexOf('.')).replace(/^Deck\s\-\s/, '');
       updateDeck('name', name);
-      file.text().then(result => {
-        setTextContent(result);
+      file.text().then(text => {
+        setTextContent(text);
       });
     }
-  }
-
-  function handlePaste(event) {
-    const text = event.clipboardData.getData('text');
-    setTextContent(text);
   }
 
   async function parseDeckList(cardListText: string) {
@@ -78,12 +73,10 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
 
   onMount(() => {
     window.addEventListener('drop', handleDrop, { passive: false });
-    window.addEventListener('paste', handlePaste, { passive: false });
   });
 
   onCleanup(() => {
     window.removeEventListener('drop', handleDrop);
-    window.removeEventListener('paste', handlePaste);
   });
 
   createEffect(() => {
@@ -110,7 +103,9 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
               <TextFieldTextArea
                 class='h-96 whitespace-pre'
                 placeholder='Paste a decklist or drop a deck list file'
-                onInput={e => debouncedSetTextContent(e.currentTarget.value)}
+                onInput={e => {
+                  debouncedSetTextContent(e.currentTarget.value)
+                }}
                 value={textContent()}
               />
             </TextField>
