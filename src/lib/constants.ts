@@ -54,6 +54,12 @@ export interface HoverSignalBase {
 export interface HoverSignalWithTarget extends HoverSignalBase {
   mesh: Mesh;
   tether: Vector3;
+  intent?: 'contextMenu'
+}
+
+export interface ContextMenuSignal {
+  mouse: Vector2;
+  target: Mesh;
 }
 
 export interface CardEntry {

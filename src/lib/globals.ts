@@ -29,6 +29,7 @@ import {
   CARD_WIDTH,
   CardSystem,
   CardZone,
+  ContextMenuSignal,
   GameState,
   HoverSignal,
   TABLE_COLOR,
@@ -66,6 +67,7 @@ export let camera: PerspectiveCamera;
 export let focusRenderer: WebGLRenderer;
 export let focusCamera: PerspectiveCamera;
 export let [hoverSignal, setHoverSignal] = createSignal<HoverSignal>();
+export let [contextMenuSignal, setContextMenuSignal] = createSignal<ContextMenuSignal>();
 export let cardsById = new Map<string, Card>();
 export let zonesById = new Map<string, CardZone<unknown>>();
 export let [playAreas, setPlayAreas] = createStore<Record<number, PlayArea>>({});

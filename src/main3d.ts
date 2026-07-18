@@ -45,6 +45,7 @@ import {
   setAnimating,
   setCapturedErrors,
   setCardBackTexture,
+  setContextMenuSignal,
   setHoverSignal,
   setIsIntitialized,
   setPlayAreas,
@@ -133,7 +134,9 @@ export async function localInit(gameOptions: GameOptions) {
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
 
+  // TODO: these document listeners are never cleaned up!
   renderer.domElement.addEventListener('mousemove', onRendererMouseMove, false);
+  renderer.domElement.addEventListener('contextmenu', onContextMenu, false);
   document.addEventListener('mousemove', onDocumentMouseMove, false);
   document.addEventListener('click', onDocumentClick, false);
   document.addEventListener('dragstart', onDocumentDragStart, false);
@@ -214,7 +217,23 @@ function onDocumentScroll(event) {
 
 let isDragging = false;
 
+function onContextMenu(event: PointerEvent) {
+  event.preventDefault();
+  raycaster.setFromCamera(mouse, camera);
+  let intersects = raycaster.intersectObject(scene);
+
+  if (!intersects.length) return;
+  let target = intersects[0].object;
+  if (!target) return;
+
+  setContextMenuSignal({
+    mouse: { x: event.x, y: event.y},
+    target,
+  });
+}
+
 function onDocumentClick(event: PointerEvent) {
+  setContextMenuSignal();
   raycaster.setFromCamera(mouse, camera);
   let intersects = raycaster.intersectObject(scene);
 

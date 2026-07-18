@@ -57,15 +57,11 @@ import SettingsOverlay from './settingsOverlay';
 import { PlayArea } from '../playArea';
 import { createPassTurnEvent } from '../createEvents';
 import Announcement from './announcement';
+import ContextMenuHandler from './context-menu/handler';
 
 export default function Overlay() {
   let userData = () => hoverSignal()?.mesh?.userData;
   const [searchParams, setSearchParams] = useSearchParams();
-
-  const isDialogVisible = (dialog: string) => dialog === searchParams.dialog;
-  const setVisibleDialog = (dialog?: string) => {
-    setSearchParams({ dialog }, { replace: !dialog });
-  };
 
   const isPublic = () => userData()?.isPublic;
   const isOwner = () => userData()?.clientId === provider?.awareness?.clientID;
@@ -148,6 +144,7 @@ export default function Overlay() {
       <PeekMenu />
       <RevealMenu />
       <TokenSearchMenu />
+      <ContextMenuHandler playArea={playArea} />
       <CounterDialog />
       <Announcement />
       <CommandPalette playArea={playArea} />
@@ -172,61 +169,63 @@ export function MainMenu(props: { playArea?: PlayArea }) {
         <MenubarMenu>
           <Show when={!isSpectating()}>
             <Show when={props.playArea}>
-              <>
-                <MenubarItem class='w-full flex' onClick={() => untapAll(props.playArea)}>
-                  Untap All <MenubarShortcut>{KEY.Shift}R</MenubarShortcut>
-                </MenubarItem>
-                <MenubarItem
-                  class='w-full'
-                  onClick={() => {
-                    dispatchGameEvent(createPassTurnEvent());
-                  }}>
-                  Pass Turn <MenubarShortcut>[ _ ]</MenubarShortcut>
-                </MenubarItem>
-                <MenubarSeparator class='w-full' />
-                <MenubarItem class='w-full flex' onClick={() => props.playArea.toggleTokenMenu()}>
-                  Related Cards
-                </MenubarItem>
-                <MoveMenu
-                  vertical
-                  text={`Battlefield (${props.playArea.battlefieldZone.observable.cardCount})`}
-                  cards={props.playArea.battlefieldZone.cards}
-                  playArea={props.playArea}
-                  fromZone={props.playArea.battlefieldZone}
-                />
-                <MoveMenu
-                  vertical
-                  text={`Hand (${props.playArea.hand.observable.cardCount})`}
-                  cards={props.playArea.hand?.cards}
-                  playArea={props.playArea}
-                  fromZone={props.playArea.hand}
-                />
-                <Dialog
-                  open={isDialogVisible('concede')}
-                  onOpenChange={isOpen => setVisibleDialog(isOpen ? 'concede' : undefined)}>
-                  <DialogTrigger as={MenubarItem} class='w-full'>
-                    Concede
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>Are you sure you want to concede?</DialogHeader>
-                    <DialogDescription>
-                      Conceding will allow you to spectate until the session ends
-                    </DialogDescription>
-                    <DialogFooter>
-                      <Button onClick={() => setVisibleDialog()} variant='ghost'>
-                        Cancel
-                      </Button>
-                      <Button onClick={() => onConcede()}>Concede</Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </>
+              {playArea => (
+                <>
+                  <MenubarItem class='w-full flex' onClick={() => untapAll(playArea())}>
+                    Untap All <MenubarShortcut>{KEY.Shift}R</MenubarShortcut>
+                  </MenubarItem>
+                  <MenubarItem
+                    class='w-full'
+                    onClick={() => {
+                      dispatchGameEvent(createPassTurnEvent());
+                    }}>
+                    Pass Turn <MenubarShortcut>[ _ ]</MenubarShortcut>
+                  </MenubarItem>
+                  <MenubarSeparator class='w-full' />
+                  <MenubarItem class='w-full flex' onClick={() => playArea().toggleTokenMenu()}>
+                    Related Cards
+                  </MenubarItem>
+                  <MoveMenu
+                    vertical
+                    text={`Battlefield (${playArea().battlefieldZone.observable.cardCount})`}
+                    cards={playArea().battlefieldZone.cards}
+                    playArea={playArea()}
+                    fromZone={playArea().battlefieldZone}
+                  />
+                  <MoveMenu
+                    vertical
+                    text={`Hand (${playArea().hand.observable.cardCount})`}
+                    cards={playArea().hand?.cards}
+                    playArea={playArea()}
+                    fromZone={playArea().hand}
+                  />
+                  <Dialog
+                    open={isDialogVisible('concede')}
+                    onOpenChange={isOpen => setVisibleDialog(isOpen ? 'concede' : undefined)}>
+                    <DialogTrigger as={MenubarItem} class='w-full'>
+                      Concede
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>Are you sure you want to concede?</DialogHeader>
+                      <DialogDescription>
+                        Conceding will allow you to spectate until the session ends
+                      </DialogDescription>
+                      <DialogFooter>
+                        <Button onClick={() => setVisibleDialog()} variant='ghost'>
+                          Cancel
+                        </Button>
+                        <Button onClick={() => onConcede()}>Concede</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </>
+              )}
             </Show>
           </Show>
           <MenubarItem class='w-full' onClick={() => setIsLogVisible(visible => !visible)}>
             {isLogVisible() ? 'Hide Log' : 'Show Log'}
           </MenubarItem>
-        <MenubarSeparator />
+          <MenubarSeparator />
           <Dialog
             open={isDialogVisible('shortcuts')}
             onOpenChange={isOpen => setVisibleDialog(isOpen ? 'shortcuts' : undefined)}>
