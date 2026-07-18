@@ -22,7 +22,7 @@ interface Author {
   description?: string;
 }
 
-const baseURL = import.meta.env.VITE_SITE_URL;
+const baseURL = import.meta.env.VITE_SITE_URL ?? 'http://localhost:3000';
 
 const SITE_DEFAULTS = {
   title: 'Arcanetable - 3D TCG Playtesting in Your Browser',

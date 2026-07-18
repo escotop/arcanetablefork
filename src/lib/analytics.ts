@@ -3,9 +3,17 @@ import { useLocation } from '@solidjs/router';
 import { Analytics } from 'analytics';
 import { createEffect } from 'solid-js';
 
+let plugins = [];
+
+let {GOOGLE_TAG_MANAGER_ID }= import.meta.env;
+
+if (GOOGLE_TAG_MANAGER_ID) {
+  plugins.push(googleTagManager({ containerId: GOOGLE_TAG_MANAGER_ID}))
+}
+
 export const analytics = Analytics({
   app: 'arcanetable',
-  plugins: [googleTagManager({ containerId: import.meta.env.VITE_GOOGLE_TAG_MANAGER_ID })],
+  plugins,
 });
 
 export function AnalyticsContext(props) {
