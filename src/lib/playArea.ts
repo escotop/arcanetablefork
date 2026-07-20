@@ -300,7 +300,7 @@ export class PlayArea {
               transferCard(card, this.graveyardZone, this.peekZone);
               resolve();
             },
-            (this.graveyardZone.mesh.children.length - i) * 50,
+            (this.graveyardZone.mesh.children.length - i) * 5,
           );
         });
       }),
@@ -325,7 +325,7 @@ export class PlayArea {
               transferCard(card, this.exileZone, this.peekZone);
               resolve();
             },
-            (this.exileZone.mesh.children.length - i) * 50,
+            (this.exileZone.mesh.children.length - i) * 5,
           );
         });
       }),

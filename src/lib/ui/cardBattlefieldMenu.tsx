@@ -230,7 +230,13 @@ function CounterRow(props: CounterRowProps) {
   );
 }
 
-const CoreCounters: Component = props => {
+export interface CoreCountersProps {
+  cardMesh: Mesh;
+  playArea: PlayArea;
+  
+}
+
+export function CoreCounters(props: CoreCountersProps) {
   let [power, setPower] = createSignal(props.cardMesh?.userData.modifiers?.power ?? 0);
   let [toughness, setToughness] = createSignal(props.cardMesh?.userData?.modifiers?.toughness ?? 0);
 

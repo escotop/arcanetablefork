@@ -111,7 +111,7 @@ export const DEFAULT_CARD_BACK = '/arcane-table-back.webp';
 
 [('warn', 'error')].forEach(captureConsole);
 
-export function doXTimes(x: number, callback, delay = 100): Promise<void> {
+export function doXTimes(x: number, callback, delay = 5): Promise<void> {
   if (x < 1) return Promise.resolve();
   return new Promise<void>(resolve => {
     new Array(x).fill(0).forEach((_, i) =>

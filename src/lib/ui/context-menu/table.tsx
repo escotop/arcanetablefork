@@ -45,7 +45,7 @@ export default function TableMenuItems(props: MenuActionsProps) {
         onClick={() => {
           dispatchGameEvent(createPassTurnEvent());
         }}>
-        Pass Turn <Dynamic component={menuCtx.shortcut}>[ _ ]</Dynamic>
+        Pass Turn <Dynamic component={menuCtx.shortcut}>space</Dynamic>
       </Dynamic>
       <Dynamic component={menuCtx.separator} class='w-full' />
       <Dynamic

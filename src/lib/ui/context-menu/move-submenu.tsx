@@ -18,7 +18,7 @@ interface Props {
 }
 
 export default function MoveSubMenu(props: Props) {
-  const menuCtx = useMenuContext();
+  const ctx = useMenuContext();
 
   function moveTo<T extends {}>(zone: CardZone<T>, addOptions?: T) {
     let cards = props.cards.slice();
@@ -45,53 +45,55 @@ export default function MoveSubMenu(props: Props) {
   }
 
   return (
-    <Dynamic component={menuCtx.menu}>
+    <Dynamic component={ctx.menu}>
       <Dynamic
-        component={menuCtx.trigger}
+        component={ctx.trigger}
         class={`whitespace-nowrap font-normal px-2 flex gap-2 ${props.vertical ? 'w-full' : ''}`}
         variant='ghost'>
         {props.text ?? 'Move to'}
-        <Show when={menuCtx.type === 'menubar'}>
+        <Show when={ctx.type === 'menubar'}>
           <DropdownIcon class='ml-auto' stroke-width={1} />
         </Show>
       </Dynamic>
-      <Dynamic component={menuCtx.content}>
-        <Dynamic component={menuCtx.item} onClick={() => moveTo(props.playArea.peekZone)}>
+      <Dynamic component={ctx.content}>
+        <Dynamic component={ctx.item} onClick={() => moveTo(props.playArea.peekZone)}>
           Search
         </Dynamic>
         <Show when={props.fromZone !== props.playArea.hand}>
-          <Dynamic component={menuCtx.item} onClick={() => moveTo(props.playArea.hand)}>
+          <Dynamic component={ctx.item} onClick={() => moveTo(props.playArea.hand)}>
             Hand
           </Dynamic>
         </Show>
         <Dynamic
-          component={menuCtx.item}
+          component={ctx.item}
           onClick={() => props.cards.forEach(card => props.playArea.reveal(card))}>
           Reveal
         </Dynamic>
-        <Dynamic component={menuCtx.item} onClick={() => moveTo(props.playArea.graveyardZone)}>
-          Discard{' '}
-          {props.showShortcuts && <Dynamic component={menuCtx.shortcut}>{KEY.Mod} d</Dynamic>}
+        <Dynamic component={ctx.item} onClick={() => moveTo(props.playArea.graveyardZone)}>
+          Discard
+          {props.showShortcuts && <Dynamic component={ctx.shortcut}>{KEY.Mod} d</Dynamic>}
         </Dynamic>
-        <Dynamic component={menuCtx.item} onClick={() => moveTo(props.playArea.exileZone)}>
-          Exile {props.showShortcuts && <Dynamic component={menuCtx.shortcut}>{KEY.Mod} e</Dynamic>}
+        <Dynamic component={ctx.item} onClick={() => moveTo(props.playArea.exileZone)}>
+          Exile {props.showShortcuts && <Dynamic component={ctx.shortcut}>{KEY.Mod} e</Dynamic>}
         </Dynamic>
-        <Dynamic component={menuCtx.item} onClick={() => moveTo(props.playArea.deck)}>
-          Top of Deck{' '}
-          {props.showShortcuts && <Dynamic component={menuCtx.shortcut}>{KEY.Shift} T</Dynamic>}
+        <Dynamic component={ctx.separator} />
+        <Dynamic component={ctx.item} onClick={() => moveTo(props.playArea.deck)}>
+          Top of Deck
+          {props.showShortcuts && <Dynamic component={ctx.shortcut}>{KEY.Shift} T</Dynamic>}
         </Dynamic>
         <Dynamic
-          component={menuCtx.item}
+          component={ctx.item}
           onClick={() => moveTo(props.playArea.deck, { location: 'bottom' })}>
-          Bottom of Deck{' '}
-          {props.showShortcuts && <Dynamic component={menuCtx.shortcut}>{KEY.Shift} B</Dynamic>}
+          Bottom of Deck
+          {props.showShortcuts && <Dynamic component={ctx.shortcut}>{KEY.Shift} B</Dynamic>}
         </Dynamic>
+        <Dynamic component={ctx.separator} />
         <Show when={props.fromZone !== props.playArea.battlefieldZone}>
-          <Dynamic component={menuCtx.item} onClick={() => moveTo(props.playArea.battlefieldZone)}>
+          <Dynamic component={ctx.item} onClick={() => moveTo(props.playArea.battlefieldZone)}>
             Battlefield
           </Dynamic>
           <Dynamic
-            component={menuCtx.item}
+            component={ctx.item}
             onClick={() => moveToFaceDown(props.playArea.battlefieldZone)}>
             Battlefield Face down
           </Dynamic>

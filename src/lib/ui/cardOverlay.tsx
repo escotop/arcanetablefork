@@ -27,7 +27,7 @@ export default function CardOverlay(props: Props) {
         <DeckMenu playArea={props.playArea} />
       </Match>
       <Match when={userData()?.location === 'battlefield'}>
-        <CardBattlefieldMenu playArea={props.playArea} cardMesh={props.cardMesh} />
+         <CardBattlefieldMenu playArea={props.playArea} cardMesh={props.cardMesh} />
       </Match>
       <Match when={userData()?.location === 'hand'}>
         <Menubar>
