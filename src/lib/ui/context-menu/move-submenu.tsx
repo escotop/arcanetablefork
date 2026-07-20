@@ -87,8 +87,8 @@ export default function MoveSubMenu(props: Props) {
           Bottom of Deck
           {props.showShortcuts && <Dynamic component={ctx.shortcut}>{KEY.Shift} B</Dynamic>}
         </Dynamic>
-        <Dynamic component={ctx.separator} />
         <Show when={props.fromZone !== props.playArea.battlefieldZone}>
+          <Dynamic component={ctx.separator} />
           <Dynamic component={ctx.item} onClick={() => moveTo(props.playArea.battlefieldZone)}>
             Battlefield
           </Dynamic>

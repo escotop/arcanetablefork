@@ -55,7 +55,7 @@ export default function TableMenuItems(props: MenuActionsProps) {
         Related Cards
       </Dynamic>
       <MoveSubMenu
-        text='Move All Cards'
+        text='Move All Cards on Field'
         cards={props.playArea.battlefieldZone.cards}
         fromZone={props.playArea.battlefieldZone}
         playArea={props.playArea}

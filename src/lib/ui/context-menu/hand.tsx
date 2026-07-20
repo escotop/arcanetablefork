@@ -23,6 +23,13 @@ export default function HandContextMenu(props: { playArea: PlayArea; targetMesh:
         playArea={props.playArea}
         fromZone={props.playArea.hand}
       />
+      <Dynamic component={ctx.separator} />
+      <MoveSubMenu
+        text={`Move all ${props.playArea.hand.cards.length} cards`}
+        cards={props.playArea.hand.cards}
+        playArea={props.playArea}
+        fromZone={props.playArea.hand}
+      />
     </>
   );
 }
