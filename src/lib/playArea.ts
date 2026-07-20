@@ -169,7 +169,7 @@ export class PlayArea {
       // toZone is expected to be undefined when dismissing tokens
 
       dispatchGameEvent(
-        createTransferCardEvent(card, zone, toZone, { addOptions: { location: 'bottom' } }),
+        createTransferCardEvent(card, zone, toZone),
       );
     });
 
