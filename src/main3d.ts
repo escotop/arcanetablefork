@@ -219,6 +219,7 @@ let isDragging = false;
 
 function onContextMenu(event: PointerEvent) {
   event.preventDefault();
+  updateMouse(event);
   raycaster.setFromCamera(mouse, camera);
   let intersects = raycaster.intersectObject(scene);
 
@@ -227,12 +228,13 @@ function onContextMenu(event: PointerEvent) {
   if (!target) return;
 
   setContextMenuSignal({
-    mouse: { x: event.x, y: event.y},
+    mouse: { x: event.x, y: event.y },
     target,
   });
 }
 
 function onDocumentClick(event: PointerEvent) {
+  updateMouse(event);
   setContextMenuSignal();
   raycaster.setFromCamera(mouse, camera);
   let intersects = raycaster.intersectObject(scene);
@@ -477,11 +479,15 @@ function onDocumentMouseMove(event) {
   );
 }
 
-function onRendererMouseMove(event) {
+function updateMouse(event) {
   mouse.set(
     (event.clientX / window.innerWidth) * 2 - 1,
     -(event.clientY / window.innerHeight) * 2 + 1,
   );
+}
+
+function onRendererMouseMove(event) {
+  updateMouse(event);
 
   selection.onMove(event);
 

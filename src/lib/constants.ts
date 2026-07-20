@@ -20,7 +20,7 @@ export const ANNOUNCEMENT_VISIBLE_DURATION = 3500;
 
 export const KEY = {
   Shift: '⇧',
-  Mod: navigator?.userAgent?.platform === 'macOS' ? '⌘' : 'Ctrl',
+  Mod: navigator?.userAgent?.toLowerCase()?.includes('mac') ? '⌘' : 'Ctrl',
 };
 
 export interface GameState {
@@ -54,7 +54,7 @@ export interface HoverSignalBase {
 export interface HoverSignalWithTarget extends HoverSignalBase {
   mesh: Mesh;
   tether: Vector3;
-  intent?: 'contextMenu'
+  intent?: 'contextMenu';
 }
 
 export interface ContextMenuSignal {

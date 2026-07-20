@@ -1,4 +1,4 @@
-import { JSX, Match, Show, Switch } from 'solid-js';
+import { createMemo, createSignal, JSX, Match, Show, Switch } from 'solid-js';
 import { contextMenuSignal, setContextMenuSignal } from '~/lib/globals';
 import {
   DropdownMenu,
@@ -9,9 +9,15 @@ import {
 import { PlayArea } from '~/lib/playArea';
 import TableContextMenu from './table';
 import { DropdownMenuElements, MenuContext, MenuContextProvider } from './context';
-
+import DeckContextMenu from './deck';
 
 export default function ContextMenuHandler(props: { playArea: PlayArea }) {
+  const target = createMemo(() => contextMenuSignal()?.target);
+  const location = createMemo(() => target()?.userData?.location);
+
+  createSignal(() => {
+    console.log({ target: target() })
+  })
   return (
     <Show when={contextMenuSignal()}>
       {contextMenuSignal => (
@@ -25,6 +31,9 @@ export default function ContextMenuHandler(props: { playArea: PlayArea }) {
             }}>
             <DropdownMenuContent>
               <Switch>
+                <Match when={location() === 'deck'}>
+                  <DeckContextMenu playArea={props.playArea} />
+                </Match>
                 <Match when>
                   <TableContextMenu playArea={props.playArea} />
                 </Match>
