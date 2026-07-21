@@ -168,9 +168,7 @@ export class PlayArea {
       const toZone = zonesById.get(card.mesh.userData.previousZoneId);
       // toZone is expected to be undefined when dismissing tokens
 
-      dispatchGameEvent(
-        createTransferCardEvent(card, zone, toZone),
-      );
+      dispatchGameEvent(createTransferCardEvent(card, zone, toZone));
     });
 
     await flushDispatchEventQueue();
@@ -184,8 +182,10 @@ export class PlayArea {
     if (payload?.availableTokens) {
       this.availableTokens = payload.availableTokens;
     }
+
     if (!this.availableTokens) {
       let cardsInPlay = this.cards;
+      console.log(this.cards.map(card => card.detail.all_parts));
       let allTokens = new Set(
         cardsInPlay
           .map(card => card.detail.all_parts ?? [])
@@ -201,7 +201,12 @@ export class PlayArea {
             clientId: this.clientId,
           };
         }),
-      ).then(cards => uniqBy(cards, 'oracle_id').sort((a, b) => a.name.localeCompare(b.name)));
+      ).then(cards =>
+        // TODO: oracle_id, set_type only works for 1 card system
+        uniqBy(cards, 'oracle_id')
+          .filter(card => card.set_type === 'token')
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      );
     }
 
     let availableCards = this.availableTokens.map((detail, i) => {
@@ -213,6 +218,8 @@ export class PlayArea {
       setCardData(card.mesh, 'isToken', true);
       return card;
     });
+
+    console.log({ availableCards });
 
     this.emitEvent({
       type: 'toggleTokenMenu',
@@ -352,7 +359,6 @@ export class PlayArea {
     this.emitEvent({ type: 'flip', payload: { userData: cardMesh.userData } });
 
     const zone = zonesById.get(cardMesh.userData.zoneId)!;
-
 
     let rotation = new Euler().fromArray(cardMesh.userData.zone[zone.id].rotation);
     let vec = new Vector3();

@@ -2,7 +2,7 @@ import { createMemo, createSignal, JSX, Match, Show, Switch } from 'solid-js';
 import { contextMenuSignal, setContextMenuSignal } from '~/lib/globals';
 import { DropdownMenu, DropdownMenuContent } from '~/components/ui/dropdown-menu';
 import { PlayArea } from '~/lib/playArea';
-import TableContextMenu from './table';
+import TableContextMenu, { TableContextDialogs } from './table';
 import { DropdownMenuElements, MenuContext, MenuContextProvider } from './context';
 import DeckContextMenu, { DeckContextDialogs } from './deck';
 import BattlefieldContextMenu, { BattlefieldContextDialogs } from './battlefield';
@@ -50,6 +50,7 @@ export default function ContextMenuHandler(props: { playArea: PlayArea }) {
           </MenuContextProvider>
         )}
       </Show>
+      <TableContextDialogs playArea={props.playArea} />
       <DeckContextDialogs playArea={props.playArea} />
       <BattlefieldContextDialogs playArea={props.playArea} />
     </>

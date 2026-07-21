@@ -78,14 +78,6 @@ export default function Overlay() {
   const isCardOwnedByPlayer = (cardMesh: Mesh) =>
     cardMesh?.userData?.clientId === provider.awareness.clientID;
 
-  const cards = () => {
-    let items = selection.selectedItems;
-    if (items.length) return items.map(item => cardsById.get(item.userData.id));
-    if (!cardMesh()) return [];
-
-    return [cardsById.get(cardMesh().userData.id)];
-  };
-
   let currentPlayer = () => players().find(player => player.id === provider?.awareness?.clientID);
 
   let [container, setContainer] = createSignal();
@@ -167,61 +159,6 @@ export function MainMenu(props: { playArea?: PlayArea }) {
         style='height: auto; white-space: nowrap;'
         class={`${styles.menu} flex-col items-start`}>
         <MenubarMenu>
-          <Show when={!isSpectating()}>
-            <Show when={props.playArea}>
-              {playArea => (
-                <>
-                  <MenubarItem class='w-full flex' onClick={() => untapAll(playArea())}>
-                    Untap All <MenubarShortcut>{KEY.Shift}R</MenubarShortcut>
-                  </MenubarItem>
-                  <MenubarItem
-                    class='w-full'
-                    onClick={() => {
-                      dispatchGameEvent(createPassTurnEvent());
-                    }}>
-                    Pass Turn <MenubarShortcut>[ _ ]</MenubarShortcut>
-                  </MenubarItem>
-                  <MenubarSeparator class='w-full' />
-                  <MenubarItem class='w-full flex' onClick={() => playArea().toggleTokenMenu()}>
-                    Related Cards
-                  </MenubarItem>
-                  <MoveMenu
-                    vertical
-                    text={`Battlefield (${playArea().battlefieldZone.observable.cardCount})`}
-                    cards={playArea().battlefieldZone.cards}
-                    playArea={playArea()}
-                    fromZone={playArea().battlefieldZone}
-                  />
-                  <MoveMenu
-                    vertical
-                    text={`Hand (${playArea().hand.observable.cardCount})`}
-                    cards={playArea().hand?.cards}
-                    playArea={playArea()}
-                    fromZone={playArea().hand}
-                  />
-                  <Dialog
-                    open={isDialogVisible('concede')}
-                    onOpenChange={isOpen => setVisibleDialog(isOpen ? 'concede' : undefined)}>
-                    <DialogTrigger as={MenubarItem} class='w-full'>
-                      Concede
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>Are you sure you want to concede?</DialogHeader>
-                      <DialogDescription>
-                        Conceding will allow you to spectate until the session ends
-                      </DialogDescription>
-                      <DialogFooter>
-                        <Button onClick={() => setVisibleDialog()} variant='ghost'>
-                          Cancel
-                        </Button>
-                        <Button onClick={() => onConcede()}>Concede</Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                </>
-              )}
-            </Show>
-          </Show>
           <MenubarItem class='w-full' onClick={() => setIsLogVisible(visible => !visible)}>
             {isLogVisible() ? 'Hide Log' : 'Show Log'}
           </MenubarItem>

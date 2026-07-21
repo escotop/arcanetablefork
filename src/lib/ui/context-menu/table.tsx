@@ -1,4 +1,4 @@
-import { Dynamic } from 'solid-js/web';
+import { Dynamic, Match, Switch } from 'solid-js/web';
 import {
   Dialog,
   DialogContent,
@@ -52,33 +52,44 @@ export default function TableMenuItems(props: MenuActionsProps) {
         component={menuCtx.item}
         class='w-full flex'
         onClick={() => props.playArea.toggleTokenMenu()}>
-        Related Cards
+        Tokens
       </Dynamic>
       <MoveSubMenu
-        text='Move All Cards on Field'
+        text={`Move All ${props.playArea.battlefieldZone.cards.length} Cards on Field`}
         cards={props.playArea.battlefieldZone.cards}
         fromZone={props.playArea.battlefieldZone}
         playArea={props.playArea}
       />
-      <Dialog
-        open={searchParams.dialog === 'concede'}
-        onOpenChange={isOpen => setSearchParams({ dialog: isOpen ? 'concede' : undefined })}>
-        <DialogTrigger as={menuCtx.item} class='w-full'>
-          Concede
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>Are you sure you want to concede?</DialogHeader>
-          <DialogDescription>
-            Conceding will allow you to spectate until the session ends
-          </DialogDescription>
-          <DialogFooter>
-            <Button onClick={() => setSearchParams({ dialog: undefined })} variant='ghost'>
-              Cancel
-            </Button>
-            <Button onClick={() => onConcede()}>Concede</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <Dynamic component={menuCtx.item} onClick={() => setSearchParams({ dialog: 'concede' })}>
+        Concede
+      </Dynamic>
     </>
+  );
+}
+
+export function TableContextDialogs(props: { playArea: PlayArea }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  return (
+    <Switch>
+      <Match when={searchParams.dialog === 'concede'}>
+        <Dialog
+          open
+          onOpenChange={isOpen => setSearchParams({ dialog: isOpen ? 'concede' : undefined })}>
+          <DialogContent>
+            <DialogHeader>Are you sure you want to concede?</DialogHeader>
+            <DialogDescription>
+              Conceding will allow you to spectate until the session ends
+            </DialogDescription>
+            <DialogFooter>
+              <Button onClick={() => setSearchParams({ dialog: undefined })} variant='ghost'>
+                Cancel
+              </Button>
+              <Button onClick={() => onConcede()}>Concede</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </Match>
+    </Switch>
   );
 }
