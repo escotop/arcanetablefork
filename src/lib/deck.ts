@@ -64,8 +64,6 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
     this.mesh.localToWorld(point);
     const projection = getProjectionVec(point);
 
-    console.log({ projection });
-
     this.setObservable('uiTether', {
       x: projection.x,
       y: projection.y,

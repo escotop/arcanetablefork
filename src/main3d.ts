@@ -152,7 +152,6 @@ export async function localInit(gameOptions: GameOptions) {
 
 export function readjustPlayAreas() {
   let entries = Object.values(playAreas).sort((a, b) => a.index - b.index);
-  console.log({ entries, playAreas });
 
   let selfIndex = entries.findIndex(e => e.isLocalPlayArea);
 
@@ -170,7 +169,6 @@ export function readjustPlayAreas() {
     2: [0, 2],
   };
 
-  console.log(sorted.length);
   let indexMap = mapIndex[sorted.length];
 
   sorted.forEach((playArea, i) => {
@@ -189,8 +187,6 @@ export async function loadDeckAndJoin(settings: LoadSettings) {
 
   playArea = await PlayArea.FromDeck(provider.awareness.clientID, deck);
   playArea.index = players().length;
-
-  console.log(playArea.index);
 
   setPlayAreas(provider.awareness.clientID, playArea);
   setIsIntitialized(true);

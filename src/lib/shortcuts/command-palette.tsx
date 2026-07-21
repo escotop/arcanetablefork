@@ -225,7 +225,6 @@ export default function CommandPalette(props: { playArea: PlayArea }) {
                 .map(match => {
                   let length = parseInt(match[1], 10);
                   let sides = parseInt(match[2], 10);
-                  console.log({ length, sides });
                   return new Array(length).fill(0).map(() => ({
                     sides,
                     result: ((Math.random() * sides) | 0) + 1,

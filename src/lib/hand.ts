@@ -52,8 +52,6 @@ export class Hand implements CardZone {
     this.mesh.localToWorld(point);
     const projection = getProjectionVec(point);
 
-    console.log({ projection });
-
     this.setObservable('uiTether', {
       x: projection.x,
       y: projection.y,

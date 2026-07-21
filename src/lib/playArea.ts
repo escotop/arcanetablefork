@@ -193,7 +193,6 @@ export class PlayArea {
 
     if (!this.availableTokens) {
       let cardsInPlay = this.cards;
-      console.log(this.cards.map(card => card.detail.all_parts));
       let allTokens = new Set(
         cardsInPlay
           .map(card => card.detail.all_parts ?? [])
@@ -226,8 +225,6 @@ export class PlayArea {
       setCardData(card.mesh, 'isToken', true);
       return card;
     });
-
-    console.log({ availableCards });
 
     this.emitEvent({
       type: 'toggleTokenMenu',

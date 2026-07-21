@@ -83,7 +83,6 @@ const PeekMenu: Component = props => {
                   }
                 }}
                 onValueChange={value => {
-                  console.log({ value });
                   setPeekFilterText(value);
                 }}
               />

@@ -48,8 +48,6 @@ export default function Overlay() {
   const isPublic = () => userData()?.isPublic;
   const isOwner = () => userData()?.clientId === provider?.awareness?.clientID;
   const location = () => userData()?.location;
-  const cardMesh = () => hoverSignal()?.mesh;
-  const tether = () => hoverSignal()?.tether;
   const playArea = playAreas[provider?.awareness?.clientID];
   const focusCameraStyle = () => {
     if (hoverSignal()?.mouse?.y > 0) {
@@ -57,8 +55,6 @@ export default function Overlay() {
     }
     return { right: `0px`, top: `0` };
   };
-  const isCardOwnedByPlayer = (cardMesh: Mesh) =>
-    cardMesh?.userData?.clientId === provider.awareness.clientID;
 
   let currentPlayer = () => players().find(player => player.id === provider?.awareness?.clientID);
 
@@ -72,10 +68,6 @@ export default function Overlay() {
     let parent = container() as HTMLDivElement;
     if (!parent) return;
     parent.appendChild(focusRenderer.domElement);
-  });
-
-  createEffect(() => {
-    console.log(playArea.graveyardZone.observable.uiTether);
   });
 
   return (
