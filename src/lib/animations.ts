@@ -248,6 +248,6 @@ export function renderAnimations(time: number) {
   }
 }
 
-export function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t;
+export function lerp(min: number, max: number, value: number) {
+  return min + (max - min) * value;
 }
