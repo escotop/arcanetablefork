@@ -22,7 +22,12 @@ import {
   CardZone,
   ZONE_OUTLINE_COLOR,
 } from './constants';
-import { cardsById, setHoverSignal, zonesById } from './globals';
+import {
+  cardsById,
+  getProjectionVec,
+  setHoverSignal,
+  zonesById,
+} from './globals';
 import { cleanupMesh, getGlobalRotation } from './utils';
 
 export class CardStack implements CardZone {
@@ -52,15 +57,31 @@ export class CardStack implements CardZone {
     this.mesh.userData.zone = zone;
     this.mesh.userData.zoneId = id;
     this.mesh.userData.id = id;
+
     createRoot(destroy => {
       this.destroyReactivity = destroy;
 
       [this.observable, this.setObservable] = createStore<CardZone['observable']>({
         cardCount: this.cards.length,
       });
-    });
+   });
 
     zonesById.set(id, this);
+  }
+
+  private updateUiTether() {
+    const vertex = 6;
+    const point = new Vector3().fromArray(
+      this.mesh.geometry.attributes.position.array.slice(vertex * 3),
+    );
+    this.mesh.localToWorld(point);
+    const projection = getProjectionVec(point);
+
+    this.setObservable('uiTether', {
+      x: projection.x,
+      y: projection.y,
+      offset: { y: '50%', },
+    });
   }
 
   getSerializable() {
@@ -78,6 +99,10 @@ export class CardStack implements CardZone {
       card.position.setZ(cummulativeZ);
       cummulativeZ += CARD_THICKNESS;
     });
+  }
+
+  updatePositions() {
+    this.updateUiTether();
   }
 
   addCard(card: Card, { skipAnimation = false, destroy = false } = {}) {

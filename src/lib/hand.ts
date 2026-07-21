@@ -2,8 +2,8 @@ import { nanoid } from 'nanoid';
 import { CatmullRomCurve3, Euler, Group, Object3D, Vector3 } from 'three';
 import { animateObject } from './animations';
 import { cleanupCard, getSerializableCard, setCardData } from './card';
-import { Card, CardZone } from './constants';
-import { cardsById, setHoverSignal, settings, zonesById } from './globals';
+import { Card, CARD_HEIGHT, CardZone } from './constants';
+import { cardsById, getProjectionVec, setHoverSignal, settings, zonesById } from './globals';
 import { getGlobalRotation } from './utils';
 import { createStore, SetStoreFunction } from 'solid-js/store';
 import { createRoot } from 'solid-js';
@@ -41,6 +41,24 @@ export class Hand implements CardZone {
     zonesById.set(this.id, this);
 
     this.cardMap = new Map<string, Card>();
+  }
+
+  updatePositions() {
+    this.updateUiTether();
+  }
+
+  private updateUiTether() {
+    const point = new Vector3(0, CARD_HEIGHT/2, 0);
+    this.mesh.localToWorld(point);
+    const projection = getProjectionVec(point);
+
+    console.log({ projection });
+
+    this.setObservable('uiTether', {
+      x: projection.x,
+      y: projection.y,
+      offset: { y: '-100%'}
+    });
   }
 
   adjustHandPosition() {
@@ -101,13 +119,11 @@ export class Hand implements CardZone {
         this.removeCard(card.mesh);
         cleanupCard(card);
         setHoverSignal();
-      }    } else {
+      }
+    } else {
       this.isInteractive = false;
       animateObject(card.mesh, {
-        path: new CatmullRomCurve3([
-          initialPosition,
-          restingPosition,
-        ]),
+        path: new CatmullRomCurve3([initialPosition, restingPosition]),
         to: {
           rotation: new Euler(0, 0, 0),
         },

@@ -1,6 +1,6 @@
 import { PlayArea } from '~/lib/playArea';
 import { useMenuContext } from './context';
-import { Dynamic, Match, Switch } from 'solid-js/web';
+import { Dynamic, For, Match, Switch } from 'solid-js/web';
 import {
   discardFromTop,
   drawCards,
@@ -14,9 +14,10 @@ import { KEY } from '~/lib/constants';
 import CardQtyDialog from '../card-qty-dialog';
 import { DialogTrigger } from '~/components/ui/dialog';
 import { useSearchParams } from '@solidjs/router';
+import { DropdownMenuGroupLabel } from '~/components/ui/dropdown-menu';
 
 export default function DeckContextMenu(props: { playArea: PlayArea }) {
-  const menuCtx = useMenuContext();
+  const ctx = useMenuContext();
   const [searchParams, setSearchParams] = useSearchParams();
 
   function getNextLandIndex() {
@@ -27,101 +28,120 @@ export default function DeckContextMenu(props: { playArea: PlayArea }) {
 
   return (
     <>
-      <Dynamic component={menuCtx.item} onClick={() => props.playArea.draw()}>
-        Draw Card<Dynamic component={menuCtx.shortcut}>d</Dynamic>
+      <Dynamic component={ctx.item} onClick={() => props.playArea.draw()}>
+        Draw Card<Dynamic component={ctx.shortcut}>d</Dynamic>
       </Dynamic>
-      <Dynamic component={menuCtx.menu}>
-        <Dynamic component={menuCtx.trigger}>Draw</Dynamic>
-        <Dynamic component={menuCtx.content}>
-          <Dynamic
-            component={menuCtx.item}
-            onClick={() => setSearchParams({ dialog: 'deck-to-hand' })}>
+      <Dynamic component={ctx.menu}>
+        <Dynamic component={ctx.trigger}>Draw</Dynamic>
+        <Dynamic component={ctx.content}>
+          <Dynamic component={ctx.item} onClick={() => setSearchParams({ dialog: 'deck-to-hand' })}>
             X Cards
           </Dynamic>
           <Dynamic
-            component={menuCtx.item}
+            component={ctx.item}
             onClick={() => drawCards(props.playArea, getNextLandIndex() + 1)}>
             Until Next Land
           </Dynamic>
           <Dynamic
-            component={menuCtx.item}
+            component={ctx.item}
             onClick={() => drawCards(props.playArea, props.playArea.deck.cards.length)}>
             All
           </Dynamic>
         </Dynamic>
       </Dynamic>
-      <Dynamic component={menuCtx.separator} />
-      <Dynamic component={menuCtx.item} onClick={() => peekFromTop(props.playArea)}>
+      <Dynamic component={ctx.separator} />
+      <Dynamic component={ctx.item} onClick={() => peekFromTop(props.playArea)}>
         Peek Top Card
       </Dynamic>
-      <Dynamic component={menuCtx.item} onClick={() => setSearchParams({ dialog: 'deck-to-peek' })}>
+      <Dynamic component={ctx.item} onClick={() => setSearchParams({ dialog: 'deck-to-peek' })}>
         Peek Top X Cards
       </Dynamic>
-      <Dynamic component={menuCtx.separator} />
-      <Dynamic component={menuCtx.menu}>
-        <Dynamic component={menuCtx.trigger}>Reveal Cards</Dynamic>
-        <Dynamic component={menuCtx.content}>
-          <Dynamic
-            component={menuCtx.item}
-            onClick={() => setSearchParams({ dialog: 'deck-to-peek' })}>
+      <Dynamic component={ctx.separator} />
+      <Dynamic component={ctx.menu}>
+        <Dynamic component={ctx.trigger}>Reveal Cards</Dynamic>
+        <Dynamic component={ctx.content}>
+          <Dynamic component={ctx.item} onClick={() => setSearchParams({ dialog: 'deck-to-peek' })}>
             To you
           </Dynamic>
           <Dynamic
-            component={menuCtx.item}
+            component={ctx.item}
             onClick={() => setSearchParams({ dialog: 'deck-to-reveal' })}>
             To Everyone
           </Dynamic>
         </Dynamic>
       </Dynamic>
-
-      <Dynamic component={menuCtx.separator} />
-      <Dynamic component={menuCtx.menu}>
-        <Dynamic component={menuCtx.trigger}>Discard</Dynamic>
-        <Dynamic component={menuCtx.content}>
+      <Dynamic component={ctx.menu}>
+        <Dynamic component={ctx.trigger}>Flip</Dynamic>
+        <Dynamic component={ctx.content}>
+          <Dynamic component={ctx.item} onClick={() => props.playArea.deckFlipTop()}>
+            One
+          </Dynamic>
+          <Dynamic component={ctx.item} onClick={() => props.playArea.deckFlipTop(true)}>
+            Keep flipped
+          </Dynamic>
+        </Dynamic>
+      </Dynamic>
+      <Dynamic component={ctx.separator} />
+      <Dynamic component={ctx.menu}>
+        <Dynamic component={ctx.trigger}>Discard</Dynamic>
+        <Dynamic component={ctx.content}>
           <Dynamic
-            component={menuCtx.item}
+            component={ctx.item}
             onClick={() => setSearchParams({ dialog: 'deck-to-discard' })}>
             X Cards
           </Dynamic>
           <Dynamic
-            component={menuCtx.item}
+            component={ctx.item}
             onClick={() => discardFromTop(props.playArea, getNextLandIndex() + 1)}>
             Until Next Land
           </Dynamic>
           <Dynamic
-            component={menuCtx.item}
+            component={ctx.item}
             onClick={() => discardFromTop(props.playArea, props.playArea.deck.cards.length)}>
             All
           </Dynamic>
         </Dynamic>
       </Dynamic>
-      <Dynamic component={menuCtx.menu}>
-        <Dynamic component={menuCtx.trigger}>Exile</Dynamic>
-        <Dynamic component={menuCtx.content}>
+      <Dynamic component={ctx.menu}>
+        <Dynamic component={ctx.trigger}>Exile</Dynamic>
+        <Dynamic component={ctx.content}>
           <Dynamic
-            component={menuCtx.item}
+            component={ctx.item}
             onClick={() => setSearchParams({ dialog: 'deck-to-exile' })}>
             X Cards
           </Dynamic>
           <Dynamic
-            component={menuCtx.item}
+            component={ctx.item}
             onClick={() => exileFromTop(props.playArea, getNextLandIndex() + 1)}>
             Until Next Land
           </Dynamic>
           <Dynamic
-            component={menuCtx.item}
+            component={ctx.item}
             onClick={() => exileFromTop(props.playArea, props.playArea.deck.cards.length)}>
             All
           </Dynamic>
         </Dynamic>
       </Dynamic>
-      <Dynamic component={menuCtx.separator} />
-      <Dynamic component={menuCtx.item} onClick={() => searchDeck(props.playArea)}>
-        Search <Dynamic component={menuCtx.shortcut}>s</Dynamic>
+      <Dynamic component={ctx.separator} />
+      <Dynamic component={ctx.item} onClick={() => searchDeck(props.playArea)}>
+        Search <Dynamic component={ctx.shortcut}>s</Dynamic>
       </Dynamic>
-      <Dynamic component={menuCtx.separator} />
-      <Dynamic component={menuCtx.item} onClick={() => shuffleDeck(props.playArea)}>
+      <Dynamic component={ctx.separator} />
+      <Dynamic component={ctx.item} onClick={() => shuffleDeck(props.playArea)}>
         Shuffle
+      </Dynamic>
+      <Dynamic component={ctx.separator} />
+      <Dynamic component={ctx.menu}>
+        <Dynamic component={ctx.trigger}>Mulligan</Dynamic>
+        <Dynamic component={ctx.content}>
+          <For each={Array(7).fill(0)}>
+            {(_, i) => (
+              <Dynamic component={ctx.item} onClick={() => props.playArea.mulligan(7 - i())}>
+                {7 - i()} Cards
+              </Dynamic>
+            )}
+          </For>
+        </Dynamic>
       </Dynamic>
     </>
   );
@@ -168,7 +188,7 @@ export function DeckContextDialogs(props: { playArea: PlayArea }) {
           onClose={() => setSearchParams({ dialog: undefined })}
         />
       </Match>
-    <Match when={searchParams.dialog === 'deck-to-reveal'}>
+      <Match when={searchParams.dialog === 'deck-to-reveal'}>
         <CardQtyDialog
           onSubmit={value => revealFromTop(props.playArea, value)}
           verb='Reveal'

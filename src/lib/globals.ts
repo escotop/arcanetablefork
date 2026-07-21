@@ -337,7 +337,7 @@ export function startSpectating() {
   orbitControls = new OrbitControls(camera, renderer.domElement);
   orbitControls.target = table.position;
 
-  Object.values(playAreas).forEach((playArea, i)=> {
+  Object.values(playAreas).forEach((playArea, i) => {
     applyPlayerTransform(playArea.mesh, i);
   });
 }
@@ -430,6 +430,15 @@ export function getProjectionVec(vec: Vector3) {
     (0.5 - projectionVec.y / 2) * (canvas.height / window.devicePixelRatio),
   );
   return projectionVec;
+}
+
+export function getTetherCssVariables(tether: { x: number, y: number, offset: { x?: string; y?: string}}) {
+  return `
+    --x: ${tether.x}px;
+    --y: ${tether.y}px;
+    --offset-x: ${tether.offset?.x || 0};
+    --offset-y: ${tether.offset?.y || 0};
+  `
 }
 
 export function onConcede(clientId?: string) {

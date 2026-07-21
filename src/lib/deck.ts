@@ -5,6 +5,7 @@ import { animateObject, queueAnimationGroup } from './animations';
 import { cleanupCard, getSearchLine, getSerializableCard, setCardData } from './card';
 import {
   Card,
+  CARD_HEIGHT,
   CARD_THICKNESS,
   CARD_WIDTH,
   CardEntry,
@@ -13,7 +14,7 @@ import {
   DetailedCardEntry,
 } from './constants';
 import { deck as deckParser } from './deckParser';
-import { cardsById, cardSystem, setHoverSignal, zonesById } from './globals';
+import { cardsById, cardSystem, getProjectionVec, setHoverSignal, zonesById } from './globals';
 import { cleanupMesh, getGlobalRotation, shuffleItems } from './utils';
 import { createRoot } from 'solid-js';
 
@@ -54,6 +55,24 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
     });
   }
 
+  updatePositions() {
+    this.updateUiTether();
+  }
+
+  private updateUiTether() {
+    const point = new Vector3(CARD_WIDTH / 2, -CARD_HEIGHT / 2, 0);
+    this.mesh.localToWorld(point);
+    const projection = getProjectionVec(point);
+
+    console.log({ projection });
+
+    this.setObservable('uiTether', {
+      x: projection.x,
+      y: projection.y,
+      offset: { y: '125%', x: '-25%' },
+    });
+  }
+
   addCardBottom(card: Card, { destroy = false } = {}) {
     setCardData(card.mesh, 'isPublic', false);
     setCardData(card.mesh, 'zoneId', this.id);
@@ -69,10 +88,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
     let yPos = this.cards.length - 1;
     let position = new Vector3(0, 0, yPos * 0.125);
 
-    let path = new CatmullRomCurve3([
-      initialPosition,
-      position,
-    ]);
+    let path = new CatmullRomCurve3([initialPosition, position]);
 
     // const prevPosition = this.mesh.position.clone();
     const restingPosition = new Vector3(70, -55, this.cards.length * 0.125 + 2.5);
@@ -80,10 +96,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
 
     animateObject(this.mesh, {
       completeOnCancel: true,
-      path: new CatmullRomCurve3([
-        curPosition,
-        restingPosition,
-      ]),
+      path: new CatmullRomCurve3([curPosition, restingPosition]),
       duration: 0.5,
     });
 
@@ -105,6 +118,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
   }
 
   async addCardTop(card: Card, { destroy = false } = {}) {
+    this.updateUiTether();
     setCardData(card.mesh, 'location', 'deck');
     setCardData(card.mesh, 'zoneId', this.id);
 
@@ -260,10 +274,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
       animateObject(card.mesh, {
         completeOnCancel: true,
         duration: 0.2,
-        path: new CatmullRomCurve3([
-          card.mesh.position.clone(),
-          card.mesh.position.clone(),
-        ]),
+        path: new CatmullRomCurve3([card.mesh.position.clone(), card.mesh.position.clone()]),
         to: {
           rotation: new Euler(0, isVisible ? Math.PI : 0, 0),
         },

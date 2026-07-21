@@ -176,6 +176,7 @@ export function readjustPlayAreas() {
   sorted.forEach((playArea, i) => {
     let index = indexMap?.[i] ?? i;
     applyPlayerTransform(playArea.mesh, index);
+    playArea?.updatePositions();
   });
 }
 

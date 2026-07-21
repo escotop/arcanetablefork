@@ -53,7 +53,7 @@ export interface HoverSignalBase {
 
 export interface HoverSignalWithTarget extends HoverSignalBase {
   mesh: Mesh;
-  tether: Vector3;
+  tether: Tether;
   intent?: 'contextMenu';
 }
 
@@ -91,6 +91,16 @@ export interface SerializableCard {
   position: Vector3Tuple;
   rotation: EulerTuple;
 }
+
+export interface Tether {
+  x: number;
+  y: number;
+  offset: {
+    x?: string;
+    y?: string;
+  }
+}
+
 export interface CardZone<AddOptions = {} & { skipAnimation?: boolean; destroy?: boolean }> {
   id: string;
   zone: string;
@@ -98,8 +108,9 @@ export interface CardZone<AddOptions = {} & { skipAnimation?: boolean; destroy?:
   removeCard(cardMesh: Mesh): void;
   addCard(card: Card, opts?: AddOptions): void;
   getSerializable(): { id: string };
-  observable: { cardCount: number };
+  observable: { cardCount: number, uiTether?: Tether };
   cards: Card[];
+  updatePositions(): void;
 }
 
 export interface Counter {

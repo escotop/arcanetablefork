@@ -1,13 +1,5 @@
 import hotkeys from 'hotkeys-js';
-import {
-  createEffect,
-  createMemo,
-  createSelector,
-  createSignal,
-  For,
-  Show,
-  type Component,
-} from 'solid-js';
+import { createEffect, createSignal, For, Show } from 'solid-js';
 import { Mesh } from 'three';
 import { Button } from '~/components/ui/button';
 import {
@@ -18,18 +10,12 @@ import {
   DialogHeader,
   DialogTrigger,
 } from '~/components/ui/dialog';
-import {
-  Menubar,
-  MenubarItem,
-  MenubarMenu,
-  MenubarSeparator,
-  MenubarShortcut,
-} from '../../components/ui/menubar';
-import { KEY } from '../constants';
+import { Menubar, MenubarItem, MenubarMenu, MenubarSeparator } from '../../components/ui/menubar';
 import {
   cardsById,
   dispatchGameEvent,
   focusRenderer,
+  getTetherCssVariables,
   hoverSignal,
   isSpectating,
   onConcede,
@@ -41,12 +27,9 @@ import {
   settings,
 } from '../globals';
 import CommandPalette from '../shortcuts/command-palette';
-import { untapAll } from '../shortcuts/commands/field';
 import HotkeysTable from '../shortcuts/hotkeys-table';
-import CardOverlay from './cardOverlay';
 import CounterDialog from './counterDialog';
 import Log from './log';
-import MoveMenu from './moveMenu';
 import styles from './overlay.module.css';
 import PeekMenu from './peekMenu';
 import { LocalPlayer, NetworkPlayer } from './playerMenu';
@@ -55,7 +38,6 @@ import TokenSearchMenu from './tokenMenu';
 import { useSearchParams } from '@solidjs/router';
 import SettingsOverlay from './settingsOverlay';
 import { PlayArea } from '../playArea';
-import { createPassTurnEvent } from '../createEvents';
 import Announcement from './announcement';
 import ContextMenuHandler from './context-menu/handler';
 
@@ -92,6 +74,10 @@ export default function Overlay() {
     parent.appendChild(focusRenderer.domElement);
   });
 
+  createEffect(() => {
+    console.log(playArea.graveyardZone.observable.uiTether);
+  });
+
   return (
     <div
       class={styles.App}
@@ -122,16 +108,74 @@ export default function Overlay() {
           <div ref={setContainer} class={styles.focusCameraContainer} />
         </Show>
       </div>
-      <Show when={tether() && isCardOwnedByPlayer(cardMesh())}>
-        <div
-          class={styles.cardActions}
-          style={`--x: ${tether().x}px; --y: ${tether().y}px; --offset-x: ${tether().offset?.x || 0}; --offset-y: ${tether().offset?.y || 0};`}
-          onClick={e => {
-            e.stopImmediatePropagation();
-          }}>
-          <CardOverlay cardMesh={cardMesh()} playArea={playArea} />
-        </div>
+      <Show when={playArea.graveyardZone.observable.uiTether}>
+        {tether => (
+          <div
+            class='text-shadow'
+            style={`
+              ${getTetherCssVariables(tether())}
+              top: var(--y);
+              left: var(--x);
+              transform: translate(var(--offset-x), var(--offset-y));
+              position: fixed;
+
+            `}>
+            Graveyard ({playArea.graveyardZone.observable.cardCount})
+          </div>
+        )}
       </Show>
+
+      <Show when={playArea.exileZone.observable.uiTether}>
+        {tether => (
+          <div
+            class='text-shadow'
+            style={`
+              ${getTetherCssVariables(tether())}
+              top: var(--y);
+              left: var(--x);
+              transform: translate(var(--offset-x), var(--offset-y));
+              position: fixed;
+
+            `}>
+            Exile ({playArea.exileZone.observable.cardCount})
+          </div>
+        )}
+      </Show>
+
+      <Show when={playArea.deck.observable.uiTether}>
+        {tether => (
+          <div
+            class='text-shadow'
+            style={`
+              ${getTetherCssVariables(tether())}
+              top: var(--y);
+              left: var(--x);
+              transform: translate(var(--offset-x), var(--offset-y));
+              position: fixed;
+
+            `}>
+            Deck ({playArea.deck.observable.cardCount})
+          </div>
+        )}
+      </Show>
+      <Show when={hoverSignal()?.mesh?.userData?.location !== 'hand'}>
+        <Show when={playArea.hand.observable.uiTether}>
+          {tether => (
+            <div
+              class='text-shadow'
+              style={`
+              ${getTetherCssVariables(tether())}
+              top: var(--y);
+              left: var(--x);
+              transform: translate(var(--offset-x), var(--offset-y));
+              position: fixed;
+            `}>
+              Hand ({playArea.hand.observable.cardCount})
+            </div>
+          )}
+        </Show>
+      </Show>
+
       <MainMenu playArea={playArea} />
       <PeekMenu />
       <RevealMenu />

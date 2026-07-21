@@ -95,7 +95,7 @@ export class PlayArea {
     this.exileZone = new CardStack('exile', state.exile?.id);
 
     this.exileZone.mesh.position.set(88, -55, 2.5);
-    this.graveyardZone.mesh.position.set(70, -80, 2.5);
+    this.graveyardZone.mesh.position.set(70, -82, 2.5);
 
     this.cards = cards.map(card => {
       card.id = card.id || nanoid();
@@ -136,6 +136,14 @@ export class PlayArea {
         });
       });
     }
+  }
+
+  updatePositions() {
+    this.exileZone.updatePositions?.();
+    this.graveyardZone.updatePositions?.();
+    this.hand.updatePositions?.();
+    this.deck.updatePositions?.();
+    this.battlefieldZone.updatePositions?.()
   }
 
   async dismissAllCardGrids() {
@@ -463,6 +471,8 @@ export class PlayArea {
       });
     }
 
+    
+    playArea.updatePositions();
     playArea.deck.shuffle();
     playArea.loadTextures();
     return playArea;
@@ -507,6 +517,7 @@ export class PlayArea {
 
   static FromNetworkState(state: State) {
     let playArea = new PlayArea(state.clientId!, state.cards!, state.deck.cards!, state);
+    playArea.updatePositions();
     playArea.loadTextures();
     return playArea;
   }
