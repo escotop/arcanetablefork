@@ -47,6 +47,15 @@ export class Hand implements CardZone {
     this.updateUiTether();
   }
 
+  private get cardSpacing() {
+    let max = 5;
+    let min = 1;
+    let value = Math.min(this.cards.length / 100, 1);
+    const result = lerp(max, min, value);
+    console.log({ result });
+    return result;
+  }
+
   private updateUiTether() {
     const point = new Vector3(0, CARD_HEIGHT/2, 0);
     this.mesh.localToWorld(point);
