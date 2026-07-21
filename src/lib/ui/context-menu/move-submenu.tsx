@@ -15,6 +15,7 @@ interface Props {
   onComplete?(): void;
   showShortcuts?: boolean;
   vertical?: true;
+  hide?: string[];
 }
 
 export default function MoveSubMenu(props: Props) {
@@ -56,10 +57,12 @@ export default function MoveSubMenu(props: Props) {
         </Show>
       </Dynamic>
       <Dynamic component={ctx.content}>
-        <Dynamic component={ctx.item} onClick={() => moveTo(props.playArea.peekZone)}>
-          Search
-        </Dynamic>
-        <Show when={props.fromZone !== props.playArea.hand}>
+        <Show when={props.fromZone !== props.playArea.peekZone}>
+          <Dynamic component={ctx.item} onClick={() => moveTo(props.playArea.peekZone)}>
+            Search
+          </Dynamic>
+        </Show>
+        <Show when={props.fromZone !== props.playArea.hand && !(props.hide ?? []).includes('hand')}>
           <Dynamic component={ctx.item} onClick={() => moveTo(props.playArea.hand)}>
             Hand
           </Dynamic>

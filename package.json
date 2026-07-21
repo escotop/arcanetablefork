@@ -12,17 +12,17 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.2",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/color-hash": "^2.0.0",
     "@types/node": "^25.9.5",
-    "autoprefixer": "^10.5.3",
+    "autoprefixer": "^10.5.4",
     "jsdom": "^27.4.0",
-    "postcss": "^8.5.19",
+    "postcss": "^8.5.20",
     "solid-devtools": "^0.34.5",
-    "tailwindcss": "^4.3.2",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^7.3.6",
-    "vite-plugin-solid": "^2.11.12"
+    "vite-plugin-solid": "^2.11.13"
   },
   "prettier": {
     "jsxSingleQuote": true,
@@ -37,7 +37,7 @@
     "@mdx-js/rollup": "^3.1.1",
     "@modyfi/vite-plugin-yaml": "^1.1.1",
     "@picocss/pico": "^2.1.1",
-    "@sentry/solidstart": "^10.65.0",
+    "@sentry/solidstart": "^10.66.0",
     "@sentry/vite-plugin": "^5.4.0",
     "@solid-primitives/deep": "^0.3.7",
     "@solid-primitives/lifecycle": "^0.1.2",

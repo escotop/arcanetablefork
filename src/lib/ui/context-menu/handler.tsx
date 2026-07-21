@@ -1,12 +1,13 @@
-import { createMemo, createSignal, JSX, Match, Show, Switch } from 'solid-js';
+import { createEffect, createMemo, createSignal, JSX, Match, Show, Switch } from 'solid-js';
 import { contextMenuSignal, setContextMenuSignal } from '~/lib/globals';
 import { DropdownMenu, DropdownMenuContent } from '~/components/ui/dropdown-menu';
 import { PlayArea } from '~/lib/playArea';
 import TableContextMenu, { TableContextDialogs } from './table';
-import { DropdownMenuElements, MenuContext, MenuContextProvider } from './context';
+import { DropdownMenuElements, MenuContextProvider } from './context';
 import DeckContextMenu, { DeckContextDialogs } from './deck';
 import BattlefieldContextMenu, { BattlefieldContextDialogs } from './battlefield';
 import HandContextMenu from './hand';
+import PeekContextMenu from './peek';
 
 export default function ContextMenuHandler(props: { playArea: PlayArea }) {
   const target = createMemo(() => contextMenuSignal()?.target);
@@ -28,6 +29,12 @@ export default function ContextMenuHandler(props: { playArea: PlayArea }) {
                 <Switch>
                   <Match when={location() === 'deck'}>
                     <DeckContextMenu playArea={props.playArea} />
+                  </Match>
+                  <Match when={location() === 'peek'}>
+                    <PeekContextMenu
+                      playArea={props.playArea}
+                      targetMesh={contextMenuSignal().target}
+                    />
                   </Match>
                   <Match when={location() === 'battlefield'}>
                     <BattlefieldContextMenu

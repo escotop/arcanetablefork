@@ -66,31 +66,6 @@ const PeekMenu: Component = props => {
   return (
     <>
       <Show when={peekCards()?.length > 0}>
-        <Show when={tether()}>
-          <div class={styles.peekActions} style={`--x: ${tether().x}px; --y: ${tether().y}px;`}>
-            <Menubar>
-              <MenubarMenu>
-                <MenubarItem
-                  class='whitespace-nowrap'
-                  onClick={() => drawAfterRevealing(card())}>
-                  Reveal & Draw
-                </MenubarItem>
-                <Button
-                  variant='ghost'
-                  class='whitespace-nowrap'
-                  onClick={() => drawWithoutRevealing(card())}>
-                  Draw
-                </Button>
-                <MoveMenu
-                  text='Move To'
-                  cards={[card()]}
-                  playArea={playArea}
-                  fromZone={playArea.peekZone}
-                />
-              </MenubarMenu>
-            </Menubar>
-          </div>
-        </Show>
         <div class={styles.searchContainer}>
           <div class={styles.search}>
             <h2 class='text-white text-xl text-left mb-4'>
