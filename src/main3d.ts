@@ -467,6 +467,8 @@ function onWindowResize() {
 
   focusRenderer.setPixelRatio(window.devicePixelRatio);
   focusRenderer.setSize(focusWidth, focusHeight);
+
+  Object.values(playAreas).forEach(playArea => playArea.updatePositions());
 }
 
 function onDocumentMouseMove(event) {
