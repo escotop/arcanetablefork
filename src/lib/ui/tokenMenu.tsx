@@ -93,7 +93,7 @@ const TokenSearchMenu: Component = props => {
         <div class={styles.searchContainer}>
           <div class={styles.search}>
             <h2 class='text-white text-xl text-left mb-4'>
-              Related Cards | {playArea.tokenSearchZone.observable.cardCount}
+              Tokens | {playArea.tokenSearchZone.observable.cardCount}
             </h2>
             <Command>
               <CommandInput

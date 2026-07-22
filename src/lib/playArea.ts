@@ -95,7 +95,7 @@ export class PlayArea {
     this.exileZone = new CardStack('exile', state.exile?.id);
 
     this.exileZone.mesh.position.set(88, -55, 2.5);
-    this.graveyardZone.mesh.position.set(70, -80, 2.5);
+    this.graveyardZone.mesh.position.set(70, -82, 2.5);
 
     this.cards = cards.map(card => {
       card.id = card.id || nanoid();
@@ -138,6 +138,14 @@ export class PlayArea {
     }
   }
 
+  updatePositions() {
+    this.exileZone.updatePositions?.();
+    this.graveyardZone.updatePositions?.();
+    this.hand.updatePositions?.();
+    this.deck.updatePositions?.();
+    this.battlefieldZone.updatePositions?.()
+  }
+
   async dismissAllCardGrids() {
     const zones = ['peekZone', 'tokenSearchZone'] as const;
     await Promise.all(
@@ -168,9 +176,7 @@ export class PlayArea {
       const toZone = zonesById.get(card.mesh.userData.previousZoneId);
       // toZone is expected to be undefined when dismissing tokens
 
-      dispatchGameEvent(
-        createTransferCardEvent(card, zone, toZone, { addOptions: { location: 'bottom' } }),
-      );
+      dispatchGameEvent(createTransferCardEvent(card, zone, toZone));
     });
 
     await flushDispatchEventQueue();
@@ -184,6 +190,7 @@ export class PlayArea {
     if (payload?.availableTokens) {
       this.availableTokens = payload.availableTokens;
     }
+
     if (!this.availableTokens) {
       let cardsInPlay = this.cards;
       let allTokens = new Set(
@@ -201,7 +208,12 @@ export class PlayArea {
             clientId: this.clientId,
           };
         }),
-      ).then(cards => uniqBy(cards, 'oracle_id').sort((a, b) => a.name.localeCompare(b.name)));
+      ).then(cards =>
+        // TODO: oracle_id, set_type only works for 1 card system
+        uniqBy(cards, 'oracle_id')
+          .filter(card => card.set_type === 'token')
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      );
     }
 
     let availableCards = this.availableTokens.map((detail, i) => {
@@ -300,7 +312,7 @@ export class PlayArea {
               transferCard(card, this.graveyardZone, this.peekZone);
               resolve();
             },
-            (this.graveyardZone.mesh.children.length - i) * 50,
+            (this.graveyardZone.mesh.children.length - i) * 5,
           );
         });
       }),
@@ -325,7 +337,7 @@ export class PlayArea {
               transferCard(card, this.exileZone, this.peekZone);
               resolve();
             },
-            (this.exileZone.mesh.children.length - i) * 50,
+            (this.exileZone.mesh.children.length - i) * 5,
           );
         });
       }),
@@ -352,7 +364,6 @@ export class PlayArea {
     this.emitEvent({ type: 'flip', payload: { userData: cardMesh.userData } });
 
     const zone = zonesById.get(cardMesh.userData.zoneId)!;
-
 
     let rotation = new Euler().fromArray(cardMesh.userData.zone[zone.id].rotation);
     let vec = new Vector3();
@@ -457,6 +468,8 @@ export class PlayArea {
       });
     }
 
+    
+    playArea.updatePositions();
     playArea.deck.shuffle();
     playArea.loadTextures();
     return playArea;
@@ -501,6 +514,7 @@ export class PlayArea {
 
   static FromNetworkState(state: State) {
     let playArea = new PlayArea(state.clientId!, state.cards!, state.deck.cards!, state);
+    playArea.updatePositions();
     playArea.loadTextures();
     return playArea;
   }

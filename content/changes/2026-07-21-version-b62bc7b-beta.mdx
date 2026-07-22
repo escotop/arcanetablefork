@@ -1,0 +1,35 @@
+---
+date: "2026-07-21T15:34:12-07:00"
+target: beta
+title: "Zone Counts, Counter Submenu, and Context Menu Fixes"
+keywords:
+  - player info
+  - zone counts
+  - hand size
+  - library
+  - graveyard
+  - exile
+  - counters
+  - context menu
+  - double faced
+  - staging
+description: "Hand size, library, graveyard, and exile counts are now visible in player info. Counters have been moved to a submenu with a toggle-all option. Several context menu fixes."
+version: b62bc7b
+changeCount:
+  bugfixes: 3
+  features: 2
+commitRange: https://github.com/odama626/arcanetable/compare/1185365...b62bc7b
+---
+
+> **Staging release** — try it at [staging.arcanetable.app](https://staging.arcanetable.app/).
+
+## Features
+
+- **Zone counts in player info** - hand size, library count, graveyard count, and exile count are now shown in the player info area so you can track everyone's board state at a glance.
+- **Counter submenu** - counters have been moved into a submenu in the card context menu. Unshielded counters now have a toggle-all option so you can flip multiple at once.
+
+## Fixes
+
+- **Flip for double-faced cards** - the flip option wasn't showing up in the context menu for double-faced cards. Now appears correctly.
+- **Clone from context menu** - cloning a card via the right-click menu wasn't working. Fixed.
+- **Counter menu on tokens** - the counter submenu was showing up for tokens and other local-only cards where it doesn't apply. Now hidden for those.

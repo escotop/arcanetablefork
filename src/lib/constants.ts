@@ -20,7 +20,7 @@ export const ANNOUNCEMENT_VISIBLE_DURATION = 3500;
 
 export const KEY = {
   Shift: '⇧',
-  Mod: navigator?.userAgent?.platform === 'macOS' ? '⌘' : 'Ctrl',
+  Mod: navigator?.userAgent?.toLowerCase()?.includes('mac') ? '⌘' : 'Ctrl',
 };
 
 export interface GameState {
@@ -53,7 +53,13 @@ export interface HoverSignalBase {
 
 export interface HoverSignalWithTarget extends HoverSignalBase {
   mesh: Mesh;
-  tether: Vector3;
+  tether: Tether;
+  intent?: 'contextMenu';
+}
+
+export interface ContextMenuSignal {
+  mouse: Vector2;
+  target: Mesh;
 }
 
 export interface CardEntry {
@@ -85,6 +91,16 @@ export interface SerializableCard {
   position: Vector3Tuple;
   rotation: EulerTuple;
 }
+
+export interface Tether {
+  x: number;
+  y: number;
+  offset: {
+    x?: string;
+    y?: string;
+  }
+}
+
 export interface CardZone<AddOptions = {} & { skipAnimation?: boolean; destroy?: boolean }> {
   id: string;
   zone: string;
@@ -92,8 +108,9 @@ export interface CardZone<AddOptions = {} & { skipAnimation?: boolean; destroy?:
   removeCard(cardMesh: Mesh): void;
   addCard(card: Card, opts?: AddOptions): void;
   getSerializable(): { id: string };
-  observable: { cardCount: number };
+  observable: { cardCount: number, uiTether?: Tether };
   cards: Card[];
+  updatePositions(): void;
 }
 
 export interface Counter {

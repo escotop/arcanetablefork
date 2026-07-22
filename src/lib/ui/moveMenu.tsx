@@ -12,7 +12,6 @@ import { doXTimes } from '../globals';
 import { PlayArea } from '../playArea';
 import { transferCard } from '../transferCard';
 import DropdownIcon from 'lucide-solid/icons/chevron-right';
-import { Button } from '~/components/ui/button';
 
 interface Props {
   cards: Card[];

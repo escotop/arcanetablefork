@@ -1,0 +1,33 @@
+---
+date: "2026-07-20T16:52:45-07:00"
+target: beta
+title: "Right-Click Context Menus, Deck Import Dialog, and Much Faster Animations"
+keywords:
+  - context menu
+  - right click
+  - deck import
+  - deck editor
+  - animation
+  - performance
+  - staging
+description: "Right-clicking cards and the table now opens a context menu with full card actions. Deck list import has its own dedicated dialog. Card animations are significantly faster across the board."
+version: 1185365
+changeCount:
+  bugfixes: 3
+  features: 3
+commitRange: https://github.com/odama626/arcanetable/compare/1acf5bf...1185365
+---
+
+> **Staging release** — try it at [staging.arcanetable.app](https://staging.arcanetable.app/).
+
+## Features
+
+- **Right-click context menus** - right-clicking on any card or the table now opens a context menu. Deck cards get draw, peek, reveal, discard, exile, search, and shuffle options including "X cards" and "until next land" variants. Battlefield cards get counters, clone, flip, and move options. Hand cards get reveal and move options. The table menu has untap all, pass turn, related cards, and concede.
+- **Deck list import dialog** - importing a card list now has its own dedicated dialog instead of relying on paste-anywhere. It opens automatically when creating a new deck and shows a live card count and list of any cards that couldn't be found. You can still drop a file onto the window.
+- **Deck picker flow** - session setup is now two steps: name and starting life first, then deck selection. Cleaner than having everything on one screen.
+
+## Fixes
+
+- **Much faster animations** - card movement animations throughout the game have been cut roughly in half. Drawing cards, moving cards between zones, searching your deck, and rearranging your hand all feel noticeably snappier.
+- **Bulk operations are faster** - drawing X cards, peeking X, discarding X, and exiling X no longer have long delays between each card. Operations that moved one card at a time with 25-100ms gaps now use 5ms.
+- **Deck list parser** - blank lines and malformed entries in pasted deck lists were being passed to the card lookup API. They're now filtered out before any requests are made.

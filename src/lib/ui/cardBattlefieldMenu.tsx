@@ -39,7 +39,6 @@ const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = 
     });
   }
 
-  let card = () => cardsById.get(props.cardMesh?.userData.id)!;
   let meshes = () =>
     selection.selectedItems.length > 0 ? selection.selectedItems : [props.cardMesh];
 
@@ -65,125 +64,6 @@ const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = 
   return (
     <div class='flex flex-col items-start'>
       <div class='text-shadow'>{cardText()} selected</div>
-      <Menubar>
-        <MenubarMenu overlap>
-          <MenubarTrigger>Actions</MenubarTrigger>
-          <MenubarContent>
-            <MenubarItem
-              onClick={() => {
-                meshes().forEach(mesh => {
-                  props.playArea.flip(mesh);
-                });
-              }}>
-              Flip<MenubarShortcut>F</MenubarShortcut>
-            </MenubarItem>
-
-            {/*<MenubarItem
-              onClick={() => {
-                if (!selection.selectedItems?.length) return;
-                // selection._setSelectedItems(items => {
-                //   let newItems = [...items];
-                //   let itemPositions = items.map(item => item.position.toArray());
-                //   const newOrder = shuffleItems(newItems);
-                //   newItems.forEach((item, i) => {
-                //     item.position.fromArray(itemPositions[i]);
-                //   });
-                //   return newItems;
-                // });
-                meshes().forEach(mesh => {
-                  if (!mesh?.userData.isFlipped) {
-                    props.playArea.flip(mesh);
-                  }
-                  setCardData(mesh, 'isPublic', false)
-                });
-                // const raycaster = new Raycaster();
-                // let direction = selection.selectedItems[0].parent
-                //   ?.getWorldDirection(new Vector3(0, -1, 0))
-                //   .multiplyScalar(-1);
-                // raycaster.set(selection.selectedItems[0].position, direction);
-                // const intersections = raycaster.intersectObject(scene);
-                // console.log(intersections);
-              }}>
-              Shuffle<MenubarShortcut>S</MenubarShortcut>
-            </MenubarItem>*/}
-            <MenubarSub overlap>
-              <MenubarSubTrigger>Counters</MenubarSubTrigger>
-              <MenubarSubContent>
-                <MenubarItem closeOnSelect={false} style='font-family: monospace;'>
-                  <CoreCounters {...props} />
-                </MenubarItem>
-
-                <Show when={counters().length}>
-                  <MenubarSeparator />
-                </Show>
-                <For each={counters()}>
-                  {counter => {
-                    return (
-                      <MenubarItem closeOnSelect={false}>
-                        <div
-                          style={`--color: ${counter.color}; width: 1rem; height: 1rem; background: var(--color); margin: 0 0.25rem;`}></div>
-                        <div style='margin: 0 0.25rem;'>{counter.name}</div>
-                        <MenubarShortcut>
-                          <NumberField
-                            defaultValue={
-                              props.cardMesh?.userData.modifiers?.counters?.[counter.id] ?? 0
-                            }
-                            style='width: 6rem'
-                            onChange={value => {
-                              updateCardModifiers(modifiers => ({
-                                ...modifiers,
-                                counters: {
-                                  ...modifiers.counters,
-                                  [counter.id]: parseInt(value.replace(/\,/g, ''), 10),
-                                },
-                              }));
-                            }}>
-                            <div class='relative'>
-                              <NumberFieldInput />
-                              <NumberFieldIncrementTrigger />
-                              <NumberFieldDecrementTrigger />
-                            </div>
-                          </NumberField>
-                        </MenubarShortcut>
-                      </MenubarItem>
-                    );
-                  }}
-                </For>
-                <Show when={counters().length > 0}>
-                  <MenubarSeparator />
-                </Show>
-                <MenubarItem closeOnSelect={false} onClick={() => setIsCounterDialogOpen(true)}>
-                  Create New Counter
-                </MenubarItem>
-              </MenubarSubContent>
-            </MenubarSub>
-            <MenubarSub overlap>
-              <MenubarSubTrigger onClick={() => props.playArea.clone(props.cardMesh?.userData.id)}>
-                Clone<MenubarShortcut>C</MenubarShortcut>
-              </MenubarSubTrigger>
-              <MenubarSubContent>
-                <div class='pt-1.5 px-2'>Clone {cardText()}</div>
-                <div class='pb-1.5 px-2 text-sm'>consider using counters</div>
-                <NumberFieldMenuItem
-                  onSubmit={count =>
-                    doXTimes(count, () => props.playArea.clone(props.cardMesh?.userData.id), 10)
-                  }
-                />
-              </MenubarSubContent>
-            </MenubarSub>
-          </MenubarContent>
-        </MenubarMenu>
-        <MoveMenu
-          text='Move To'
-          onComplete={() => {
-            selection.clearSelection();
-          }}
-          cards={meshes().map(mesh => cardsById.get(mesh?.userData.id))}
-          fromZone={props.playArea.battlefieldZone}
-          playArea={props.playArea}
-          showShortcuts
-        />
-      </Menubar>
       <div>
         <CounterRow
           onChangeCounter={(counterId, fn) => {
@@ -230,7 +110,13 @@ function CounterRow(props: CounterRowProps) {
   );
 }
 
-const CoreCounters: Component = props => {
+export interface CoreCountersProps {
+  cardMesh: Mesh;
+  playArea: PlayArea;
+  
+}
+
+export function CoreCounters(props: CoreCountersProps) {
   let [power, setPower] = createSignal(props.cardMesh?.userData.modifiers?.power ?? 0);
   let [toughness, setToughness] = createSignal(props.cardMesh?.userData?.modifiers?.toughness ?? 0);
 

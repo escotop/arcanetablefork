@@ -8,27 +8,27 @@ export function drawCards(playArea: PlayArea, count: number = 1) {
 }
 
 export function peekFromTop(playArea: PlayArea, count = 1) {
-  doXTimes(count, () => transferCard(playArea.deck.cards[0], playArea.deck, playArea.peekZone), 25);
+  doXTimes(count, () => transferCard(playArea.deck.cards[0], playArea.deck, playArea.peekZone), 5);
 }
 
 export function searchDeck(playArea: PlayArea) {
   peekFromTop(playArea, playArea.deck.cards.length);
 }
 
+export function shuffleDeck(playArea: PlayArea) {
+  playArea.shuffleDeck();
+}
+
 export function discardFromTop(playArea: PlayArea, count = 1) {
   doXTimes(
     count,
     () => transferCard(playArea.deck.cards[0], playArea.deck, playArea.graveyardZone),
-    25,
+    5,
   );
 }
 
 export function exileFromTop(playArea: PlayArea, count = 1) {
-  doXTimes(
-    count,
-    () => transferCard(playArea.deck.cards[0], playArea.deck, playArea.exileZone),
-    25,
-  );
+  doXTimes(count, () => transferCard(playArea.deck.cards[0], playArea.deck, playArea.exileZone), 5);
 }
 
 export function getNextLandIndex(cards: Card[]) {
@@ -43,6 +43,6 @@ export function revealFromTop(playArea: PlayArea, count = 1) {
       playArea.reveal(playArea.deck.cards[0]);
       transferCard(playArea.deck.cards[0], playArea.deck, playArea.peekZone);
     },
-    25,
+    5,
   );
 }

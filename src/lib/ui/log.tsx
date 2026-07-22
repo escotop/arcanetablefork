@@ -101,7 +101,6 @@ export function parseLogEntry(entry) {
         </>
       );
     case 'roll':
-      console.log(entry.payload);
       return (
         <>
           rolled{' '}

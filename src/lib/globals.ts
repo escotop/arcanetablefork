@@ -29,6 +29,7 @@ import {
   CARD_WIDTH,
   CardSystem,
   CardZone,
+  ContextMenuSignal,
   GameState,
   HoverSignal,
   TABLE_COLOR,
@@ -66,6 +67,7 @@ export let camera: PerspectiveCamera;
 export let focusRenderer: WebGLRenderer;
 export let focusCamera: PerspectiveCamera;
 export let [hoverSignal, setHoverSignal] = createSignal<HoverSignal>();
+export let [contextMenuSignal, setContextMenuSignal] = createSignal<ContextMenuSignal>();
 export let cardsById = new Map<string, Card>();
 export let zonesById = new Map<string, CardZone<unknown>>();
 export let [playAreas, setPlayAreas] = createStore<Record<number, PlayArea>>({});
@@ -109,7 +111,7 @@ export const DEFAULT_CARD_BACK = '/arcane-table-back.webp';
 
 [('warn', 'error')].forEach(captureConsole);
 
-export function doXTimes(x: number, callback, delay = 100): Promise<void> {
+export function doXTimes(x: number, callback, delay = 5): Promise<void> {
   if (x < 1) return Promise.resolve();
   return new Promise<void>(resolve => {
     new Array(x).fill(0).forEach((_, i) =>
@@ -335,7 +337,7 @@ export function startSpectating() {
   orbitControls = new OrbitControls(camera, renderer.domElement);
   orbitControls.target = table.position;
 
-  Object.values(playAreas).forEach((playArea, i)=> {
+  Object.values(playAreas).forEach((playArea, i) => {
     applyPlayerTransform(playArea.mesh, i);
   });
 }
@@ -428,6 +430,15 @@ export function getProjectionVec(vec: Vector3) {
     (0.5 - projectionVec.y / 2) * (canvas.height / window.devicePixelRatio),
   );
   return projectionVec;
+}
+
+export function getTetherCssVariables(tether: { x: number, y: number, offset: { x?: string; y?: string}}) {
+  return `
+    --x: ${tether.x}px;
+    --y: ${tether.y}px;
+    --offset-x: ${tether.offset?.x || 0};
+    --offset-y: ${tether.offset?.y || 0};
+  `
 }
 
 export function onConcede(clientId?: string) {

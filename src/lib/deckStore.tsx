@@ -64,7 +64,7 @@ const DEFAULT_DECK = {
 };
 
 export function getCardKey(entry: CardEntry) {
-  return entry.id ?? [entry.name, entry.set].join(':');
+  return entry?.id ?? [entry.name, entry.set].join(':');
 }
 
 export async function hydrateDeck(originalDeck: Deck) {
@@ -130,7 +130,7 @@ export function serializeDeck(deck: Deck) {
     }
   }
 
-  for (const [name, card] of Object.entries(deck.inPlay)) {
+  for (const [name, card] of Object.entries(deck.inPlay ?? {})) {
     if (card.qty < 1) continue;
     serializedDeck.inPlay[name] = { ...card, detail: undefined };
     if (!mostPopularCard || card.detail.popularity > mostPopularCard?.detail?.popularity) {

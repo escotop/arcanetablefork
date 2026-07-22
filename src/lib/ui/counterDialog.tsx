@@ -30,36 +30,38 @@ function createCounter(counter: Counter) {
 }
 
 export default function CounterDialog() {
-  <Dialog open={isCounterDialogOpen()} onOpenChange={setIsCounterDialogOpen}>
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle>Create A Counter</DialogTitle>
-      </DialogHeader>
-      <form
-        onSubmit={e => {
-          e.preventDefault();
-          const formData = new FormData(e.currentTarget);
-          async function create() {
-            let id = await sha1(formData.get('name'));
-            formData.set('id', id);
-            formData.set('color', colorHashLight.hex(formData.get('name')));
+  return (
+    <Dialog open={isCounterDialogOpen()} onOpenChange={setIsCounterDialogOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create A Counter</DialogTitle>
+        </DialogHeader>
+        <form
+          onSubmit={e => {
+            e.preventDefault();
+            const formData = new FormData(e.currentTarget);
+            async function create() {
+              let id = await sha1(formData.get('name'));
+              formData.set('id', id);
+              formData.set('color', colorHashLight.hex(formData.get('name')));
 
-            const counter = Object.fromEntries(formData.entries());
-            createCounter(counter);
-          }
-          create();
-          e.currentTarget.reset();
-          setIsCounterDialogOpen(false);
-        }}>
-        <TextField>
-          <TextFieldLabel for='name'>Name</TextFieldLabel>
-          <TextFieldInput type='text' id='name' name='name' />
-        </TextField>
-        <br />
-        <DialogFooter>
-          <Button type='submit'>Create</Button>
-        </DialogFooter>
-      </form>
-    </DialogContent>
-  </Dialog>;
+              const counter = Object.fromEntries(formData.entries());
+              createCounter(counter);
+            }
+            create();
+            e.currentTarget.reset();
+            setIsCounterDialogOpen(false);
+          }}>
+          <TextField>
+            <TextFieldLabel for='name'>Name</TextFieldLabel>
+            <TextFieldInput type='text' id='name' name='name' />
+          </TextField>
+          <br />
+          <DialogFooter>
+            <Button type='submit'>Create</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }

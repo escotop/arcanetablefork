@@ -45,6 +45,7 @@ import {
   setAnimating,
   setCapturedErrors,
   setCardBackTexture,
+  setContextMenuSignal,
   setHoverSignal,
   setIsIntitialized,
   setPlayAreas,
@@ -133,7 +134,9 @@ export async function localInit(gameOptions: GameOptions) {
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
 
+  // TODO: these document listeners are never cleaned up!
   renderer.domElement.addEventListener('mousemove', onRendererMouseMove, false);
+  renderer.domElement.addEventListener('contextmenu', onContextMenu, false);
   document.addEventListener('mousemove', onDocumentMouseMove, false);
   document.addEventListener('click', onDocumentClick, false);
   document.addEventListener('dragstart', onDocumentDragStart, false);
@@ -149,7 +152,6 @@ export async function localInit(gameOptions: GameOptions) {
 
 export function readjustPlayAreas() {
   let entries = Object.values(playAreas).sort((a, b) => a.index - b.index);
-  console.log({ entries, playAreas });
 
   let selfIndex = entries.findIndex(e => e.isLocalPlayArea);
 
@@ -167,12 +169,12 @@ export function readjustPlayAreas() {
     2: [0, 2],
   };
 
-  console.log(sorted.length);
   let indexMap = mapIndex[sorted.length];
 
   sorted.forEach((playArea, i) => {
     let index = indexMap?.[i] ?? i;
     applyPlayerTransform(playArea.mesh, index);
+    playArea?.updatePositions();
   });
 }
 
@@ -185,8 +187,6 @@ export async function loadDeckAndJoin(settings: LoadSettings) {
 
   playArea = await PlayArea.FromDeck(provider.awareness.clientID, deck);
   playArea.index = players().length;
-
-  console.log(playArea.index);
 
   setPlayAreas(provider.awareness.clientID, playArea);
   setIsIntitialized(true);
@@ -214,7 +214,25 @@ function onDocumentScroll(event) {
 
 let isDragging = false;
 
+function onContextMenu(event: PointerEvent) {
+  event.preventDefault();
+  updateMouse(event);
+  raycaster.setFromCamera(mouse, camera);
+  let intersects = raycaster.intersectObject(scene);
+
+  if (!intersects.length) return;
+  let target = intersects[0].object;
+  if (!target) return;
+
+  setContextMenuSignal({
+    mouse: { x: event.x, y: event.y },
+    target,
+  });
+}
+
 function onDocumentClick(event: PointerEvent) {
+  updateMouse(event);
+  setContextMenuSignal();
   raycaster.setFromCamera(mouse, camera);
   let intersects = raycaster.intersectObject(scene);
 
@@ -449,6 +467,8 @@ function onWindowResize() {
 
   focusRenderer.setPixelRatio(window.devicePixelRatio);
   focusRenderer.setSize(focusWidth, focusHeight);
+
+  Object.values(playAreas).forEach(playArea => playArea.updatePositions());
 }
 
 function onDocumentMouseMove(event) {
@@ -458,11 +478,15 @@ function onDocumentMouseMove(event) {
   );
 }
 
-function onRendererMouseMove(event) {
+function updateMouse(event) {
   mouse.set(
     (event.clientX / window.innerWidth) * 2 - 1,
     -(event.clientY / window.innerHeight) * 2 + 1,
   );
+}
+
+function onRendererMouseMove(event) {
+  updateMouse(event);
 
   selection.onMove(event);
 

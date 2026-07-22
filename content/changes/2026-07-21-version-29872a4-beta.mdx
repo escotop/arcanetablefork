@@ -1,0 +1,37 @@
+---
+date: "2026-07-21T14:45:57-07:00"
+target: beta
+title: "Zone Count Labels, Peek Context Menu, Mulligan, and Deck Flip"
+keywords:
+  - zone counts
+  - graveyard
+  - exile
+  - deck
+  - hand
+  - peek
+  - context menu
+  - mulligan
+  - flip
+  - tokens
+  - staging
+description: "Graveyard, exile, deck, and hand counts now appear as labels anchored to their zones in the 3D scene. Right-clicking cards in the search zone now gives Draw and Move options. Mulligan and deck flip added to the deck context menu."
+version: 29872a4
+changeCount:
+  bugfixes: 2
+  features: 4
+commitRange: https://github.com/odama626/arcanetable/compare/b62bc7b...29872a4
+---
+
+> **Staging release** — try it at [staging.arcanetable.app](https://staging.arcanetable.app/).
+
+## Features
+
+- **Zone count labels** - graveyard, exile, deck, and hand counts are now shown as labels floating in the 3D scene, anchored to their actual zone positions. No more hunting through the player info panel to check counts at a glance.
+- **Peek context menu** - right-clicking a card while searching your deck now gives you Draw, Draw & Reveal, and Move To options. The old floating action bar on hovered peek cards is gone.
+- **Mulligan from deck menu** - the deck right-click menu now has a Mulligan submenu with options for 1 through 7 cards.
+- **Deck flip from context menu** - you can now flip the top card of your deck (once, or keep it flipped) directly from the deck right-click menu.
+
+## Fixes
+
+- **Tokens menu shows only tokens** - the Related Cards menu was including non-token associated cards. It now correctly filters to tokens only.
+- **Peek shuffle-back destination** - cards dismissed from the search/peek zone were being sent to the bottom of the deck instead of back to their original position. Fixed.
