@@ -1,0 +1,40 @@
+---
+date: "2026-07-21T14:45:57-07:00"
+target: stable
+title: "Right-Click Menus, Zone Labels, Deck Import, Mulligan, and Much More"
+keywords:
+  - context menu
+  - right click
+  - zone counts
+  - deck import
+  - mulligan
+  - deck flip
+  - animation
+  - performance
+  - peek
+  - counters
+description: "Right-click context menus across all zones. Zone count labels anchored in the 3D scene. Dedicated deck import dialog. Mulligan and deck flip from the deck menu. Significantly faster animations and bulk operations. Several context menu fixes."
+version: 29872a4
+changeCount:
+  bugfixes: 6
+  features: 6
+commitRange: https://github.com/odama626/arcanetable/compare/1acf5bf...29872a4
+---
+
+## Features
+
+- **Right-click context menus** - right-clicking any card or the table now opens a context menu. Deck cards get draw, peek, reveal, discard, exile, search, and shuffle with "X cards" and "until next land" variants. Battlefield cards get move, counters, clone, and flip. Hand cards get reveal and move. The peek/search zone has draw, draw & reveal, and move. The table menu has untap all, pass turn, tokens, move all battlefield cards, and concede.
+- **Zone count labels** - graveyard, exile, deck, and hand counts now appear as labels floating in the 3D scene, anchored to their actual zone positions.
+- **Deck list import dialog** - importing a card list now has its own dedicated dialog that opens automatically when creating a new deck. Paste a list or drop a file, and see a live card count and anything that couldn't be found.
+- **Mulligan from deck menu** - the deck right-click menu now has a Mulligan submenu with options for 1 through 7 cards.
+- **Deck flip from context menu** - flip the top card of your deck (once, or keep it flipped) directly from the deck right-click menu.
+- **Cleaner session setup** - the deck picker is now two steps: name and starting life first, then deck selection.
+
+## Fixes
+
+- **Much faster animations** - card movement animations are roughly twice as fast throughout the game. Bulk operations like draw X, peek X, discard X, and exile X no longer have long delays between each card.
+- **Flip option for double-faced cards** - the flip option wasn't appearing in the context menu for DFCs. Now shows correctly.
+- **Clone from context menu** - cloning a card via right-click wasn't working. Fixed.
+- **Counter menu on tokens** - the counter submenu was showing up on tokens and other local-only cards. Now hidden where it doesn't apply.
+- **Tokens menu filtered correctly** - the Tokens menu was including non-token associated cards. Now correctly shows tokens only.
+- **Peek dismissal destination** - cards dismissed from the search zone were being routed to the bottom of the deck instead of back to their original position.

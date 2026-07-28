@@ -5,10 +5,10 @@ import { createEffect } from 'solid-js';
 
 let plugins = [];
 
-let {GOOGLE_TAG_MANAGER_ID }= import.meta.env;
+let { VITE_GOOGLE_TAG_MANAGER_ID } = import.meta.env;
 
-if (GOOGLE_TAG_MANAGER_ID) {
-  plugins.push(googleTagManager({ containerId: GOOGLE_TAG_MANAGER_ID}))
+if (VITE_GOOGLE_TAG_MANAGER_ID) {
+  plugins.push(googleTagManager({ containerId: VITE_GOOGLE_TAG_MANAGER_ID }));
 }
 
 export const analytics = Analytics({
