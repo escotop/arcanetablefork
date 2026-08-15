@@ -101,7 +101,7 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
     return;
   }
 
-  if (cardId && !card) {
+  if (cardId && !card && event.type !== 'createCard') {
     Sentry.captureException(new Error('card is undefined'), {
       tags: { event_type: event.type },
       extra: { missingId: cardId, knownIdCount: cardsById.size, payload: event.payload },
@@ -191,10 +191,14 @@ const EVENTS = {
     zone?.addCard(card, options);
   },
   tap(event: Event, playArea: PlayArea, card: Card) {
-    playArea?.tap(card.mesh);
+    if (card?.mesh) {
+      playArea?.tap(card.mesh);
+    }
   },
   flip(event: Event, playArea: PlayArea, card: Card) {
-    playArea?.flip(card.mesh);
+    if (card?.mesh) {
+      playArea?.flip(card.mesh);
+    }
   },
   clone(event: Event, playArea: PlayArea) {
     playArea?.clone(event.payload.id, event.payload.newId);

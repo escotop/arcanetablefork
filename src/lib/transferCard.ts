@@ -26,7 +26,15 @@ export async function transferCard<AddOptions extends {}>(
 ) {
   if (!card) {
     console.warn(`card is undefined`, new Error().stack);
-    Sentry.captureException(new Error(`card is undefined`));
+    Sentry.captureException(new Error(`card is undefined`), {
+      extra: {
+        userData,
+        addOptions,
+        preventTransmit,
+        toZone,
+        fromZone,
+      },
+    });
     return;
   }
 

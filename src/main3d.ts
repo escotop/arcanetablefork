@@ -278,6 +278,7 @@ function onDocumentClick(event: PointerEvent) {
         if (!card) return;
 
         let cardProxy = cloneCard(card, nanoid());
+        setCardData(cardProxy.mesh, 'isLocalOnly', true);
         setCardData(cardProxy.mesh, 'isPublic', true);
         setTimeout(() => {
           playArea.reveal(cardProxy);
@@ -294,6 +295,7 @@ function onDocumentClick(event: PointerEvent) {
         if (!card) return;
 
         let cardProxy = cloneCard(card, nanoid());
+        setCardData(cardProxy.mesh, 'isLocalOnly', true);
         setCardData(cardProxy.mesh, 'isPublic', true);
         setTimeout(() => {
           playArea.reveal(cardProxy);
