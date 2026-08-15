@@ -1,0 +1,23 @@
+---
+date: "2026-08-14T19:06:23-07:00"
+target: stable
+title: "Session Crash Fix: Peeking Other Players' Zones"
+keywords:
+  - stability
+  - crash
+  - peek
+  - graveyard
+  - exile
+  - reveal
+  - local only
+description: "Revealing cards from another player's graveyard or exile could crash other clients. Those card proxies are now correctly marked as local-only so they don't broadcast network events."
+version: d350ba8
+changeCount:
+  bugfixes: 1
+  features: 0
+commitRange: https://github.com/odama626/arcanetable/compare/29872a4...d350ba8
+---
+
+## Fixes
+
+- **Session crash when peeking other players' zones** - revealing a card from another player's graveyard or exile created a local card proxy, but that proxy was incorrectly broadcasting network events to other clients who didn't have it. Those other clients would crash trying to act on a card they'd never seen. The proxies are now marked as local-only and filtered before hitting the network.
