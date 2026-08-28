@@ -1,5 +1,6 @@
 import { Component, createSignal, For, JSX, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
+import { toast } from 'solid-sonner';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -11,6 +12,7 @@ import {
 import { createDeckStore } from '../deckStore';
 import { useCardSystemContext } from '../cardSystemContext';
 import { colorHashDark } from '../globals';
+import { exportAllDecksZip, mergeImportedDecks, parseDecksZip } from '../deckBulkTransfer';
 import PencilIcon from 'lucide-solid/icons/pencil';
 import { DeckEditor } from './deckEditor';
 import styles from './deckPicker.module.css';
@@ -32,6 +34,8 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
   const [deckStore, setDeckStore] = createDeckStore();
   const [cardSystemStore] = useCardSystemContext();
   const [editingDeck, setEditingDeck] = createSignal<Deck>();
+  const [importing, setImporting] = createSignal(false);
+  let importInput: HTMLInputElement | undefined;
   const [selectedDeckId, setSelectedDeckId] = createSignal(
     props.selectedDeckId ?? deckStore?.systems[cardSystemStore.system]?.[0],
   );
@@ -51,6 +55,38 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
       setSelectedDeckId(deckId);
     }
     props.onSelectDeck?.(deckId);
+  }
+
+  function onExportAll() {
+    try {
+      exportAllDecksZip(deckStore.decks);
+      toast.success('Decks exported');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Export failed');
+    }
+  }
+
+  async function onImportFile(file: File) {
+    setImporting(true);
+    try {
+      const imported = parseDecksZip(await file.arrayBuffer());
+      if (!imported.length) {
+        toast.error('No deck JSON files found in zip');
+        return;
+      }
+
+      const merged = mergeImportedDecks(imported, {
+        decks: deckStore.decks,
+        systems: deckStore.systems,
+      });
+      setDeckStore(merged);
+      toast.success(`Imported ${imported.length} deck${imported.length === 1 ? '' : 's'}`);
+    } catch {
+      toast.error('Import failed');
+    } finally {
+      setImporting(false);
+      if (importInput) importInput.value = '';
+    }
   }
 
   return (
@@ -148,16 +184,40 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
                   )}
                 </For>
               </div>
-              <DialogFooter>
-                {props.footerStart}
-                <Button variant='outline' type='button' onClick={() => setEditingDeck({})}>
-                  Create Deck
-                </Button>
-                {props.footer ?? (
-                  <Button variant='ghost' type='button' onClick={() => props.onOpenChange?.(false)}>
-                    Close
+              <DialogFooter class='flex-wrap gap-2 sm:justify-between'>
+                <div class='flex flex-wrap gap-2 mr-auto'>
+                  <Button variant='ghost' type='button' onClick={onExportAll}>
+                    Export all
                   </Button>
-                )}
+                  <Button
+                    variant='ghost'
+                    type='button'
+                    disabled={importing()}
+                    onClick={() => importInput?.click()}>
+                    {importing() ? 'Importing…' : 'Import in bulk'}
+                  </Button>
+                  <input
+                    ref={importInput}
+                    type='file'
+                    accept='.zip,application/zip'
+                    class='hidden'
+                    onChange={e => {
+                      const file = e.currentTarget.files?.[0];
+                      if (file) void onImportFile(file);
+                    }}
+                  />
+                </div>
+                <div class='flex flex-wrap gap-2 justify-end'>
+                  {props.footerStart}
+                  <Button variant='outline' type='button' onClick={() => setEditingDeck({})}>
+                    Create Deck
+                  </Button>
+                  {props.footer ?? (
+                    <Button variant='ghost' type='button' onClick={() => props.onOpenChange?.(false)}>
+                      Close
+                    </Button>
+                  )}
+                </div>
               </DialogFooter>
             </div>
           </DialogContent>
