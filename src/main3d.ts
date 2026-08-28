@@ -86,7 +86,7 @@ import { getPlayAreaPlayerName } from './lib/playAreaNameTag';
 import { resolvePlayerColor } from './lib/playerColor';
 import { handlePingAwarenessChanges, publishTablePingFromHit } from './lib/pingSync';
 import { updateWaterdrops } from './lib/waterdropEffect';
-import { setCameraViewMode as applyCameraViewMode } from './lib/cameraView';
+import { setCameraViewMode as applyCameraViewMode, setCameraViewByPlayerIndex as applyCameraViewByPlayerIndex } from './lib/cameraView';
 import { transferCard } from './lib/transferCard';
 import { setCounters } from './lib/ui/counterDialog';
 import { resolveStackAnchor } from './lib/footprintOverlap';
@@ -1245,6 +1245,13 @@ function render3d(delta: number) {
 
 let currentYaw = 0;
 let currentPitch = 0;
+
+export function setCameraViewByPlayerIndex(orderedIndex: number) {
+  applyCameraViewByPlayerIndex(orderedIndex);
+  currentYaw = 0;
+  currentPitch = 0;
+  camera.quaternion.copy(baseCameraQuaternion);
+}
 
 export function setCameraViewMode(mode: 'local' | 'opponent') {
   applyCameraViewMode(mode);

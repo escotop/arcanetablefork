@@ -17,7 +17,7 @@ import { CardGrid } from './cardGrid';
 import { CardStack } from './cardStack';
 import { Card, CARD_HEIGHT, CARD_THICKNESS, CARD_WIDTH, CardZone, SerializableCard } from './constants';
 import { Deck, expandCardEntries } from './deck';
-import { cameraViewMode } from './cameraView';
+import { cameraViewPlayerIndex } from './cameraView';
 import {
   camera,
   cardsById,
@@ -231,8 +231,8 @@ export class PlayArea {
   }
 
   private nameTagUsesLocalTextOrientation(): boolean {
-    const fromOpponentSeat = cameraViewMode() === 'opponent';
-    return fromOpponentSeat ? !this.isLocalPlayArea : this.isLocalPlayArea;
+    const fromRemoteSeat = cameraViewPlayerIndex() !== 0;
+    return fromRemoteSeat ? !this.isLocalPlayArea : this.isLocalPlayArea;
   }
 
   refreshNameTagOrientation() {

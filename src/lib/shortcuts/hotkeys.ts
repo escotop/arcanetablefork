@@ -14,7 +14,7 @@ import { untapAll, adjustBattlefieldCardsPowerToughness, getPowerToughnessDeltaF
 import { activateSpanishPreview } from '../spanishCardPreview';
 import { createPassTurnEvent } from '../createEvents';
 import { Card } from '../constants';
-import { dismissZoomPanel, navigateKeyboardHandHover, setKeyboardHandHover, setCameraViewMode } from '../../main3d';
+import { dismissZoomPanel, navigateKeyboardHandHover, setKeyboardHandHover, setCameraViewByPlayerIndex } from '../../main3d';
 
 export function HotKeys() {
   const cardMesh = () => hoverSignal()?.mesh;
@@ -85,15 +85,23 @@ export function HotKeys() {
 
     window.addEventListener('keydown', onSpanishPreviewKeyDown);
 
-    hotkeys('f1', function (e) {
-      e.preventDefault();
-      setCameraViewMode('local');
-    });
+    const onFunctionKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      const match = /^F(\d+)$/i.exec(event.key);
+      if (!match) return;
 
-    hotkeys('f2', function (e) {
-      e.preventDefault();
-      setCameraViewMode('opponent');
-    });
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+
+      const playerIndex = parseInt(match[1], 10) - 1;
+      if (playerIndex < 0 || playerIndex > 11) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setCameraViewByPlayerIndex(playerIndex);
+    };
+
+    window.addEventListener('keydown', onFunctionKeyDown, true);
 
     hotkeys('shift+r', function () {
       const area = playArea();
@@ -239,6 +247,7 @@ export function HotKeys() {
     return () => {
       window.removeEventListener('keydown', onPowerToughnessKeyDown);
       window.removeEventListener('keydown', onSpanishPreviewKeyDown);
+      window.removeEventListener('keydown', onFunctionKeyDown, true);
       hotkeys.unbind();
     };
   });

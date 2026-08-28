@@ -1,17 +1,30 @@
 import { createSignal } from 'solid-js';
-import { Object3D, Quaternion, Vector3 } from 'three';
-import { camera, baseCameraQuaternion, getLocalPlayerClientId, playAreas, table } from './globals';
+import { Quaternion, Vector3 } from 'three';
+import { camera, baseCameraQuaternion, playAreas, table } from './globals';
+import type { PlayArea } from './playArea';
 
 let localCameraPosition: Vector3 | null = null;
 let localCameraQuaternion: Quaternion | null = null;
 let localLookTarget: Vector3 | null = null;
 
-/** Reused proxy to mirror camera position with the same rotateZ(π) as opponent play areas. */
-const cameraProxy = new Object3D();
 const worldUp = new Vector3(0, 1, 0);
 const lookTarget = new Vector3();
+const SEAT_VISUAL_INDEX: Record<number, number[]> = {
+  1: [0],
+  2: [0, 2],
+};
 
-export const [cameraViewMode, setCameraViewModeSignal] = createSignal<'local' | 'opponent'>('local');
+/** Ordered play area index: 0 = you, 1+ = other players clockwise. */
+export const [cameraViewPlayerIndex, setCameraViewPlayerIndex] = createSignal(0);
+
+/** @deprecated Use cameraViewPlayerIndex() !== 0 */
+export function cameraViewMode(): 'local' | 'opponent' {
+  return cameraViewPlayerIndex() === 0 ? 'local' : 'opponent';
+}
+
+export function isViewingFromRemoteSeat() {
+  return cameraViewPlayerIndex() !== 0;
+}
 
 export function captureLocalCameraView() {
   if (!camera) return;
@@ -21,76 +34,111 @@ export function captureLocalCameraView() {
   localLookTarget = localCameraPosition.clone().add(lookDirection);
 }
 
-export function getOpponentPlayArea() {
-  const localClientId = getLocalPlayerClientId();
-  return Object.values(playAreas).find(area => area && area.clientId !== localClientId);
+export function getOrderedPlayAreas(): PlayArea[] {
+  const entries = Object.values(playAreas)
+    .filter(Boolean)
+    .sort((a, b) => a.index - b.index);
+
+  const selfIndex = entries.findIndex(area => area.isLocalPlayArea);
+  if (selfIndex === -1) return entries;
+
+  const localFirst = entries.splice(selfIndex);
+  localFirst.push(...entries);
+  return localFirst;
 }
 
-function resetCameraProxy() {
-  cameraProxy.position.set(0, 0, 0);
-  cameraProxy.rotation.set(0, 0, 0);
-  cameraProxy.quaternion.set(0, 0, 0, 1);
+function getVisualSeatIndex(orderedIndex: number, playerCount: number) {
+  return SEAT_VISUAL_INDEX[playerCount]?.[orderedIndex] ?? orderedIndex;
 }
 
-function mirrorPointInTablePlane(worldPoint: Vector3, target: Vector3) {
-  cameraProxy.position.copy(worldPoint);
-  cameraProxy.quaternion.set(0, 0, 0, 1);
-  cameraProxy.rotation.set(0, 0, 0);
-  table.attach(cameraProxy);
-  cameraProxy.position.x *= -1;
-  cameraProxy.position.y *= -1;
-  table.updateMatrixWorld(true);
-  cameraProxy.getWorldPosition(target);
-  table.remove(cameraProxy);
-  resetCameraProxy();
-}
-
-function applyOpponentCameraTransform() {
-  if (!camera || !localCameraPosition || !localCameraQuaternion || !localLookTarget || !table) {
-    return;
+function getSeatAngle(seatIndex: number) {
+  switch (seatIndex) {
+    case 1:
+      return Math.PI / 2;
+    case 2:
+      return Math.PI;
+    case 3:
+      return (Math.PI * 3) / 2;
+    default:
+      return 0;
   }
+}
 
-  mirrorPointInTablePlane(localCameraPosition, camera.position);
-  mirrorPointInTablePlane(localLookTarget, lookTarget);
+function transformPointInTablePlane(worldPoint: Vector3, target: Vector3, angle: number) {
+  const local = table.worldToLocal(worldPoint.clone());
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const x = local.x * cos - local.y * sin;
+  const y = local.x * sin + local.y * cos;
+  target.copy(table.localToWorld(new Vector3(x, y, local.z)));
+}
+
+function applySeatCameraTransform(visualSeatIndex: number) {
+  if (!camera || !localCameraPosition || !localLookTarget) return;
+
+  const angle = getSeatAngle(visualSeatIndex);
+  transformPointInTablePlane(localCameraPosition, camera.position, angle);
+  transformPointInTablePlane(localLookTarget, lookTarget, angle);
 
   camera.up.copy(worldUp);
   camera.lookAt(lookTarget);
   baseCameraQuaternion.copy(camera.quaternion);
 }
 
-function refreshOpponentViewPresentation() {
-  const inOpponentView = cameraViewMode() === 'opponent';
-  const opponent = getOpponentPlayArea();
+function refreshViewPresentation() {
+  const ordered = getOrderedPlayAreas();
+  const viewIndex = cameraViewPlayerIndex();
+  const viewedArea = ordered[viewIndex];
+  const localArea = ordered[0];
 
-  if (opponent) {
-    opponent.hand.mesh.visible = !inOpponentView;
-  }
+  ordered.forEach(area => {
+    if (!area) return;
+    if (viewIndex === 0) {
+      area.hand.mesh.visible = true;
+      return;
+    }
+
+    area.hand.mesh.visible = area !== localArea && area !== viewedArea;
+  });
 
   Object.values(playAreas).forEach(area => area?.refreshNameTagOrientation());
 }
 
-export function setCameraViewMode(mode: 'local' | 'opponent') {
+export function setCameraViewByPlayerIndex(orderedIndex: number) {
   if (!camera || !table) return;
   if (!localCameraPosition || !localCameraQuaternion) captureLocalCameraView();
-  if (!localCameraPosition || !localCameraQuaternion) return;
-  if (mode === 'opponent' && !getOpponentPlayArea()) return;
+  if (!localCameraPosition || !localCameraQuaternion || !localLookTarget) return;
 
-  setCameraViewModeSignal(mode);
+  const ordered = getOrderedPlayAreas();
+  if (orderedIndex < 0 || orderedIndex >= ordered.length) return;
 
-  if (mode === 'local') {
+  const visualSeat = getVisualSeatIndex(orderedIndex, ordered.length);
+  setCameraViewPlayerIndex(orderedIndex);
+
+  if (visualSeat === 0) {
     camera.position.copy(localCameraPosition);
     baseCameraQuaternion.copy(localCameraQuaternion);
   } else {
-    applyOpponentCameraTransform();
+    applySeatCameraTransform(visualSeat);
   }
 
-  refreshOpponentViewPresentation();
+  refreshViewPresentation();
+}
+
+export function setCameraViewMode(mode: 'local' | 'opponent') {
+  if (mode === 'local') {
+    setCameraViewByPlayerIndex(0);
+    return;
+  }
+
+  if (getOrderedPlayAreas().length < 2) return;
+  setCameraViewByPlayerIndex(1);
 }
 
 export function resetCameraView() {
-  setCameraViewModeSignal('local');
+  setCameraViewPlayerIndex(0);
   localCameraPosition = null;
   localCameraQuaternion = null;
   localLookTarget = null;
-  refreshOpponentViewPresentation();
+  refreshViewPresentation();
 }

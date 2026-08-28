@@ -68,7 +68,7 @@ export const SHORTCUTS = [
   { shortcuts: [['space']], action: 'Pass turn' },
   { shortcuts: [['esc']], action: 'Close zoom panel and clear selection' },
   { shortcuts: [['F1']], action: 'Return to your camera view' },
-  { shortcuts: [['F2']], action: "View from opponent's perspective" },
+  { shortcuts: [['F2'], ['F3'], ['F4']], action: "View from another player's perspective" },
   { shortcuts: [['+'], ['=']], action: 'Increase +1/+1 on hovered battlefield card' },
   { shortcuts: [['-']], action: 'Decrease +1/+1 on hovered battlefield card' },
   {
