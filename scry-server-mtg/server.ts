@@ -280,6 +280,11 @@ function minimalCard(card: Record<string, unknown>) {
   return {
     id: card.id,
     name: card.name,
+    set: card.set,
+    set_name: card.set_name,
+    collector_number: card.collector_number,
+    lang: card.lang,
+    released_at: card.released_at,
     type: card.type,
     type_line: card.type_line,
     cmc: card.cmc,

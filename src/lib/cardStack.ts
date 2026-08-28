@@ -14,6 +14,7 @@ import {
 } from 'three';
 import { animateObject } from './animations';
 import { cleanupCard, getSerializableCard, setCardData } from './card';
+import { onStackCardAdded } from './cardLoading';
 import {
   Card,
   CARD_HEIGHT,
@@ -76,6 +77,7 @@ export class CardStack implements CardZone {
     );
     this.mesh.localToWorld(point);
     const projection = getProjectionVec(point);
+    if (!projection) return;
 
     this.setObservable('uiTether', {
       x: projection.x,
@@ -139,9 +141,11 @@ export class CardStack implements CardZone {
       },
       onComplete: () => {
         if (destroy) {
-          this.removeCard(card.mesh);
+          this.removeCard(card.mesh!);
           cleanupCard(card);
           setHoverSignal();
+        } else {
+          onStackCardAdded(this);
         }
       },
     });

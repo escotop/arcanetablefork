@@ -15,13 +15,71 @@ import {
   NumberFieldIncrementTrigger,
   NumberFieldInput,
 } from '~/components/ui/number-field';
-import { playAreas, provider } from '../globals';
+import { TextField, TextFieldInput } from '~/components/ui/text-field';
+import { provider } from '../globals';
+import { parseLifeInput } from '../utils';
+import { displayPlayerColor } from '../playerColor';
 import { counters, setIsCounterDialogOpen } from './counterDialog';
 import ChevronDownIcon from 'lucide-solid/icons/chevron-down';
+import ChevronUpIcon from 'lucide-solid/icons/chevron-up';
+
+const LifeField: Component<{ life: number; onLifeChange: (life: number) => void }> = props => {
+  const [draft, setDraft] = createSignal<string | null>(null);
+  const displayValue = () => draft() ?? String(props.life);
+
+  function commit() {
+    const raw = draft();
+    if (raw === null) return;
+    const next = parseLifeInput(raw, props.life);
+    setDraft(null);
+    if (next !== undefined) props.onLifeChange(next);
+  }
+
+  function adjust(delta: number) {
+    setDraft(null);
+    props.onLifeChange(props.life + delta);
+  }
+
+  return (
+    <div class='relative rounded-md focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2'>
+      <TextField
+        style='width: 6rem'
+        value={displayValue()}
+        onChange={value => setDraft(value)}>
+        <TextFieldInput
+          type='text'
+          inputMode='numeric'
+          title='Life, +N/-N relative, or expressions like 40-6'
+          class='h-10 pr-8'
+          onBlur={commit}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              e.currentTarget.blur();
+            } else if (e.key === 'Escape') {
+              setDraft(null);
+              e.currentTarget.blur();
+            }
+          }}
+        />
+      </TextField>
+      <button
+        type='button'
+        class='absolute right-3 top-1.5 inline-flex size-4 items-center justify-center cursor-pointer'
+        onClick={() => adjust(1)}>
+        <ChevronUpIcon class='size-4' />
+      </button>
+      <button
+        type='button'
+        class='absolute bottom-1.5 right-3 inline-flex size-4 items-center justify-center cursor-pointer'
+        onClick={() => adjust(-1)}>
+        <ChevronDownIcon class='size-4' />
+      </button>
+    </div>
+  );
+};
 
 export const LocalPlayer: Component = props => {
   const [open, setOpen] = createSignal(true);
-  const playArea = () => playAreas[provider?.awareness?.clientID];
 
   function changeCounter(counterId, callback) {
     let localState = provider.awareness.getLocalState();
@@ -44,22 +102,16 @@ export const LocalPlayer: Component = props => {
         <Collapsible onOpenChange={setOpen} open={open()}>
           <div class='flex gap-5 items-center justify-between'>
             You
-            <NumberField
-              style='width: 6rem'
-              value={props?.life}
-              onChange={value => {
-                let localState = provider.awareness.getLocalState();
+            <LifeField
+              life={props?.life ?? 0}
+              onLifeChange={life => {
+                const localState = provider.awareness.getLocalState();
                 provider.awareness.setLocalState({
                   ...localState,
-                  life: parseInt(value, 10),
+                  life,
                 });
-              }}>
-              <div class='relative rounded-md' style='display: inline-block;'>
-                <NumberFieldInput />
-                <NumberFieldIncrementTrigger />
-                <NumberFieldDecrementTrigger />
-              </div>
-            </NumberField>
+              }}
+            />
             <CollapsibleTrigger class='size-6'>
               <ChevronDownIcon
                 style={`transform: rotate3d(1,0,0,${
@@ -177,10 +229,16 @@ export const LocalPlayer: Component = props => {
 
 export const NetworkPlayer: Component = props => {
   const [open, setOpen] = createSignal(false);
+  const playerColor = () => displayPlayerColor(props);
 
   return (
     <Card>
-      <div class='rounded-lg shadow-md w-64 flex-shrink-0 p-2' style='pointer-events: initial'>
+      <div
+        class='rounded-lg shadow-md w-64 flex-shrink-0 p-2'
+        style={{
+          'pointer-events': 'initial',
+          border: `3px solid ${playerColor()}`,
+        }}>
         <Collapsible onOpenChange={setOpen} open={open()}>
           <div class='flex gap-5 items-center justify-between' style='min-height: 40px;'>
             {props?.name}

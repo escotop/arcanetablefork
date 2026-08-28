@@ -1,3 +1,4 @@
+import { nanoid } from 'nanoid';
 import set from 'lodash-es/set';
 import uniqBy from 'lodash-es/uniqBy';
 import { splitProps } from 'solid-js';
@@ -65,6 +66,57 @@ export function updateTextureAnimation(delta: number) {
   cardLoadingTexture.offset.x = x;
   currentSlide++;
   currentSlide = currentSlide % totalSlides;
+}
+
+export function createDeckProxyMesh() {
+  const geometry = new BoxGeometry(CARD_WIDTH, CARD_HEIGHT, CARD_THICKNESS);
+  const cardBackMat = new MeshStandardMaterial({ map: cardBackTexture });
+  cardBackMat.transparent = true;
+
+  const mesh = new Mesh(geometry, [
+    blackMat.clone(),
+    blackMat.clone(),
+    blackMat.clone(),
+    blackMat.clone(),
+    blackMat.clone(),
+    cardBackMat,
+  ]);
+  mesh.userData.isDeckProxy = true;
+  mesh.userData.location = 'deck';
+  mesh.userData.isInteractive = true;
+  mesh.receiveShadow = true;
+  mesh.castShadow = true;
+  return mesh;
+}
+
+export function createDeckStackMesh() {
+  const geometry = new BoxGeometry(CARD_WIDTH, CARD_HEIGHT, 1);
+  const mesh = new Mesh(geometry, blackMat.clone());
+  mesh.userData.isDeckStack = true;
+  mesh.userData.location = 'deck';
+  mesh.userData.isInteractive = true;
+  mesh.receiveShadow = true;
+  mesh.castShadow = true;
+  mesh.visible = false;
+  return mesh;
+}
+
+export function dematerializeCard(card: Card) {
+  if (!card.mesh) return;
+  cleanupFromNode(card.mesh);
+  card.mesh.parent?.remove(card.mesh);
+  card.mesh = undefined;
+}
+
+export function ensureCardMesh(card: Card, clientId: number): Card {
+  if (card.mesh?.userData?.id === card.id) return card;
+  if (card.mesh) {
+    dematerializeCard(card);
+  }
+  if (!card.id) card.id = nanoid();
+  card.clientId = clientId;
+  initializeCardMesh(card, clientId);
+  return card;
 }
 
 export function createCardGeometry(card: Card, cache?: Map<string, ImageBitmap>) {
@@ -283,17 +335,14 @@ export function getCardArtImage(card: { detail: CardEntryDetail }) {
   return options?.[(Math.random() * options.length) | 0];
 }
 
-export function initializeCardMesh(card: Card, clientId: string): Card {
+export function initializeCardMesh(card: Card, clientId: string | number): Card {
+  if (!card.id) card.id = nanoid();
   const mesh = createCardGeometry(card);
   setCardData(mesh, 'clientId', clientId);
-
-  let result = {
-    ...card,
-    clientId: clientId,
-    mesh,
-  };
-  cardsById.set(result.id, result);
-  return result;
+  card.mesh = mesh;
+  card.clientId = Number(clientId);
+  cardsById.set(card.id, card);
+  return card;
 }
 
 export function getCardMeshTetherPoint(cardMesh: Mesh) {
@@ -342,11 +391,16 @@ export function getCardMeshTetherPoint(cardMesh: Mesh) {
   );
   cardMesh.localToWorld(vec);
   const tether = getProjectionVec(vec);
+  if (!tether) return { x: 0, y: 0, offset };
   tether.offset = offset;
   return tether;
 }
 
-export function cleanupCard(card: card) {
+export function cleanupCard(card: Card) {
+  if (!card.mesh) {
+    cardsById.delete(card.id);
+    return;
+  }
   cleanupFromNode(card.mesh);
   cardsById.delete(card.id);
 }

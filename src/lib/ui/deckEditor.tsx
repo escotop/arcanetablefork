@@ -30,11 +30,18 @@ import {
 } from '~/components/ui/text-field';
 import { getCardImage } from '../card';
 import { DetailedCardEntry, Deck, FORMATS, CardSystem } from '../constants';
-import { populateCardInfo } from '../deck';
+import {
+  CardPrintingOption,
+  fetchCardInfo,
+  populateCardInfo,
+  supportsCardPrintings,
+} from '../deck';
 import { cardSystem, colorHashDark } from '../globals';
 import { cn } from '../utils';
 import styles from './deckEditor.module.css';
 import CardList from './deckEditor/cardList';
+import DeckGridCard from './deckEditor/deckGridCard';
+import PrintingPickerModal from './deckEditor/printingPickerModal';
 import random from 'lodash-es/random';
 import { Command, CommandInput } from '~/components/ui/command';
 import { ToggleGroup, ToggleGroupItem } from '~/components/ui/toggle-group';
@@ -72,7 +79,7 @@ import CopyIcon from 'lucide-solid/icons/copy';
 import CheckIcon from 'lucide-solid/icons/check';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import DeckImportDialog from './deckEditor/deckImportDialog';
-import useCardGrouping from './deckEditor/cardGroupings';
+import useCardGrouping, { getSimpleType } from './deckEditor/cardGroupings';
 import OverflowMenuIcon from 'lucide-solid/icons/ellipsis';
 import DeleteIcon from 'lucide-solid/icons/trash-2';
 
@@ -96,6 +103,8 @@ export const DeckEditor: Component<Props> = props => {
   const [searchResults, setSearchResults] = createSignal();
   const [cardSystemStore, { setCardSystem }] = useCardSystemContext();
   const [isDirty, setIsDirty] = createSignal(false);
+  const [printingPickerKey, setPrintingPickerKey] = createSignal<string>();
+  const [typeFilter, setTypeFilter] = createSignal<string | null>(null);
   let formRef: HTMLFormElement;
 
   const [deck, setDeck] = createStore<Deck>(
@@ -104,9 +113,10 @@ export const DeckEditor: Component<Props> = props => {
 
   const getDeckList = createMemo(() => {
     trackDeep(deck.cards);
-
     return Object.values(deck?.cards || {});
   });
+
+  const deckCardKeys = createMemo(() => Object.keys(deck.cards ?? {}));
 
   const getInPlayList = createMemo(() => {
     trackDeep(deck.inPlay);
@@ -125,6 +135,7 @@ export const DeckEditor: Component<Props> = props => {
       () => deck.system,
       () => {
         rehydrateDeck(unwrap(deck));
+        setTypeFilter(null);
         setSearchParams({ q: undefined, type: undefined }, { replace: true });
       },
     ),
@@ -149,12 +160,48 @@ export const DeckEditor: Component<Props> = props => {
     setIsDirty(true);
   };
 
+  async function changeCardPrinting(storageKey: string, printing: CardPrintingOption) {
+    const previous = deck.cards[storageKey];
+    if (!previous) return;
+
+    const qty = previous.qty;
+    const updated = await fetchCardInfo({
+      name: previous.name,
+      id: printing.id,
+      set: printing.set,
+      qty,
+      categories: previous.categories ?? [],
+    });
+    if (!updated?.id) return;
+
+    const nextEntry = { ...updated, qty };
+    updateDeck('cards', storageKey, nextEntry);
+
+    if (deck.inPlay?.[previous.name]?.id === previous.id) {
+      updateDeck('inPlay', previous.name, nextEntry);
+    }
+  }
+
   let isEditing = () => !!props?.deck?.id;
 
   onMount(() => {
     if (!isEditing()) {
       setSearchParams({ dialog: 'import' });
     }
+  });
+
+  onMount(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const previousHtmlOverflow = html.style.overflow;
+    const previousBodyOverflow = body.style.overflow;
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+
+    onCleanup(() => {
+      html.style.overflow = previousHtmlOverflow;
+      body.style.overflow = previousBodyOverflow;
+    });
   });
 
   function onSaveDeck(e: SubmitEvent & { currentTarget: HTMLFormElement }) {
@@ -317,25 +364,73 @@ export const DeckEditor: Component<Props> = props => {
   }
   const cardGrouping = useCardGrouping(cardSystem.types ?? [], getDeckList);
 
+  const filteredDeckCardKeys = createMemo(() => {
+    trackDeep(deck.cards);
+    const filter = typeFilter();
+    const keys = deckCardKeys();
+    if (!filter) return keys;
+
+    const lowerTypes = (cardSystem.types ?? []).map(type => type.toLowerCase());
+
+    return keys.filter(key => {
+      const entry = deck.cards[key];
+      if (!entry?.qty) return false;
+
+      const simpleType = getSimpleType(entry);
+      const type = lowerTypes.find(candidate => simpleType?.endsWith(candidate));
+
+      if (filter === 'unsorted') return !type;
+      return type === filter;
+    });
+  });
+
   return (
     <>
-      <form ref={formRef} onSubmit={onSaveDeck}>
-        <div class={styles.container} onDragOver={e => e.preventDefault()}>
+      <div class={styles.container} onDragOver={e => e.preventDefault()}>
+        <form ref={formRef} class={styles.editorForm} onSubmit={onSaveDeck}>
           <div
             style='grid-area: header;'
             class='pr-7 pl-4 p-4  flex flex-row gap-2 items-center bg-background'>
             <div class='flex flex-wrap gap-2 items-center'>
-              <label>{cardGrouping().totalCount} Cards Added</label>
-              <For each={Object.values(cardGrouping().types)}>
-                {grouping => (
+              <button
+                type='button'
+                class={cn(
+                  'rounded px-1 transition-colors hover:bg-muted',
+                  !typeFilter() && 'font-semibold',
+                )}
+                onClick={() => setTypeFilter(null)}>
+                {cardGrouping().totalCount} Cards Added
+              </button>
+              <For each={Object.entries(cardGrouping().types)}>
+                {([type, grouping]) => (
                   <Show when={grouping.count > 0}>
-                    <div class='flex gap-1 border-l-2 px-2 py-1'>
+                    <button
+                      type='button'
+                      class={cn(
+                        'flex gap-1 border-l-2 px-2 py-1 transition-colors hover:bg-muted',
+                        typeFilter() === type && 'bg-muted font-semibold',
+                      )}
+                      onClick={() => setTypeFilter(current => (current === type ? null : type))}>
                       <span>{grouping.name}</span>
                       <span>{grouping.count}</span>
-                    </div>
+                    </button>
                   </Show>
                 )}
               </For>
+              <Show when={cardGrouping().unsorted.count > 0}>
+                <button
+                  type='button'
+                  class={cn(
+                    'flex gap-1 border-l-2 px-2 py-1 transition-colors hover:bg-muted',
+                    typeFilter() === 'unsorted' && 'bg-muted font-semibold',
+                  )}
+                  onClick={() =>
+                    setTypeFilter(current => (current === 'unsorted' ? null : 'unsorted'))
+                  }>
+                  <span>Unsorted</span>
+                  <span>{cardGrouping().unsorted.count}</span>
+                </button>
+              </Show>
             </div>
             <div class='ml-auto' />
             <Button
@@ -574,77 +669,146 @@ export const DeckEditor: Component<Props> = props => {
               </ToggleGroup>
             </div>
             <div class={`p-4 ${styles.cardList}`}>
-              <For
-                each={searchResults() || getDeckList()}
+              <Show
+                when={searchResults()}
                 fallback={
-                  <EmptyGridContainer
-                    hasSearchResults={searchParams.totalPages > 0}
-                    isSearching={isSearching()}
-                    importCardList={() => setSearchParams({ dialog: 'import' })}
-                  />
+                  <For
+                    each={filteredDeckCardKeys()}
+                    keyed
+                    fallback={
+                      typeFilter() ? (
+                        <div class='p-8 text-center text-muted-foreground'>
+                          <p>
+                            No{' '}
+                            {typeFilter() === 'unsorted'
+                              ? 'unsorted'
+                              : capitalize(typeFilter()!)}{' '}
+                            cards in this deck.
+                          </p>
+                          <Button
+                            class='mt-3'
+                            type='button'
+                            variant='secondary'
+                            onClick={() => setTypeFilter(null)}>
+                            Show all cards
+                          </Button>
+                        </div>
+                      ) : (
+                        <EmptyGridContainer
+                          hasSearchResults={searchParams.totalPages > 0}
+                          isSearching={isSearching()}
+                          importCardList={() => setSearchParams({ dialog: 'import' })}
+                        />
+                      )
+                    }>
+                    {(storageKey, index) => (
+                      <DeckGridCard
+                        storageKey={storageKey}
+                        index={index()}
+                        card={() => deck.cards[storageKey]}
+                        updateDeck={updateDeck}
+                        onChangePrinting={changeCardPrinting}
+                        onPreview={src => setSearchParams({ dialog: 'card-preview', src })}
+                        onOpenPrintings={
+                          supportsCardPrintings()
+                            ? () => setPrintingPickerKey(storageKey)
+                            : undefined
+                        }
+                      />
+                    )}
+                  </For>
                 }>
-                {(card, i) => {
-                  const deckCard = () => deck.cards?.[getCardKey(card)];
-                  return (
-                    <div
-                      data-index={i()}
-                      id={card.id}
-                      style={`
+                <For
+                  each={searchResults()}
+                  fallback={
+                    <EmptyGridContainer
+                      hasSearchResults={searchParams.totalPages > 0}
+                      isSearching={isSearching()}
+                      importCardList={() => setSearchParams({ dialog: 'import' })}
+                    />
+                  }>
+                  {(card, i) => {
+                    const cardKey = () => getCardKey(card);
+                    const deckCard = () => deck.cards?.[cardKey()];
+                    return (
+                      <div
+                        data-index={i()}
+                        id={card.id}
+                        style={`
                         position: relative;
                         --timing: ${random(400, 600)}ms;
                         --delay: ${random(250, 500)}ms;
                         --distance: ${random(20, 100)}px;
                         content-visibility: auto;
                       `}
-                      class='fade-in-from-below'>
-                      <img
-                        crossOrigin=''
-                        src={
-                          getCardImage(card) ??
-                          cardSystem.fallbackImage ??
-                          '/unknown-card-image.webp'
-                        }
-                        style={`anchor-name: --card-${i()}; height: 100%;`}
-                      />
-                      <div
-                        class='absolute inset-0 fade-in'
-                        style={`
+                        class='fade-in-from-below'>
+                        <img
+                          crossOrigin=''
+                          src={
+                            getCardImage(card) ??
+                            cardSystem.fallbackImage ??
+                            '/unknown-card-image.webp'
+                          }
+                          style={`anchor-name: --card-${i()}; height: 100%;`}
+                        />
+                        <div
+                          class='absolute inset-0 fade-in'
+                          style={`
                       position-anchor: --card-${i()};
                       right: anchor(right);
-                      // width: anchor-size(width);
                       height: anchor-size(height);
                       container-type: size;
                       --delay: ${random(1000, 1250)}ms;
                       --timing: ${random(500, 1250)}ms;
                     `}>
-                        <div
-                          class='grid place-items-center justify-end'
-                          style={`
+                          <div
+                            class='grid place-items-center justify-end'
+                            style={`
                         height: 100%;
                         padding-inline: 10cqw;
                         padding-bottom: 10cqh;
                       `}>
-                          <div
-                            class='dark gap-2 font-bold text-white flex items-center rounded'
-                            style={`background: hsla(var(--background) / .4);`}>
-                            <Show
-                              when={!card.detail?.name || !getCardImage(card)}
-                              fallback={
+                            <div
+                              class='dark gap-2 font-bold text-white flex items-center rounded'
+                              style={`background: hsla(var(--background) / .4);`}>
+                              <Show
+                                when={!card.detail?.name || !getCardImage(card)}
+                                fallback={
+                                  <Button
+                                    variant='ghost'
+                                    size='icon'
+                                    onClick={() =>
+                                      setSearchParams({
+                                        dialog: 'card-preview',
+                                        src: getCardImage(card),
+                                      })
+                                    }>
+                                    <SearchIcon />
+                                  </Button>
+                                }>
+                                <div class='pl-2'>{card.name}</div>
+                              </Show>
+                              <Show when={deckCard()?.qty > 0}>
                                 <Button
-                                  variant='ghost'
                                   size='icon'
-                                  onClick={() =>
-                                    setSearchParams({
-                                      dialog: 'card-preview',
-                                      src: getCardImage(card),
-                                    })
-                                  }>
-                                  <SearchIcon />
+                                  variant='ghost'
+                                  type='button'
+                                  onClick={() => {
+                                    let id = getCardKey(unwrap(card));
+                                    if (deck.cards[id]) {
+                                      return updateDeck('cards', id, 'qty', (qty = 1) =>
+                                        Math.max(qty - 1, 0),
+                                      );
+                                    }
+                                  }}>
+                                  <SubIcon
+                                    class='text-white'
+                                    style='filter: drop-shadow(2px 4px 6px black);'
+                                  />
                                 </Button>
-                              }>
-                              <div class='pl-2'>{card.name}</div>
-                            </Show>
-                            <Show when={deckCard()?.qty > 0}>
+                              </Show>
+                              <Show when={deckCard()?.qty > 0}>{deckCard()?.qty}</Show>
+
                               <Button
                                 size='icon'
                                 variant='ghost'
@@ -652,59 +816,50 @@ export const DeckEditor: Component<Props> = props => {
                                 onClick={() => {
                                   let id = getCardKey(unwrap(card));
                                   if (deck.cards[id]) {
-                                    return updateDeck('cards', id, 'qty', (qty = 1) =>
-                                      Math.max(qty - 1, 0),
-                                    );
+                                    return updateDeck('cards', id, 'qty', (qty = 1) => qty + 1);
                                   }
+                                  updateDeck('cards', id, { ...unwrap(card), qty: 1 });
                                 }}>
-                                <SubIcon
+                                <AddIcon
                                   class='text-white'
                                   style='filter: drop-shadow(2px 4px 6px black);'
                                 />
                               </Button>
-                            </Show>
-                            <Show when={deckCard()?.qty > 0}>{deckCard()?.qty}</Show>
-
-                            <Button
-                              size='icon'
-                              variant='ghost'
-                              type='button'
-                              onClick={() => {
-                                let id = getCardKey(unwrap(card));
-                                if (deck.cards[id]) {
-                                  return updateDeck('cards', id, 'qty', (qty = 1) => qty + 1);
-                                }
-                                updateDeck('cards', id, { ...unwrap(card), qty: 1 });
-                              }}>
-                              <AddIcon
-                                class='text-white'
-                                style='filter: drop-shadow(2px 4px 6px black);'
-                              />
-                            </Button>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                }}
-              </For>
-              <div use:intersectionObserver={{ onIntersect: loadMoreResults }}>
-                <Show
-                  when={
-                    (searchParams.q || searchParams.type) &&
-                    searchParams.page < searchParams.totalPages
-                  }>
-                  <div class='flex gap-2 justify-center p-6'>
-                    <LoaderIcon class='animate-spin' /> Loading more results
-                  </div>
-                </Show>
-              </div>
+                    );
+                  }}
+                </For>
+              </Show>
+            </div>
+            <div use:intersectionObserver={{ onIntersect: loadMoreResults }}>
+              <Show
+                when={
+                  (searchParams.q || searchParams.type) &&
+                  searchParams.page < searchParams.totalPages
+                }>
+                <div class='flex gap-2 justify-center p-6'>
+                  <LoaderIcon class='animate-spin' /> Loading more results
+                </div>
+              </Show>
             </div>
           </div>
-        </div>
-      </form>
+        </form>
+      </div>
 
       <Portal>
+        <Show when={printingPickerKey() && deck.cards[printingPickerKey()!]}>
+          <PrintingPickerModal
+            entry={deck.cards[printingPickerKey()!]}
+            onClose={() => setPrintingPickerKey(undefined)}
+            onSelect={printing => {
+              void changeCardPrinting(printingPickerKey()!, printing);
+              setPrintingPickerKey(undefined);
+            }}
+          />
+        </Show>
         <Show when={searchParams.dialog === 'import'}>
           <DeckImportDialog
             onClose={closeCurrentDialog}

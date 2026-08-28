@@ -90,3 +90,54 @@ export function createPassTurnEvent() {
     type: 'passTurn',
   };
 }
+
+/** Search/peek UI events are synced live but not replayed when loading a saved game. */
+export const SKIP_REPLAY = true as const;
+
+export function createPeekCardsEvent(
+  fromZoneId: string,
+  toZoneId: string,
+  count: number,
+  options?: { skipAnimation?: boolean },
+) {
+  return {
+    type: 'peekCards',
+    skipReplay: SKIP_REPLAY,
+    payload: { fromZoneId, toZoneId, count, ...options },
+  } as const;
+}
+
+export function createDismissZoneEvent(zoneId: string) {
+  return {
+    type: 'dismissZone',
+    skipReplay: SKIP_REPLAY,
+    payload: { zoneId },
+  } as const;
+}
+
+export function createTransferEntireZoneEvent(
+  fromZoneId: string,
+  toZoneId: string,
+  addOptions?: { location?: 'top' | 'bottom' },
+) {
+  return {
+    type: 'transferEntireZone',
+    skipReplay: SKIP_REPLAY,
+    payload: { fromZoneId, toZoneId, addOptions },
+  } as const;
+}
+
+export function createWaterdropEvent(
+  worldPosition: [number, number, number],
+  worldNormal: [number, number, number],
+  color: string,
+) {
+  return {
+    type: 'waterdrop',
+    payload: {
+      position: worldPosition,
+      normal: worldNormal,
+      color,
+    },
+  } as const;
+}

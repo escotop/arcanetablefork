@@ -1,23 +1,24 @@
 import hotkeys from 'hotkeys-js';
 import { createEffect, onMount } from 'solid-js';
 import {
-  selection,
   cardsById,
-  zonesById,
-  playAreas,
-  provider,
+  getLocalPlayArea,
   hoverSignal,
+  selection,
   dispatchGameEvent,
+  zonesById,
 } from '../globals';
 import { transferCard } from '../transferCard';
 import { drawCards, searchDeck } from './commands/deck';
-import { untapAll } from './commands/field';
-import { createPassTurnEvent, createTapEvent } from '../createEvents';
+import { untapAll, adjustBattlefieldCardsPowerToughness, getPowerToughnessDeltaFromKey } from './commands/field';
+import { activateSpanishPreview } from '../spanishCardPreview';
+import { createPassTurnEvent } from '../createEvents';
 import { Card } from '../constants';
+import { dismissZoomPanel, navigateKeyboardHandHover, setKeyboardHandHover, setCameraViewMode } from '../../main3d';
 
 export function HotKeys() {
   const cardMesh = () => hoverSignal()?.mesh;
-  const playArea = playAreas[provider?.awareness?.clientID];
+  const playArea = () => getLocalPlayArea();
   const cards = () => {
     let items = selection.selectedItems;
     if (items.length) {
@@ -28,14 +29,76 @@ export function HotKeys() {
     return [cardsById.get(cardMesh().userData.id)].filter(Boolean) as Card[];
   };
   createEffect(() => {
-    if (selection.selectedItems.length) {
-      hotkeys.setScope(selection.selectedItems[0].userData.location);
+    const selected = selection.selectedItems[0];
+    if (selected?.userData?.location) {
+      hotkeys.setScope(selected.userData.location);
+      return;
     }
+    hotkeys.setScope(hoverSignal()?.mesh?.userData?.location ?? 'all');
   });
 
   onMount(() => {
+    const requirePlayArea = () => {
+      const area = playArea();
+      if (!area) throw new Error('No local play area');
+      return area;
+    };
+
+    const adjustPowerToughness = (delta: number) => {
+      adjustBattlefieldCardsPowerToughness(cards(), playArea(), delta);
+    };
+
+    const onPowerToughnessKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+
+      const location =
+        selection.selectedItems[0]?.userData?.location ??
+        hoverSignal()?.mesh?.userData?.location;
+      if (location !== 'battlefield') return;
+
+      const delta = getPowerToughnessDeltaFromKey(event);
+      if (delta === null) return;
+
+      event.preventDefault();
+      adjustPowerToughness(delta);
+    };
+
+    window.addEventListener('keydown', onPowerToughnessKeyDown);
+
+    const onSpanishPreviewKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      if (event.key.toLowerCase() !== 't') return;
+      if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+
+      const mesh = hoverSignal()?.mesh;
+      if (!mesh?.userData?.id) return;
+
+      event.preventDefault();
+      void activateSpanishPreview(mesh.userData.id);
+    };
+
+    window.addEventListener('keydown', onSpanishPreviewKeyDown);
+
+    hotkeys('f1', function (e) {
+      e.preventDefault();
+      setCameraViewMode('local');
+    });
+
+    hotkeys('f2', function (e) {
+      e.preventDefault();
+      setCameraViewMode('opponent');
+    });
+
     hotkeys('shift+r', function () {
-      untapAll(playArea);
+      const area = playArea();
+      if (!area) return;
+      untapAll(area);
     });
 
     hotkeys('space', function () {
@@ -43,104 +106,139 @@ export function HotKeys() {
     });
 
     hotkeys('d', function () {
-      drawCards(playArea, 1);
+      const area = playArea();
+      if (!area) return;
+      drawCards(area, 1);
     });
 
     hotkeys('ctrl+d,command+d', function (e) {
       e.preventDefault();
+      const area = requirePlayArea();
       cards().map(card => {
         const previousZone = zonesById.get(card.mesh.userData.zoneId);
-        transferCard(card, previousZone, playArea.graveyardZone);
+        transferCard(card, previousZone, area.graveyardZone);
       });
       selection.clearSelection();
     });
 
     hotkeys('ctrl+c,command+c', function (e) {
       e.preventDefault();
+      const area = requirePlayArea();
       cards().map(card => {
-        playArea.clone(card.id);
+        area.clone(card.id);
       });
     });
 
     hotkeys('ctrl+e,command+e', function (e) {
       e.preventDefault();
+      const area = requirePlayArea();
       cards().map(card => {
         const previousZone = zonesById.get(card.mesh.userData.zoneId);
-        transferCard(card, previousZone, playArea.exileZone);
+        transferCard(card, previousZone, area.exileZone);
       });
       selection.clearSelection();
     });
 
     hotkeys('ctrl+f,command+f', function (e) {
       e.preventDefault();
+      const area = requirePlayArea();
       cards().map(card => {
         const previousZone = zonesById.get(card.mesh.userData.zoneId);
-        transferCard(card, previousZone, playArea.battlefieldZone);
+        transferCard(card, previousZone, area.battlefieldZone);
       });
     });
 
     hotkeys('shift+t', function (e) {
       e.preventDefault();
+      const area = requirePlayArea();
       cards().forEach(card => {
         const previousZone = zonesById.get(card.mesh.userData.zoneId);
-        transferCard(card, previousZone, playArea.deck);
+        transferCard(card, previousZone, area.deck);
       });
     });
 
     hotkeys('shift+b', function (e) {
       e.preventDefault();
+      const area = requirePlayArea();
 
       cards().forEach(card => {
         const previousZone = zonesById.get(card.mesh.userData.zoneId);
-        transferCard(card, previousZone, playArea.deck, { addOptions: { location: 'bottom' } });
+        transferCard(card, previousZone, area.deck, { addOptions: { location: 'bottom' } });
       });
     });
 
     hotkeys('p', function (e) {
       e.preventDefault();
+      const area = requirePlayArea();
       cards().map(card => {
         const previousZone = zonesById.get(card.mesh.userData.zoneId);
-        transferCard(card, previousZone, playArea.peekZone);
+        transferCard(card, previousZone, area.peekZone);
       });
       selection.clearSelection();
     });
 
     hotkeys('s', function (e) {
       e.preventDefault();
-      searchDeck(playArea);
+      const area = playArea();
+      if (!area) return;
+      searchDeck(area);
+    });
+
+    hotkeys('1,2,3,4,5,6,7,8,9,0', function (e, handler) {
+      e.preventDefault();
+      const key = handler.key === '0' ? 10 : parseInt(handler.key, 10);
+      setKeyboardHandHover(key);
+    });
+
+    hotkeys('left', function (e) {
+      e.preventDefault();
+      navigateKeyboardHandHover(-1);
+    });
+
+    hotkeys('right', function (e) {
+      e.preventDefault();
+      navigateKeyboardHandHover(1);
+    });
+
+    hotkeys('escape', function (e) {
+      e.preventDefault();
+      dismissZoomPanel();
+      selection.clearSelection();
     });
 
     hotkeys('escape', 'peek', function (e) {
       e.preventDefault();
-      playArea.dismissFromZone(playArea.peekZone);
+      const area = requirePlayArea();
+      area.dismissFromZone(area.peekZone);
     });
 
     hotkeys('escape', 'tokenSearch', function (e) {
       e.preventDefault();
-      playArea.dismissFromZone(playArea.tokenSearchZone);
+      const area = requirePlayArea();
+      area.dismissFromZone(area.tokenSearchZone);
     });
 
     hotkeys('escape', 'reveal', function (e) {
       e.preventDefault();
-      playArea.dismissFromZone(playArea.revealZone);
-    });
-
-    hotkeys('t', 'battlefield', function (e) {
-      e.preventDefault();
-      cards().forEach(card => dispatchGameEvent(createTapEvent(card.mesh)));
+      const area = requirePlayArea();
+      area.dismissFromZone(area.revealZone);
     });
 
     hotkeys('c', 'battlefield', function (e) {
       e.preventDefault();
-      cards().forEach(card => playArea.clone(card?.mesh.userData.id));
+      const area = requirePlayArea();
+      cards().forEach(card => area.clone(card?.mesh.userData.id));
     });
 
     hotkeys('f', 'battlefield', function (e) {
       e.preventDefault();
-      cards().forEach(card => playArea.flip(card.mesh));
+      const area = requirePlayArea();
+      cards().forEach(card => area.flip(card.mesh));
     });
 
     return () => {
+      window.removeEventListener('keydown', onPowerToughnessKeyDown);
+      window.removeEventListener('keydown', onSpanishPreviewKeyDown);
       hotkeys.unbind();
     };
   });

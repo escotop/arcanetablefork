@@ -84,6 +84,8 @@ export function parseLogEntry(entry) {
     }
     case 'concede':
       return 'conceded';
+    case 'kick':
+      return 'was removed from the game';
     case 'animateObject':
       return null;
     case 'tap':

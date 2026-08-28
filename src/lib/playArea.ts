@@ -1,6 +1,8 @@
 import uniqBy from 'lodash-es/uniqBy';
 import { nanoid } from 'nanoid';
-import { CatmullRomCurve3, Euler, Group, Mesh, MeshStandardMaterial, Vector3 } from 'three';
+import { CatmullRomCurve3, Euler, Group, Mesh, MeshStandardMaterial, Object3D, Quaternion, Vector3 } from 'three';
+import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
+import { getPlayAreaPlayerColor, textColorOnBackground } from './playerColor';
 import { animateObject } from './animations';
 import {
   cloneCard,
@@ -13,24 +15,46 @@ import {
 import { CardArea } from './cardArea';
 import { CardGrid } from './cardGrid';
 import { CardStack } from './cardStack';
-import { Card, CARD_HEIGHT, CARD_WIDTH, CardZone, SerializableCard } from './constants';
+import { Card, CARD_HEIGHT, CARD_THICKNESS, CARD_WIDTH, CardZone, SerializableCard } from './constants';
 import { Deck, expandCardEntries } from './deck';
+import { cameraViewMode } from './cameraView';
 import {
+  camera,
   cardsById,
   dispatchGameEvent,
   doXTimes,
   expect,
   flushDispatchEventQueue,
   focusCamera,
-  provider,
+  getLocalPlayerClientId,
+  isEventCatchUpComplete,
+  sendEvent,
   zonesById,
 } from './globals';
 import { Hand } from './hand';
 import { transferCard } from './transferCard';
 import { getFocusCameraPositionRelativeTo } from './utils';
 import { getCardKey, hydrateDeck } from './deckStore';
+import { cardFromDeckEntry, preloadStackTextures } from './cardLoading';
 import { Deck as DeckData } from './constants';
-import { createTransferCardEvent } from './createEvents';
+import {
+  createDismissZoneEvent,
+  createPeekCardsEvent,
+  createTransferEntireZoneEvent,
+  createTransferCardEvent,
+  SKIP_REPLAY,
+} from './createEvents';
+import { playCounterSoundForModifierChange, playShuffleDeckSound } from './sounds';
+
+/** Battlefield mesh uses BoxGeometry(200, 100) centered at the origin. */
+const BATTLEFIELD_HALF_W = 100;
+const BATTLEFIELD_HALF_H = 50;
+const BATTLEFIELD_TAG_INSET = 10;
+const BATTLEFIELD_TAG_REMOTE_X_OFFSET = -12;
+const BATTLEFIELD_TAG_SURFACE_Z = CARD_THICKNESS / 4 + 0.1;
+const BATTLEFIELD_TAG_Z_LIFT = 2;
+/** CSS3DRenderer centers elements on the pivot; keep scale modest on top of px sizing. */
+const BATTLEFIELD_TAG_SCALE = 0.17 * 1.3;
 
 interface RemoteZoneState {
   id: string;
@@ -46,6 +70,7 @@ interface CardReference {
 interface State {
   isLocalPlayer?: boolean;
   clientId?: number;
+  playerSessionId?: string;
   graveyard?: RemoteZoneState;
   exile?: RemoteZoneState;
   battlefield?: RemoteZoneState;
@@ -71,6 +96,11 @@ export class PlayArea {
   public availableTokens?: CardReference[];
   private inProgressActions = new Set<string>();
   public index: number;
+  public playerSessionId?: string;
+  private nameTagElement: HTMLDivElement;
+  private nameTagWrapper: HTMLDivElement;
+  private nameTagPivot: Object3D;
+  private nameTagObject: CSS3DObject;
 
   constructor(
     public clientId: number,
@@ -81,6 +111,7 @@ export class PlayArea {
     this.mesh = new Group();
     this.isLocalPlayArea = !!state.isLocalPlayer;
     this.index = state.index ?? 0;
+    this.playerSessionId = state.playerSessionId;
 
     this.battlefieldZone = new CardArea('battlefield', state.battlefield?.id);
 
@@ -109,11 +140,10 @@ export class PlayArea {
     this.mesh.add(this.exileZone.mesh);
     this.mesh.add(this.graveyardZone.mesh);
 
-    let deckCards = (state?.deck?.cards || cardsInDeck).map(card =>
-      initializeCardMesh(card, clientId),
-    );
+    let deckEntries = state?.deck?.cards?.length ? state.deck.cards : cardsInDeck;
+    let deckCards = deckEntries.map(entry => cardFromDeckEntry(entry, clientId));
 
-    this.deck = new Deck(deckCards, state?.deck?.id);
+    this.deck = new Deck(deckCards, state?.deck?.id, clientId);
     this.hand = new Hand(state?.hand?.id, this.isLocalPlayArea);
 
     if (this.isLocalPlayArea) {
@@ -125,6 +155,43 @@ export class PlayArea {
     this.mesh.add(this.deck.mesh);
     this.mesh.add(this.hand.mesh);
     this.mesh.add(this.battlefieldZone.mesh);
+
+    this.nameTagElement = document.createElement('div');
+    this.nameTagElement.style.display = 'inline-block';
+    this.nameTagElement.style.boxSizing = 'border-box';
+    this.nameTagElement.style.width = 'max-content';
+    this.nameTagElement.style.padding = '3px 8px';
+    this.nameTagElement.style.borderRadius = '4px';
+    this.nameTagElement.style.fontSize = '14px';
+    this.nameTagElement.style.fontWeight = '600';
+    this.nameTagElement.style.lineHeight = '1.1';
+    this.nameTagElement.style.color = 'white';
+    this.nameTagElement.style.whiteSpace = 'nowrap';
+    this.nameTagElement.style.pointerEvents = 'none';
+    this.nameTagElement.style.textAlign = 'right';
+    this.nameTagElement.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.45)';
+    this.nameTagElement.style.transform = 'translate(-100%, 0)';
+    this.nameTagElement.style.transformOrigin = '100% 0%';
+
+    // CSS3DObject applies translate(-50%, -50%) — zero-size wrapper keeps the pivot on the corner.
+    this.nameTagWrapper = document.createElement('div');
+    this.nameTagWrapper.style.width = '0';
+    this.nameTagWrapper.style.height = '0';
+    this.nameTagWrapper.style.overflow = 'visible';
+    this.nameTagWrapper.style.pointerEvents = 'none';
+    this.nameTagWrapper.appendChild(this.nameTagElement);
+
+    this.nameTagPivot = new Object3D();
+    this.mesh.add(this.nameTagPivot);
+    this.updateNameTagPivotPosition();
+
+    this.nameTagObject = new CSS3DObject(this.nameTagWrapper);
+    this.nameTagWrapper.style.pointerEvents = 'none';
+    this.nameTagElement.style.pointerEvents = 'none';
+    this.nameTagObject.scale.setScalar(BATTLEFIELD_TAG_SCALE);
+    this.nameTagObject.userData.isNameTag = true;
+    this.nameTagPivot.add(this.nameTagObject);
+    this.applyNameTagOrientation();
 
     if (state?.battlefield?.cards) {
       state.battlefield.cards.forEach(mesh => {
@@ -143,7 +210,54 @@ export class PlayArea {
     this.graveyardZone.updatePositions?.();
     this.hand.updatePositions?.();
     this.deck.updatePositions?.();
-    this.battlefieldZone.updatePositions?.()
+    this.battlefieldZone.updatePositions?.();
+  }
+
+  updateNameTag(name: string, color = getPlayAreaPlayerColor(this)) {
+    this.nameTagElement.textContent = name;
+    this.nameTagElement.style.backgroundColor = color;
+    this.nameTagElement.style.color = textColorOnBackground(color);
+
+    if (!camera) return;
+
+    const mesh = this.battlefieldZone.mesh;
+    const worldNormal = new Vector3(0, 0, 1).applyQuaternion(
+      mesh.getWorldQuaternion(new Quaternion()),
+    );
+    const meshPosition = new Vector3();
+    mesh.getWorldPosition(meshPosition);
+    const toCamera = camera.position.clone().sub(meshPosition).normalize();
+    this.nameTagObject.visible = worldNormal.dot(toCamera) > 0;
+  }
+
+  private nameTagUsesLocalTextOrientation(): boolean {
+    const fromOpponentSeat = cameraViewMode() === 'opponent';
+    return fromOpponentSeat ? !this.isLocalPlayArea : this.isLocalPlayArea;
+  }
+
+  refreshNameTagOrientation() {
+    this.applyNameTagOrientation();
+  }
+
+  private updateNameTagPivotPosition() {
+    const battlefieldMesh = this.battlefieldZone.mesh;
+    const usesLocalCorner = this.nameTagUsesLocalTextOrientation();
+    const remoteXOffset = usesLocalCorner ? 0 : BATTLEFIELD_TAG_REMOTE_X_OFFSET;
+    this.nameTagPivot.position.set(
+      BATTLEFIELD_HALF_W - BATTLEFIELD_TAG_INSET + remoteXOffset,
+      battlefieldMesh.position.y + BATTLEFIELD_HALF_H - BATTLEFIELD_TAG_INSET,
+      battlefieldMesh.position.z + BATTLEFIELD_TAG_SURFACE_Z + BATTLEFIELD_TAG_Z_LIFT,
+    );
+  }
+
+  private applyNameTagOrientation() {
+    this.updateNameTagPivotPosition();
+    // Rotate text in place at the corner anchor — not the 3D object (that shifts position).
+    this.nameTagObject.rotation.z = 0;
+    this.nameTagElement.style.transform = this.nameTagUsesLocalTextOrientation()
+      ? 'translate(-100%, 0)'
+      : 'translate(-100%, 0) rotate(180deg)';
+    this.nameTagElement.style.transformOrigin = '100% 0%';
   }
 
   async dismissAllCardGrids() {
@@ -155,32 +269,106 @@ export class PlayArea {
     );
   }
 
-  async transferEntireZone(fromZone: CardZone, toZone: CardZone) {
+  async peekCards(count = 1) {
+    const actualCount = Math.min(count, this.deck.cards.length);
+    if (actualCount < 1) return;
+
+    const key = `peekCards.${this.peekZone.id}`;
+    if (this.inProgressActions.has(key)) return;
+    this.inProgressActions.add(key);
+
+    const skipAnimation = actualCount > 5;
+    await this.executePeekCards(this.deck, this.peekZone, actualCount, { skipAnimation });
+
+    if (this.isLocalPlayArea) {
+      sendEvent(
+        createPeekCardsEvent(this.deck.id, this.peekZone.id, actualCount, { skipAnimation }),
+      );
+    }
+
+    this.inProgressActions.delete(key);
+  }
+
+  async executePeekCards(
+    fromZone: CardZone,
+    toZone: CardZone,
+    count: number,
+    options?: { skipAnimation?: boolean },
+  ) {
+    const skipAnimation = options?.skipAnimation ?? count > 5;
+    const cardsToMove = fromZone.cards.slice(0, count);
+
+    for (const card of cardsToMove) {
+      await transferCard(card, fromZone, toZone, {
+        preventTransmit: true,
+        addOptions: { skipAnimation },
+      });
+    }
+  }
+
+  async transferEntireZone(
+    fromZone: CardZone,
+    toZone: CardZone,
+    addOptions?: { location?: 'top' | 'bottom' },
+  ) {
     if (this.inProgressActions.has(`dismissFromZone.${fromZone.id}`)) return;
     this.inProgressActions.add(`dismissFromZone.${fromZone.id}`);
-    let addOptions = toZone.zone === 'deck' ? { location: 'bottom' } : undefined;
+    const options = {
+      skipAnimation: true,
+      ...(addOptions ?? (toZone.zone === 'deck' ? { location: 'bottom' as const } : {})),
+    };
 
-    fromZone.cards.forEach(card => {
-      dispatchGameEvent(createTransferCardEvent(card, fromZone, toZone, { addOptions }));
-    });
+    await this.executeTransferEntireZone(fromZone, toZone, options);
 
-    await flushDispatchEventQueue();
+    if (this.isLocalPlayArea) {
+      sendEvent(createTransferEntireZoneEvent(fromZone.id, toZone.id, options));
+    }
+
     this.inProgressActions.delete(`dismissFromZone.${fromZone.id}`);
+  }
+
+  async executeTransferEntireZone(
+    fromZone: CardZone,
+    toZone: CardZone,
+    addOptions?: { location?: 'top' | 'bottom'; skipAnimation?: boolean },
+  ) {
+    const transfers = [...fromZone.cards].map(card => ({ card, toZone }));
+
+    for (const { card, toZone: target } of transfers) {
+      await transferCard(card, fromZone, target, {
+        preventTransmit: true,
+        addOptions,
+      });
+    }
   }
 
   async dismissFromZone(zone: CardZone) {
     if (this.inProgressActions.has(`dismissFromZone.${zone.id}`)) return;
     this.inProgressActions.add(`dismissFromZone.${zone.id}`);
 
-    zone.cards.forEach(card => {
-      const toZone = zonesById.get(card.mesh.userData.previousZoneId);
-      // toZone is expected to be undefined when dismissing tokens
+    await this.executeDismissZone(zone);
 
-      dispatchGameEvent(createTransferCardEvent(card, zone, toZone));
-    });
+    if (this.isLocalPlayArea) {
+      sendEvent(createDismissZoneEvent(zone.id));
+    }
 
-    await flushDispatchEventQueue();
     this.inProgressActions.delete(`dismissFromZone.${zone.id}`);
+  }
+
+  async executeDismissZone(zone: CardZone) {
+    const transfers = [...zone.cards]
+      .filter(card => card.mesh)
+      .map(card => ({
+        card,
+        toZone: zonesById.get(card.mesh!.userData.previousZoneId),
+      }));
+
+    for (const { card, toZone } of transfers) {
+      await transferCard(card, zone, toZone, {
+        preventTransmit: true,
+        addOptions: { skipAnimation: true },
+      });
+    }
   }
 
   async toggleTokenMenu(payload?: { availableTokens: CardReference[]; ids: string[] }) {
@@ -221,7 +409,7 @@ export class PlayArea {
       setCardData(card.mesh, 'isPublic', true);
       setCardData(card.mesh, 'isInteractive', true);
       setCardData(card.mesh, 'location', 'tokenSearch');
-      setCardData(card.mesh, 'clientId', provider.awareness.clientID);
+      setCardData(card.mesh, 'clientId', this.clientId);
       setCardData(card.mesh, 'isToken', true);
       return card;
     });
@@ -242,9 +430,14 @@ export class PlayArea {
   }
 
   modifyCard(card: Card, update = x => x) {
-    card.mesh.userData.modifiers = update(
+    const prev = structuredClone(
       card.mesh.userData.modifiers ?? { power: 0, toughness: 0, counters: {} },
     );
+    const next = update(prev);
+    if (this.isLocalPlayArea) {
+      playCounterSoundForModifierChange(prev, next);
+    }
+    card.mesh.userData.modifiers = next;
     this.emitEvent({ type: 'modifyCard', payload: { userData: card.mesh.userData } });
 
     updateModifiers(card);
@@ -253,29 +446,20 @@ export class PlayArea {
   draw() {
     let card = this.deck.cards[0];
     if (!card) return;
+    this.deck.materializeTopCard();
     const event = createTransferCardEvent(card, this.deck, this.hand);
     dispatchGameEvent(event);
   }
 
-  async mulligan(drawCount: number, existingOrder?: number[]) {
-    let cardsInHand = this.hand.cards;
+  async executeMulligan(drawCount: number, existingOrder?: number[]) {
+    const cardsInHand = this.hand.cards.length;
 
-    // for (const card of this.hand.cards) {
-    //   const event = createTransferCardEvent(card, this.hand, this.deck, {
-    //     addOptions: { location: 'bottom' },
-    //   });
-
-    //   dispatchGameEvent(event);
-    // }
-    // await flushDispatchEventQueue();
-
-    await doXTimes(cardsInHand.length, () => {
-      let card = this.hand.cards[0];
+    await doXTimes(cardsInHand, () => {
+      const card = this.hand.cards[0];
       transferCard(card, this.hand, this.deck, { preventTransmit: true });
     });
 
-    let order = await this.deck.shuffle(existingOrder);
-    this.emitEvent({ type: 'mulligan', payload: { order, drawCount } });
+    const order = await this.deck.shuffle(existingOrder);
 
     await doXTimes(
       drawCount,
@@ -284,10 +468,17 @@ export class PlayArea {
       },
       50,
     );
+
+    return order;
+  }
+
+  async mulligan(drawCount: number, existingOrder?: number[]) {
+    const order = await this.executeMulligan(drawCount, existingOrder);
+    this.emitEvent({ type: 'mulligan', skipReplay: SKIP_REPLAY, payload: { order, drawCount } });
   }
 
   reveal(card: Card) {
-    if (provider.awareness.clientID !== card?.mesh.userData.clientId) {
+    if (getLocalPlayerClientId() !== card?.mesh.userData.clientId) {
       setCardData(card.mesh, 'isPublic', true);
       this.revealZone.addCard(card);
     } else {
@@ -350,16 +541,20 @@ export class PlayArea {
     this.emitEvent({ type: 'deckFlipTop', payload: { toggle, userData: card.mesh.userData } });
   }
 
+  async executeShuffleDeck(existingOrder?: number[]) {
+    return this.deck.shuffle(existingOrder);
+  }
+
   async shuffleDeck(existingOrder?: number[]) {
-    let order = await this.deck.shuffle(existingOrder);
+    const order = await this.executeShuffleDeck(existingOrder);
+    if (this.isLocalPlayArea) {
+      playShuffleDeckSound();
+    }
     this.emitEvent({ type: 'shuffleDeck', payload: { order } });
   }
 
   flip(cardMesh: Mesh) {
-    let focusCameraTarget = getFocusCameraPositionRelativeTo(
-      cardMesh,
-      new Vector3(CARD_WIDTH / 4, 0, 0),
-    );
+    let focusCameraTarget = getFocusCameraPositionRelativeTo(cardMesh);
     setCardData(cardMesh, 'isFlipped', !cardMesh.userData.isFlipped);
     this.emitEvent({ type: 'flip', payload: { userData: cardMesh.userData } });
 
@@ -420,8 +615,23 @@ export class PlayArea {
     card.mesh.parent?.add(newCard.mesh);
   }
 
+  setAsLocalPlayArea() {
+    this.isLocalPlayArea = true;
+    this.applyNameTagOrientation();
+    this.hand.enableLocalHand();
+    this.peekZone.enableLocalFeatures();
+    this.revealZone.enableLocalFeatures();
+    this.tokenSearchZone.enableLocalFeatures();
+
+    if (!this.deck.mesh.userData.hasLocalDeckListener) {
+      this.deck.mesh.addEventListener('click', () => this.draw());
+      this.deck.mesh.userData.hasLocalDeckListener = true;
+    }
+  }
+
   getLocalState(): State {
     const localState = {
+      playerSessionId: this.playerSessionId,
       graveyard: this.graveyardZone.getSerializable(),
       exile: this.exileZone.getSerializable(),
       battlefield: this.battlefieldZone.getSerializable(),
@@ -441,6 +651,7 @@ export class PlayArea {
   }
 
   private emitEvent(event = {}) {
+    if (!this.isLocalPlayArea || !isEventCatchUpComplete()) return;
     this.listeners.forEach(callback => {
       callback(event);
     });
@@ -475,21 +686,15 @@ export class PlayArea {
     return playArea;
   }
 
-  async loadTextures() {
-    const cache = new Map<string, Promise<MeshStandardMaterial>>();
-    const promises = this.battlefieldZone.cards.map(card => loadCardTextures(card, cache));
-    promises.concat(
-      ...this.deck.cards.map(
-        (card, i) =>
-          new Promise<void>(resolve =>
-            setTimeout(() => {
-              loadCardTextures(card, cache).then(resolve);
-            }, i * 20),
-          ),
-      ),
-    );
-    await Promise.all(promises);
-    cache.clear();
+  loadTextures() {
+    const cache = new Map<string, Promise<import('three').MeshStandardMaterial>>();
+    const jobs = [
+      ...this.battlefieldZone.cards.filter(card => card.mesh).map(card => loadCardTextures(card, cache)),
+      ...this.hand.cards.filter(card => card.mesh).map(card => loadCardTextures(card, cache)),
+      preloadStackTextures(this.graveyardZone, cache),
+      preloadStackTextures(this.exileZone, cache),
+    ];
+    void Promise.all(jobs).finally(() => cache.clear());
   }
 
   destroy() {
@@ -509,11 +714,15 @@ export class PlayArea {
     this.battlefieldZone.destroy();
     this.deck.destroy();
     this.hand.destroy();
+    this.nameTagPivot.remove(this.nameTagObject);
+    this.mesh.remove(this.nameTagPivot);
+    this.nameTagWrapper.remove();
     this.cards = [];
   }
 
-  static FromNetworkState(state: State) {
-    let playArea = new PlayArea(state.clientId!, state.cards!, state.deck.cards!, state);
+  static FromNetworkState(state: State & { clientID?: number }) {
+    const clientId = state.clientId ?? state.clientID!;
+    let playArea = new PlayArea(clientId, state.cards ?? [], state.deck?.cards ?? [], state);
     playArea.updatePositions();
     playArea.loadTextures();
     return playArea;

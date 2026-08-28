@@ -8,6 +8,7 @@ import { Card, CARD_HEIGHT, CARD_WIDTH, CardZone, SCROLL_SPEED } from './constan
 import {
   cardsById,
   peekFilterText,
+  scrollTarget,
   setHoverSignal,
   setPeekFilterText,
   setScrollTarget,
@@ -27,6 +28,39 @@ export class CardGrid implements CardZone {
   private maxScroll: number;
   private isLocalPlayArea: boolean;
   public mode: 'grid' | 'field' = 'grid';
+
+  private localFeaturesEnabled = false;
+  private localFeaturesDispose?: () => void;
+
+  setLocalPlayArea(isLocal: boolean) {
+    this.isLocalPlayArea = isLocal;
+    if (isLocal) this.enableLocalFeatures();
+  }
+
+  enableLocalFeatures() {
+    if (this.localFeaturesEnabled) return;
+    this.localFeaturesEnabled = true;
+    this.isLocalPlayArea = true;
+
+    this.scrollContainer.addEventListener('scroll', event => {
+      let position = this.scrollContainer.position
+        .clone()
+        .add(new Vector3(0, event.event.deltaY * SCROLL_SPEED, 0));
+
+      position.y = Math.min(position.y, this.maxScroll);
+      position.y = Math.max(position.y, this.minScroll);
+
+      animateObject(this.scrollContainer, { duration: 0.2, to: { position } });
+    });
+
+    createRoot(dispose => {
+      this.localFeaturesDispose = dispose;
+      createEffect(() => {
+        this.filterCards();
+        this.updateCardPositions();
+      });
+    });
+  }
   public observable: CardZone['observable'];
   private setObservable: SetStoreFunction<CardZone['observable']>;
   private destroyReactivity;
@@ -66,21 +100,7 @@ export class CardGrid implements CardZone {
       });
 
       if (this.isLocalPlayArea) {
-        this.scrollContainer.addEventListener('scroll', event => {
-          let position = this.scrollContainer.position
-            .clone()
-            .add(new Vector3(0, event.event.deltaY * SCROLL_SPEED, 0));
-
-          position.y = Math.min(position.y, this.maxScroll);
-          position.y = Math.max(position.y, this.minScroll);
-
-          animateObject(this.scrollContainer, { duration: 0.2, to: { position } });
-        });
-
-        createEffect(() => {
-          this.filterCards();
-          this.updateCardPositions();
-        });
+        this.enableLocalFeatures();
       }
     });
   }
@@ -233,7 +253,7 @@ export class CardGrid implements CardZone {
     };
   }
 
-  addCard(card: Card) {
+  addCard(card: Card, { skipAnimation = false } = {}) {
     if (!card) return;
     let initialPosition = new Vector3();
     let indexPosition = this.cards.length;
@@ -260,13 +280,19 @@ export class CardGrid implements CardZone {
 
     this.listeners.forEach(fn => fn(this.cards));
 
-    this.adjustHandPosition();
-
     let { position, rotation } = this.getCardPosition(indexPosition);
     card.mesh.userData.resting = {
       position,
       rotation,
     };
+
+    if (skipAnimation) {
+      card.mesh.position.copy(position);
+      card.mesh.rotation.copy(rotation);
+      return;
+    }
+
+    this.adjustHandPosition();
 
     const path = new CatmullRomCurve3([
       initialPosition,
@@ -306,6 +332,9 @@ export class CardGrid implements CardZone {
 
     if (this.cards.length < 1) {
       setHoverSignal();
+      if (this.isLocalPlayArea && scrollTarget() === this.scrollContainer) {
+        setScrollTarget();
+      }
     }
     if (this.filteredCards) {
       this.filteredCards = this.filteredCards.filter(card => card.id !== cardMesh.userData.id);
@@ -315,10 +344,13 @@ export class CardGrid implements CardZone {
       this.filterCards();
     }
 
-    this.updateCardPositions();
+    if (!cardMesh.userData.skipAnimation) {
+      this.updateCardPositions();
+    }
   }
 
   destroy() {
+    this.localFeaturesDispose?.();
     this.cards.map(card => {
       cardsById.delete(card.id);
     });
@@ -326,6 +358,6 @@ export class CardGrid implements CardZone {
     cleanupMesh(this.mesh);
     this.cards = [];
     this.cardMap.clear();
-    this.destroyReactivity();
+    this.destroyReactivity?.();
   }
 }

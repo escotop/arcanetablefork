@@ -4,3 +4,29 @@ dist
 .nitro
 .env*
 secrets.yml
+
+# Build / cache
+.vite
+*.tsbuildinfo
+
+# Test
+coverage
+.vitest
+
+# Deno (scry-server-*)
+.deno
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / local AI
+.cursor
+.idea
+.vscode/*
+!.vscode/extensions.json

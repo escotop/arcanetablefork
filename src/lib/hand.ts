@@ -60,6 +60,7 @@ export class Hand implements CardZone {
     const point = new Vector3(0, CARD_HEIGHT/2, 0);
     this.mesh.localToWorld(point);
     const projection = getProjectionVec(point);
+    if (!projection) return;
 
     this.setObservable('uiTether', {
       x: projection.x,
@@ -85,6 +86,42 @@ export class Hand implements CardZone {
       id: this.id,
       cards: this.cards.map(card => getSerializableCard(card.mesh)),
     };
+  }
+
+  private focusedIndex?: number;
+  private keyboardFocusedIndex?: number;
+
+  focusCardAtIndex(index: number, { keyboard = false } = {}) {
+    if (index < 0 || index >= this.cards.length) return;
+    if (this.focusedIndex !== undefined && this.focusedIndex !== index) {
+      animateUnfocusCard(this.mesh, this.cards, this.focusedIndex);
+    }
+    this.focusedIndex = index;
+    if (keyboard) {
+      this.keyboardFocusedIndex = index;
+    }
+    animateFocusCard(this.mesh, this.cards, index);
+  }
+
+  clearFocus() {
+    if (this.focusedIndex === undefined) return;
+    animateUnfocusCard(this.mesh, this.cards, this.focusedIndex);
+    this.focusedIndex = undefined;
+    this.keyboardFocusedIndex = undefined;
+  }
+
+  isKeyboardFocused(index: number) {
+    return this.keyboardFocusedIndex === index;
+  }
+
+  enableLocalHand() {
+    this.isLocalHand = true;
+    for (const card of this.cards) {
+      card.mesh.removeEventListener('mousein', this.cardMouseIn);
+      card.mesh.removeEventListener('mouseout', this.cardMouseOut);
+      card.mesh.addEventListener('mousein', this.cardMouseIn);
+      card.mesh.addEventListener('mouseout', this.cardMouseOut);
+    }
   }
 
   addCard(card: Card, { skipAnimation = false, destroy = false } = {}) {
@@ -157,6 +194,10 @@ export class Hand implements CardZone {
 
     let card = cardsById.get(event.mesh.userData.id)!;
     let index = this.cards.indexOf(card);
+    this.focusedIndex = index;
+    if (this.keyboardFocusedIndex !== undefined && this.keyboardFocusedIndex !== index) {
+      this.keyboardFocusedIndex = undefined;
+    }
     animateFocusCard(this.mesh, this.cards, index);
   };
 
@@ -167,7 +208,11 @@ export class Hand implements CardZone {
 
     let card = cardsById.get(event.mesh.userData.id)!;
     let index = this.cards.indexOf(card);
+    if (this.keyboardFocusedIndex === index) return;
     animateUnfocusCard(this.mesh, this.cards, index);
+    if (this.focusedIndex === index) {
+      this.focusedIndex = undefined;
+    }
   };
 
   removeCard(cardMesh: Object3D) {
@@ -188,6 +233,15 @@ export class Hand implements CardZone {
     this.setObservable('cardCount', this.cards.length);
 
     this.adjustHandPosition();
+    if (this.focusedIndex === cardIndex) {
+      this.focusedIndex = undefined;
+      this.keyboardFocusedIndex = undefined;
+    } else if (this.focusedIndex !== undefined && this.focusedIndex > cardIndex) {
+      this.focusedIndex--;
+      if (this.keyboardFocusedIndex !== undefined) {
+        this.keyboardFocusedIndex--;
+      }
+    }
     for (let i = cardIndex; i < this.cards.length; i++) {
       let cardMesh = this.cards[i]?.mesh;
       if (!cardMesh) {

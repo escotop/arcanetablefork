@@ -11,7 +11,13 @@ import PeekContextMenu from './peek';
 
 export default function ContextMenuHandler(props: { playArea: PlayArea }) {
   const target = createMemo(() => contextMenuSignal()?.target);
-  const location = createMemo(() => target()?.userData?.location);
+  const location = createMemo(() => {
+    const mesh = target();
+    if (!mesh) return undefined;
+    if (mesh.userData?.location) return mesh.userData.location;
+    if (mesh.userData?.zone === 'deck') return 'deck';
+    return undefined;
+  });
 
   return (
     <>

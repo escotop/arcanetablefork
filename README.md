@@ -55,7 +55,9 @@ Visit `http://localhost:3000` to start playtesting!
 
 ## 🛠️ Contributing
 
-Contributions are what make this project thrive! Here’s how you can help:
+Contributions are what make this project thrive! See [CONTRIBUTING.md](./CONTRIBUTING.md) for architecture, conventions, and change checklists.
+
+Here’s how you can help:
 
 1. Fork the repository.
 2. Create your feature branch:

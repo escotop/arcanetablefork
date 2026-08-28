@@ -1,29 +1,30 @@
 import { createMemo, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { Command, CommandInput } from '~/components/ui/command';
 import { Menubar, MenubarItem, MenubarMenu } from '~/components/ui/menubar';
-import { playAreas, players, provider, setHoverSignal, setPeekFilterText } from '../globals';
+import { getLocalPlayArea, players, setHoverSignal, setPeekFilterText } from '../globals';
 import styles from './peekMenu.module.css';
 import { cleanupCard } from '../card';
 import { Card } from '../constants';
 
 export default function RevealMenu() {
-  const playArea = playAreas[provider.awareness.clientID];
+  const playArea = () => getLocalPlayArea();
   const [peekCards, setPeekCards] = createSignal<Card[]>([]);
 
   const revealingPlayer = createMemo(() => {
     let card = peekCards()?.[0];
     if (!card) return;
     return players().find(player => player.id === card.mesh.userData.clientId);
-
-  })
+  });
 
   let inputRef;
 
   onMount(() => {
-    const unsub = playArea.revealZone.subscribeToCardList(cardList => {
-      setPeekCards(cardList)
+    const area = playArea();
+    if (!area) return;
+    const unsub = area.revealZone.subscribeToCardList(cardList => {
+      setPeekCards(cardList);
       if (cardList?.length > 0 && inputRef) {
-        inputRef.focus()
+        inputRef.focus();
       }
     });
 
@@ -34,12 +35,13 @@ export default function RevealMenu() {
 
   return (
     <>
-      <Show when={peekCards()?.length > 0}>
+      <Show when={peekCards()?.length > 0 && playArea()}>
+        {area => (
         <div class={styles.searchContainer}>
           <div class={styles.search}>
             <h2 class='text-white text-xl text-left mb-4'>
               Revealed — from {revealingPlayer()?.entry?.name} |{' '}
-              {playArea.revealZone.observable.cardCount}
+              {area.revealZone.observable.cardCount}
             </h2>
             <Command>
               <CommandInput
@@ -47,7 +49,7 @@ export default function RevealMenu() {
                 placeholder='Search'
                 onKeyUp={e => {
                   if (e.code === 'Escape') {
-                    playArea.dismissFromZone(playArea.revealZone);
+                    area.dismissFromZone(area.revealZone);
                   }
                 }}
                 onValueChange={value => {
@@ -58,7 +60,7 @@ export default function RevealMenu() {
                 <MenubarMenu>
                   <MenubarItem
                     onClick={() => {
-                      playArea.dismissFromZone(playArea.revealZone)
+                      area.dismissFromZone(area.revealZone);
                       setHoverSignal();
                     }}>
                     Dismiss
@@ -68,6 +70,7 @@ export default function RevealMenu() {
             </Command>
           </div>
         </div>
+        )}
       </Show>
     </>
   );

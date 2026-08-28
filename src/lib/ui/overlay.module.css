@@ -2,6 +2,7 @@
   text-align: center;
   position: fixed;
   width: 100%;
+  z-index: 10;
   pointer-events: none;
 }
 
@@ -11,9 +12,42 @@
 }
 
 .focusCameraContainer {
+  position: relative;
+  height: var(--focus-panel-height, 50vh);
+  aspect-ratio: var(--focus-panel-aspect, 0.716);
+  width: auto;
+}
+
+.focusCanvasSlot {
+  position: absolute;
+  inset: 0;
+
   :global(canvas) {
-    height: 50vh;
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
   }
+}
+
+.spanishPreviewOverlay {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  text-align: center;
+  background: hsla(var(--background) / 0.72);
+  color: hsl(var(--foreground));
+}
+
+.spanishPreviewMessage {
+  max-width: 18ch;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .cardActions {

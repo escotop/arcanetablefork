@@ -19,6 +19,9 @@ import {
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { IndexeddbPersistence } from 'y-indexeddb';
+import { touchGameLastAccess } from './gamePersistence';
+import { markLoadProfile, profileAsync } from './loadProfile';
 import { WebrtcProvider } from 'y-webrtc';
 import { WebsocketProvider } from 'y-websocket';
 import { Doc } from 'yjs';
@@ -26,6 +29,7 @@ import { YArray, YMap } from 'yjs/dist/src/internals';
 import {
   ANNOUNCEMENT_VISIBLE_DURATION,
   Card,
+  CARD_HEIGHT,
   CARD_WIDTH,
   CardSystem,
   CardZone,
@@ -41,8 +45,14 @@ import { cleanupFromNode, getFocusCameraPositionRelativeTo } from './utils';
 import { Selection } from './selection';
 import { captureConsole } from './console-capture';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
+import { CSS3DRenderer } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import GUI from 'lil-gui';
 import { createLocalStore } from './localStore';
+import { clearPlayerSessionRegistry, clearJoinBinding, unregisterPlayerSession } from './playerSession';
+import { clearWaterdrops } from './waterdropEffect';
+import { clearPingSync } from './pingSync';
+import { resetCameraView, captureLocalCameraView } from './cameraView';
+import { clearSpanishPreview } from './spanishCardPreview';
 
 export function expect(test: boolean, message: string, ...supplemental: any) {
   if (!test) {
@@ -62,6 +72,7 @@ export let clock: Clock;
 export let loadingManager: LoadingManager;
 export let textureLoader: TextureLoader;
 export let renderer: WebGLRenderer;
+export let css3dRenderer: CSS3DRenderer | null = null;
 export let scene: Scene;
 export let camera: PerspectiveCamera;
 export let focusRenderer: WebGLRenderer;
@@ -83,8 +94,48 @@ export let focusRayCaster: Raycaster;
 export let arrowHelper = new ArrowHelper();
 export const [scrollTarget, setScrollTarget] = createSignal();
 export let provider: WebsocketProvider | WebrtcProvider;
+let indexeddbPersistence: IndexeddbPersistence | null = null;
 export let [logs, setLogs] = createStore([]);
 export let [processedEvents, setProcessedEvents] = createSignal(0);
+let gameStateImportInProgress = false;
+let eventCatchUpComplete = false;
+
+export function setEventCatchUpComplete(value: boolean) {
+  eventCatchUpComplete = value;
+}
+
+export function isEventCatchUpComplete() {
+  return eventCatchUpComplete;
+}
+
+export function hasPersistedGameState() {
+  return !!indexeddbPersistence?.synced && gameLog.length > 0;
+}
+
+export function setGameStateImportInProgress(value: boolean) {
+  gameStateImportInProgress = value;
+}
+
+export function isGameStateImportInProgress() {
+  return gameStateImportInProgress;
+}
+
+export function resetGameSceneForReplay() {
+  Object.values(playAreas).forEach(playArea => {
+    if (playArea && table) table.remove(playArea.mesh);
+    playArea?.destroy();
+  });
+  setPlayAreas({});
+  cardsById.clear();
+  zonesById.clear();
+  setLogs([]);
+  setProcessedEvents(0);
+  setPlayerCount(0);
+  clearPlayerSessionRegistry();
+  setLocalPlayerClientId(undefined);
+  setIsIntitialized(false);
+  setEventCatchUpComplete(false);
+}
 export let [isSpectating, setIsSpectating] = createSignal(false);
 export let [playerCount, setPlayerCount] = createSignal(0);
 export let orbitControls: OrbitControls;
@@ -92,7 +143,54 @@ export const PLAY_AREA_ROTATIONS = [0, Math.PI, Math.PI / 2, Math.PI / 2 + Math.
 export const colorHashLight = new ColorHash({ lightness: 0.7 });
 export const colorHashDark = new ColorHash({ lightness: 0.2 });
 export const [selectedDeckId, setSelectedDeckId] = createSignal<string | undefined>();
-export const [settings, setSettings] = createLocalStore('settings', { enableCameraTilt: false });
+export const FOCUS_PANEL_BASE_HEIGHT_RATIO = 0.5;
+export const FOCUS_PANEL_WIDE_ASPECT = 750 / 700;
+export const FOCUS_PANEL_MIN_SCALE = 0.25;
+export const FOCUS_PANEL_MAX_SCALE = 1.5;
+
+export const SOUND_VOLUME_MIN = 0;
+export const SOUND_VOLUME_MAX = 1;
+export const SOUND_VOLUME_STEP = 0.05;
+
+export const [settings, setSettings] = createLocalStore('settings', {
+  enableCameraTilt: false,
+  focusPanelScale: 1,
+  playerColor: undefined as string | undefined,
+  localSoundVolume: 0.65,
+  remoteSoundVolume: 0.4,
+});
+
+export function cardShowsCounterModifiers(mesh?: THREE.Object3D) {
+  if (!mesh) return false;
+  const mods = mesh.userData?.modifiers;
+  if (!mods) return false;
+  if (mesh.userData.isToken) return true;
+  const declared = mods.counters;
+  if (!declared) return false;
+  return Object.values(declared).some(
+    value => value !== 0 && value !== '' && value != null && value !== false,
+  );
+}
+
+export function getFocusPanelAspect(mesh?: THREE.Object3D) {
+  return cardShowsCounterModifiers(mesh) ? FOCUS_PANEL_WIDE_ASPECT : CARD_WIDTH / CARD_HEIGHT;
+}
+
+export function getFocusPanelDimensions(scale = settings.focusPanelScale, mesh?: THREE.Object3D) {
+  const focusHeight = window.innerHeight * FOCUS_PANEL_BASE_HEIGHT_RATIO * scale;
+  const focusWidth = focusHeight * getFocusPanelAspect(mesh);
+  return { focusWidth, focusHeight };
+}
+
+export function updateFocusPanelSize(scale = settings.focusPanelScale, mesh?: THREE.Object3D) {
+  if (!focusRenderer || !focusCamera) return;
+  const targetMesh = mesh ?? hoverSignal()?.mesh;
+  const { focusWidth, focusHeight } = getFocusPanelDimensions(scale, targetMesh);
+  focusRenderer.setPixelRatio(window.devicePixelRatio);
+  focusRenderer.setSize(focusWidth, focusHeight);
+  focusCamera.aspect = focusWidth / focusHeight;
+  focusCamera.updateProjectionMatrix();
+}
 export let textureLoaderWorker: Comlink.Remote<TextureLoaderWorkerType>;
 export let gui: GUI = null;
 export let baseCameraQuaternion: THREE.Quaternion;
@@ -106,6 +204,26 @@ export let cardLoadingTexture: THREE.Texture;
 export let cardBackTexture: THREE.Texture;
 
 export let [cardSystem, setCardSystem] = createStore<CardSystem>({} as CardSystem);
+
+/** Stable client id from the original join event; used after reconnect when awareness id changes. */
+let localPlayerClientId: number | undefined;
+
+export function setLocalPlayerClientId(clientId: number | undefined) {
+  localPlayerClientId = clientId;
+}
+
+export function getLocalPlayerClientId() {
+  if (localPlayerClientId !== undefined) return localPlayerClientId;
+  const awarenessId = provider?.awareness?.clientID;
+  if (awarenessId !== undefined && playAreas[awarenessId]?.isLocalPlayArea) {
+    return awarenessId;
+  }
+}
+
+export function getLocalPlayArea(): PlayArea | undefined {
+  const clientId = getLocalPlayerClientId();
+  return clientId !== undefined ? playAreas[clientId] : undefined;
+}
 
 export const DEFAULT_CARD_BACK = '/arcane-table-back.webp';
 
@@ -183,14 +301,56 @@ export function initClock() {
 
 export const DEFAULT_CARD_SYSTEM_URI = 'https://scry-server-mtg.arcanetable.app';
 
+function waitForIndexedDbSync(): Promise<void> {
+  if (!indexeddbPersistence) return Promise.resolve();
+  return new Promise(resolve => {
+    if (indexeddbPersistence!.synced) {
+      resolve();
+      return;
+    }
+    const onSynced = () => {
+      indexeddbPersistence!.off('synced', onSynced);
+      resolve();
+    };
+    indexeddbPersistence.on('synced', onSynced);
+    setTimeout(() => {
+      indexeddbPersistence!.off('synced', onSynced);
+      resolve();
+    }, 1500);
+  });
+}
+
+function parseEnvUrlList(value: string | undefined): string[] | undefined {
+  if (!value) return undefined;
+  return value
+    .split(',')
+    .map(url => url.trim())
+    .filter(Boolean);
+}
+
+function createSyncProvider(gameId: string) {
+  const wsUrl = import.meta.env.VITE_YJS_WS_URL as string | undefined;
+  if (import.meta.env.PROD || wsUrl) {
+    return new WebsocketProvider(wsUrl ?? 'wss://ws.arcanetable.app', gameId, ydoc);
+  }
+
+  const signaling =
+    parseEnvUrlList(import.meta.env.VITE_YJS_SIGNALING_URL as string | undefined) ?? [
+      'wss://signaling.arcanetable.app',
+    ];
+
+  return new WebrtcProvider(gameId, ydoc, { signaling });
+}
+
 export async function init({ gameId }) {
   tearingDown = false;
+  touchGameLastAccess(gameId);
   headlessInit();
-  if (import.meta.env.PROD) {
-    provider = new WebsocketProvider('wss://ws.arcanetable.app', gameId, ydoc);
-  } else {
-    provider = new WebrtcProvider(gameId, ydoc, { signaling: [`signaling.arcanetable.app`] });
-  }
+  indexeddbPersistence?.destroy();
+  indexeddbPersistence = new IndexeddbPersistence(`arcanetable-${gameId}`, ydoc);
+  await profileAsync('indexeddb sync', () => waitForIndexedDbSync(), { gameId });
+  provider = createSyncProvider(gameId);
+  markLoadProfile('sync provider created', { gameId });
 
   loadingManager.onProgress = function (item, loaded, total) {
     console.log(item, loaded, total);
@@ -202,6 +362,7 @@ export async function init({ gameId }) {
   cardLoadingTexture = textureLoader.load(`/loading-texture.png`);
   cardLoadingTexture.repeat.setX(1 / 3);
   cardLoadingTexture.repeat.setY(1 / 2);
+  markLoadProfile('card textures queued');
 
   THREE.Cache.enabled = true;
 
@@ -221,8 +382,7 @@ export async function init({ gameId }) {
   renderer.setClearColor(0x05050e);
   renderer.domElement.style.width = '100vw';
 
-  let focusHeight = window.innerHeight * 0.5;
-  let focusWidth = (focusHeight / 700) * 750;
+  const { focusWidth, focusHeight } = getFocusPanelDimensions();
 
   focusRenderer = new WebGLRenderer();
   focusRenderer.setPixelRatio(window.devicePixelRatio);
@@ -241,6 +401,7 @@ export async function init({ gameId }) {
 
   camera.lookAt(scene.position);
   baseCameraQuaternion = camera.quaternion.clone();
+  captureLocalCameraView();
 
   createEffect(() => {
     if (!settings.enableCameraTilt) {
@@ -249,6 +410,7 @@ export async function init({ gameId }) {
   });
 
   selection = new Selection(renderer, camera, scene);
+  markLoadProfile('three.js scene + renderers');
 
   const pmrem = new THREE.PMREMGenerator(renderer);
   pmrem.compileEquirectangularShader();
@@ -308,6 +470,7 @@ export async function init({ gameId }) {
   };
 
   scene.add(table);
+  markLoadProfile('table mesh ready');
 }
 
 export function applyPlayerTransform(group: THREE.Group, index: number) {
@@ -346,7 +509,7 @@ export function startSpectating() {
  * @deprecated use dispatchEvent instead
  */
 export function sendEvent(event) {
-  event.clientID = provider.awareness.clientID;
+  event.clientID = getLocalPlayerClientId();
   event.locallyApplied = true;
   logger.warn('sendEvent', event.type);
   gameLog.push([event]);
@@ -375,7 +538,7 @@ export async function flushDispatchEventQueue() {
 }
 
 export function dispatchGameEvent(event: any, timing = 0) {
-  event.clientID = provider.awareness.clientID;
+  event.clientID = getLocalPlayerClientId();
   if (batch.length > 0 && timing !== batchTiming) {
     flushDispatchEventQueue();
   }
@@ -387,14 +550,42 @@ export function dispatchGameEvent(event: any, timing = 0) {
   }
 }
 
+/** CSS3DObject and the renderer's inner camera layer default to pointer-events: auto and block the WebGL canvas. */
+export function patchCss3dPointerEvents() {
+  if (!css3dRenderer) return;
+  const root = css3dRenderer.domElement;
+  root.style.pointerEvents = 'none';
+  root.querySelectorAll<HTMLElement>('*').forEach(node => {
+    node.style.pointerEvents = 'none';
+  });
+}
+
+export function setupCss3dRenderer(container: HTMLElement) {
+  css3dRenderer?.domElement.remove();
+  css3dRenderer = new CSS3DRenderer();
+  css3dRenderer.setSize(window.innerWidth, window.innerHeight);
+  css3dRenderer.domElement.style.position = 'absolute';
+  css3dRenderer.domElement.style.top = '0';
+  css3dRenderer.domElement.style.left = '0';
+  css3dRenderer.domElement.style.pointerEvents = 'none';
+  css3dRenderer.domElement.style.zIndex = '2';
+  container.appendChild(css3dRenderer.domElement);
+  patchCss3dPointerEvents();
+}
+
 export function cleanup() {
   tearingDown = true;
+  clearSpanishPreview();
+  setLocalPlayerClientId(undefined);
+  clearPlayerSessionRegistry();
   cardsById.clear();
   zonesById.clear();
   setPeekFilterText('');
   setHoverSignal();
   setScrollTarget();
   provider?.destroy();
+  indexeddbPersistence?.destroy();
+  indexeddbPersistence = null;
   ydoc.destroy();
   ydoc = new Doc();
   setAnimating(false);
@@ -403,6 +594,10 @@ export function cleanup() {
   setCapturedErrors([]);
   setIsSpectating(false);
   setIsIntitialized(false);
+  setEventCatchUpComplete(false);
+  clearWaterdrops();
+  clearPingSync();
+  resetCameraView();
 
   gui?.destroy?.();
   gui = null;
@@ -417,28 +612,40 @@ export function cleanup() {
   focusRenderer.dispose();
   focusRenderer.domElement.remove();
 
+  css3dRenderer?.domElement.remove();
+  css3dRenderer = null;
+
   cleanupFromNode(scene, true);
 }
-export function getProjectionVec(vec: Vector3) {
-  let canvas = renderer.domElement;
-  let projectionVec = vec.clone();
-  projectionVec.project(camera);
-  projectionVec.x = Math.round(
-    (0.5 + projectionVec.x / 2) * (canvas.width / window.devicePixelRatio),
-  );
-  projectionVec.y = Math.round(
-    (0.5 - projectionVec.y / 2) * (canvas.height / window.devicePixelRatio),
-  );
+export function getProjectionVec(vec: Vector3): Vector3 | null {
+  if (!camera || !renderer?.domElement) return null;
+
+  const canvas = renderer.domElement;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+
+  const projectionVec = vec.clone().project(camera);
+  if (projectionVec.z > 1) return null;
+
+  projectionVec.x = rect.left + ((projectionVec.x + 1) / 2) * rect.width;
+  projectionVec.y = rect.top + ((1 - projectionVec.y) / 2) * rect.height;
+  projectionVec.z = 0;
   return projectionVec;
 }
 
-export function getTetherCssVariables(tether: { x: number, y: number, offset: { x?: string; y?: string}}) {
+export function getTetherCssVariables(tether: {
+  x: number;
+  y: number;
+  offset: { x?: string; y?: string };
+  rotation?: number;
+}) {
   return `
     --x: ${tether.x}px;
     --y: ${tether.y}px;
     --offset-x: ${tether.offset?.x || 0};
     --offset-y: ${tether.offset?.y || 0};
-  `
+    --rotation: ${tether.rotation ?? 0}deg;
+  `;
 }
 
 export function onConcede(clientId?: string) {
@@ -464,14 +671,64 @@ export function onConcede(clientId?: string) {
   }
 }
 
-export function updateFocusCamera(target: Object3D, offset = new Vector3(CARD_WIDTH / 4, 0, 0)) {
+export function onKickPlayer(
+  targetClientId: number,
+  options?: { playerSessionId?: string; gameId?: string },
+) {
+  const playArea = playAreas[targetClientId];
+  if (!playArea) return;
+
+  const playerName =
+    players().find(
+      player =>
+        player.id === targetClientId ||
+        (options?.playerSessionId && player.entry.playerSessionId === options.playerSessionId),
+    )?.entry?.name ?? 'Player';
+
+  if (options?.playerSessionId) {
+    unregisterPlayerSession(options.playerSessionId);
+  }
+
+  setPlayerCount(count => count - 1);
+  table.remove(playArea.mesh);
+  playArea.destroy();
+  setPlayAreas(targetClientId, undefined);
+
+  const isLocal = targetClientId === getLocalPlayerClientId();
+  if (isLocal) {
+    setLocalPlayerClientId(undefined);
+    setIsIntitialized(false);
+    setSelectedDeckId(undefined);
+    setIsSpectating(false);
+    if (options?.gameId) clearJoinBinding(options.gameId);
+    createAnnouncement('You were removed from the game');
+  } else {
+    createAnnouncement(`${playerName} was removed from the game`);
+  }
+}
+
+export function kickPlayer(targetClientId: number, gameId: string) {
+  if (targetClientId === getLocalPlayerClientId()) return;
+  const playArea = playAreas[targetClientId];
+  if (!playArea) return;
+
+  dispatchGameEvent({
+    type: 'kick',
+    payload: {
+      targetClientId,
+      playerSessionId: playArea.playerSessionId,
+      gameId,
+    },
+  });
+}
+
+export function updateFocusCamera(target: Object3D) {
   if (focusCamera.userData.isAnimating) return;
 
-  let { position, rotation } = getFocusCameraPositionRelativeTo(target, offset);
+  let { position, rotation, lookAt } = getFocusCameraPositionRelativeTo(target);
 
   focusCamera.position.copy(position);
-
-  focusCamera.lookAt(target.getWorldPosition(new Vector3()));
+  focusCamera.lookAt(lookAt);
   focusCamera.rotation.copy(rotation);
 }
 

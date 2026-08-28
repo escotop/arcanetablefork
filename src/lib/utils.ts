@@ -3,9 +3,9 @@ import { clsx } from 'clsx';
 import get from 'lodash-es/get';
 import set from 'lodash-es/set';
 import { twMerge } from 'tailwind-merge';
-import { Euler, Intersection, Matrix4, Mesh, Object3D, Quaternion, Vector3 } from 'three';
+import { Box3, Euler, Intersection, Matrix4, Mesh, Object3D, Quaternion, Vector3 } from 'three';
 import { CARD_STACK_OFFSET, CARD_THICKNESS, CARD_WIDTH } from './constants';
-import { cardsById, provider } from './globals';
+import { cardsById, getLocalPlayerClientId } from './globals';
 import { createAnimationEvent } from './createEvents';
 import { animateObject } from './animations';
 import { resolveStackAnchor } from './footprintOverlap';
@@ -14,6 +14,29 @@ import { getRotationFromCardState } from './card';
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+/** `+N`/`-N` adjust current life; `40-6` style expressions; plain integer sets absolute life. */
+export function parseLifeInput(value: string, currentLife: number): number | undefined {
+  const trimmed = value.trim().replace(/\s+/g, '');
+  if (!trimmed) return currentLife;
+
+  const relativeAdd = trimmed.match(/^\+(\d+)$/);
+  if (relativeAdd) return currentLife + parseInt(relativeAdd[1], 10);
+
+  const relativeSub = trimmed.match(/^-(\d+)$/);
+  if (relativeSub) return currentLife - parseInt(relativeSub[1], 10);
+
+  if (/^-?\d+([+-]\d+)+$/.test(trimmed)) {
+    const tokens = trimmed.match(/[+-]?\d+/g);
+    if (!tokens?.length) return undefined;
+    return tokens.reduce((sum, token) => sum + parseInt(token, 10), 0);
+  }
+
+  if (/^-?\d+$/.test(trimmed)) return parseInt(trimmed, 10);
+
+  return undefined;
+}
+
 export function isVectorEqual(a: Vector3 | Euler, b: Vector3 | Euler) {
   if (!a || !b) return false;
   let ab = a.toArray();
@@ -68,15 +91,15 @@ export function getGlobalRotation(mesh: Object3D) {
   let euler = new Euler().setFromQuaternion(initialQuart);
   return euler;
 }
-export function getFocusCameraPositionRelativeTo(target: Object3D, offset: Vector3) {
+export function getFocusCameraPositionRelativeTo(target: Object3D) {
   let distance = 26;
-  let localOffset = new Vector3(target.userData.isFlipped ? -CARD_WIDTH / 2 : 0, -1, 0);
+  const box = new Box3().setFromObject(target);
+  const targetWorldPosition = box.getCenter(new Vector3());
 
-  let targetWorldPosition = target.localToWorld(offset.clone().add(localOffset));
   let worldDirection = target.getWorldDirection(new Vector3());
   let rotation = getGlobalRotation(target);
 
-  let isOwner = target.userData.clientId === provider.awareness.clientID;
+  let isOwner = target.userData.clientId === getLocalPlayerClientId();
   let isDoubleSided = target.userData.isDoubleSided;
 
   if (target.userData.isFlipped && !(isOwner && !isDoubleSided)) {
@@ -85,13 +108,14 @@ export function getFocusCameraPositionRelativeTo(target: Object3D, offset: Vecto
     rotation.z *= -1;
   }
 
-  let position = targetWorldPosition.add(
+  let position = targetWorldPosition.clone().add(
     worldDirection.multiply(new Vector3(distance, distance, distance)),
   );
 
   return {
     position,
     rotation,
+    lookAt: targetWorldPosition,
   };
 }
 

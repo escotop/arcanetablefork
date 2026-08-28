@@ -75,7 +75,7 @@ export interface DetailedCardEntry extends CardEntry {
 }
 
 export interface Card {
-  mesh: Mesh;
+  mesh?: Mesh;
   id: string;
   clientId: number;
   detail: CardEntryDetail;
@@ -98,7 +98,8 @@ export interface Tether {
   offset: {
     x?: string;
     y?: string;
-  }
+  };
+  rotation?: number;
 }
 
 export interface CardZone<AddOptions = {} & { skipAnimation?: boolean; destroy?: boolean }> {

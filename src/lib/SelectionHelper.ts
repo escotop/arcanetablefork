@@ -62,8 +62,9 @@ class SelectionHelper {
   }
 
   onSelectStart(event) {
+    const parent = this.renderer.domElement.parentElement ?? document.body;
     this.element.style.display = 'none';
-    this.renderer.domElement.parentElement.appendChild(this.element);
+    parent.appendChild(this.element);
 
     this.element.style.left = event.clientX + 'px';
     this.element.style.top = event.clientY + 'px';

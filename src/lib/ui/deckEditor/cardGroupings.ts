@@ -52,3 +52,5 @@ export default function useCardGrouping(types: string[], entries: Accessor<Detai
 function getSimpleType(entry: DetailedCardEntry) {
   return entry?.detail?.type?.toLowerCase()?.split('—')?.[0]?.trim();
 }
+
+export { getSimpleType };

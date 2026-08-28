@@ -1,6 +1,9 @@
-import { setCardData, updateModifiers } from './card';
+import { setCardData, updateModifiers, ensureCardMesh, loadCardTextures } from './card';
 import { Card, CardZone } from './constants';
 import { cardsById, sendEvent } from './globals';
+import { Deck } from './deck';
+import { onStackCardAdded } from './cardLoading';
+import type { CardStack } from './cardStack';
 import * as Sentry from '@sentry/solidstart';
 
 interface DefaultAddOptions {
@@ -38,9 +41,30 @@ export async function transferCard<AddOptions extends {}>(
     return;
   }
 
+  if (fromZone?.zone === 'deck') {
+    (fromZone as Deck).prepareCardForRemoval(card);
+  }
+
+  if (!card.mesh) {
+    const ownerId = card.clientId ?? (fromZone as Deck | undefined)?.clientId;
+    if (ownerId === undefined) return;
+    ensureCardMesh(card, ownerId);
+  }
+
+  if (!card.mesh) return;
+
+  if (addOptions?.skipAnimation) {
+    setCardData(card.mesh, 'skipAnimation', true);
+  }
+
   await fromZone?.removeCard?.(card.mesh);
 
+  if (addOptions?.skipAnimation) {
+    setCardData(card.mesh, 'skipAnimation', false);
+  }
+
   if (toZone && toZone?.zone !== 'battlefield') {
+    if (!card.mesh) return;
     if (card.mesh.userData.isToken) {
       addOptions.destroy = true;
     }
@@ -54,10 +78,20 @@ export async function transferCard<AddOptions extends {}>(
   }
 
   if (!toZone) {
-    card.mesh.geometry.dispose();
+    card.mesh!.geometry.dispose();
     cardsById.delete(card.id);
   } else {
+    const textureZones = new Set(['hand', 'battlefield', 'peek', 'tokenSearch', 'reveal']);
+    if (textureZones.has(toZone.zone)) {
+      if (toZone.zone === 'peek' || toZone.zone === 'reveal') {
+        setCardData(card.mesh, 'isPublic', true);
+      }
+      await loadCardTextures(card);
+    }
     await toZone.addCard(card, addOptions);
+    if (toZone.zone === 'graveyard' || toZone.zone === 'exile') {
+      onStackCardAdded(toZone as CardStack);
+    }
   }
 
   if (!preventTransmit) {

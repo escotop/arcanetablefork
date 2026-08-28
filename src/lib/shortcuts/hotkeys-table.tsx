@@ -66,6 +66,11 @@ export const SHORTCUTS = [
   { shortcuts: [['shift', 'R']], action: 'Untap all cards' },
   { shortcuts: [['D']], action: 'Draw a card' },
   { shortcuts: [['space']], action: 'Pass turn' },
+  { shortcuts: [['esc']], action: 'Close zoom panel and clear selection' },
+  { shortcuts: [['F1']], action: 'Return to your camera view' },
+  { shortcuts: [['F2']], action: "View from opponent's perspective" },
+  { shortcuts: [['+'], ['=']], action: 'Increase +1/+1 on hovered battlefield card' },
+  { shortcuts: [['-']], action: 'Decrease +1/+1 on hovered battlefield card' },
   {
     shortcuts: [
       ['ctrl', 'space'],
@@ -101,10 +106,18 @@ export const SHORTCUTS = [
     shortcuts: [['S']],
     action: 'search your deck',
   },
+  {
+    shortcuts: [['1'], ['2'], ['3'], ['4'], ['5'], ['6'], ['7'], ['8'], ['9'], ['0']],
+    action: 'zoom a card in your hand (1 = leftmost, 0 = 10th). Press again to dismiss',
+  },
+  {
+    shortcuts: [['←'], ['→']],
+    action: 'cycle hand zoom left/right (wraps). Shows first card if none selected',
+  },
 ];
 
 export const BATTLEFIELD_SHORTCUTS = [
-  { shortcuts: [['T']], action: 'tap selected cards' },
+  { shortcuts: [['T']], action: 'show Spanish printing while hovering a card' },
   { shortcuts: [['C']], action: 'clone selected cards' },
   { shortcuts: [['F']], action: 'flip selected cards' },
 ];

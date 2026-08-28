@@ -9,8 +9,8 @@ import { Card } from '../constants';
 import {
   cardsById,
   doXTimes,
+  getLocalPlayArea,
   hoverSignal,
-  playAreas,
   provider,
   sendEvent,
   setPeekFilterText,
@@ -19,16 +19,18 @@ import styles from './peekMenu.module.css';
 
 const TokenSearchMenu: Component = props => {
   let userData = () => hoverSignal()?.mesh?.userData;
-  const playArea = playAreas[provider.awareness.clientID];
+  const playArea = () => getLocalPlayArea();
   const [peekCards, setPeekCards] = createSignal<Card[]>([]);
   let inputRef;
 
   
   onMount(() => {
-    const unsub = playArea.tokenSearchZone.subscribeToCardList(cardList => {
-      setPeekCards(cardList)
+    const area = playArea();
+    if (!area) return;
+    const unsub = area.tokenSearchZone.subscribeToCardList(cardList => {
+      setPeekCards(cardList);
       if (cardList?.length > 0 && inputRef) {
-        inputRef.focus()
+        inputRef.focus();
       }
     });
 
@@ -37,17 +39,17 @@ const TokenSearchMenu: Component = props => {
     });
   });
 
-  
-  const location = createMemo(() => userData()?.location);
   const cardMesh = () => hoverSignal()?.mesh;
   const tether = () => hoverSignal()?.tether;
   const [viewField, setViewField] = createSignal(false);
 
   function addToBattlefield(referenceCard: Card) {
+    const area = playArea();
+    if (!area) return;
     let card = cloneCard(referenceCard, nanoid());
 
-    let battlefield = playArea.battlefieldZone;
-    let tokenZone = playArea.tokenSearchZone;
+    let battlefield = area.battlefieldZone;
+    let tokenZone = area.tokenSearchZone;
     tokenZone.mesh.localToWorld(card.mesh.position);
     battlefield.addCard(card);
 
@@ -62,7 +64,9 @@ const TokenSearchMenu: Component = props => {
 
   return (
     <>
-      <Show when={peekCards()?.length > 0}>
+      <Show when={peekCards()?.length > 0 && playArea()}>
+        {area => (
+          <>
         <Show when={tether()}>
           <div class={styles.peekActions} style={`--x: ${tether().x}px; --y: ${tether().y}px;`}>
             <Menubar>
@@ -81,7 +85,7 @@ const TokenSearchMenu: Component = props => {
                 <Button
                   variant='ghost'
                   onClick={() => {
-                    playArea.tokenSearchZone.removeCard(cardMesh());
+                    area.tokenSearchZone.removeCard(cardMesh());
                     cleanupCard(cardsById.get(cardMesh().userData.id));
                   }}>
                   Dismiss
@@ -93,7 +97,7 @@ const TokenSearchMenu: Component = props => {
         <div class={styles.searchContainer}>
           <div class={styles.search}>
             <h2 class='text-white text-xl text-left mb-4'>
-              Tokens | {playArea.tokenSearchZone.observable.cardCount}
+              Tokens | {area.tokenSearchZone.observable.cardCount}
             </h2>
             <Command>
               <CommandInput
@@ -101,7 +105,7 @@ const TokenSearchMenu: Component = props => {
                 placeholder='Search'
                 onKeyUp={e => {
                   if (e.code === 'Escape') {
-                    playArea.dismissFromZone(playArea.tokenSearchZone);
+                    area.dismissFromZone(area.tokenSearchZone);
                   }
                 }}
                 onValueChange={value => {
@@ -115,7 +119,7 @@ const TokenSearchMenu: Component = props => {
                       <Button
                         variant='ghost'
                         onClick={() => {
-                          playArea.tokenSearchZone.viewGrid();
+                          area.tokenSearchZone.viewGrid();
                           setViewField(false);
                         }}>
                         View Grid
@@ -125,7 +129,7 @@ const TokenSearchMenu: Component = props => {
                       <Button
                         variant='ghost'
                         onClick={() => {
-                          playArea.tokenSearchZone.viewField();
+                          area.tokenSearchZone.viewField();
                           setViewField(true);
                         }}>
                         View Field
@@ -134,7 +138,7 @@ const TokenSearchMenu: Component = props => {
                   </Switch>
                   <Button
                     variant='ghost'
-                    onClick={() => playArea.dismissFromZone(playArea.tokenSearchZone)}>
+                    onClick={() => area.dismissFromZone(area.tokenSearchZone)}>
                     Dismiss
                   </Button>
                 </MenubarMenu>
@@ -142,6 +146,8 @@ const TokenSearchMenu: Component = props => {
             </Command>
           </div>
         </div>
+          </>
+        )}
       </Show>
     </>
   );

@@ -16,16 +16,39 @@ import {
 import { HotKeys } from '~/lib/shortcuts/hotkeys';
 import StackTraceDialog from '~/lib/stack-trace-dialog';
 import DeckPicker from '~/lib/ui/deckPicker';
+import GameLoadingOverlay from '~/lib/ui/gameLoadingOverlay';
 import Overlay from '~/lib/ui/overlay';
-import { loadDeckAndJoin, localInit } from '~/main3d';
+import { loadDeckAndJoin, localInit, tryReconnectToGame } from '~/main3d';
+import {
+  beginLoadProfile,
+  endLoadProfile,
+  profileAsync,
+} from '~/lib/loadProfile';
 
 const GamePage: Component = props => {
   const [inviteDismissed, setInviteDismissed] = createSignal(false);
+  const [reconnecting, setReconnecting] = createSignal(true);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [cardSystemStore, { setCardSystem }] = useCardSystemContext();
+  const [cardSystemStore, { initCardSystem, setCardSystem }] = useCardSystemContext();
 
-  onMount(() => {
-    localInit({ gameId: props.params.gameId });
+  const isGameLoading = () =>
+    reconnecting() || (!!selectedDeckId() && !isInitialized() && !isSpectating());
+
+  onMount(async () => {
+    beginLoadProfile('game page load', { gameId: props.params.gameId });
+    let reconnected = false;
+    try {
+      await profileAsync('localInit', () => localInit({ gameId: props.params.gameId }));
+      reconnected = await profileAsync('tryReconnectToGame', () =>
+        tryReconnectToGame(props.params.gameId, initCardSystem),
+      );
+      if (reconnected) {
+        setSelectedDeckId('reconnected');
+      }
+    } finally {
+      setReconnecting(false);
+      endLoadProfile({ reconnected, gameId: props.params.gameId });
+    }
   });
 
   onCleanup(() => {
@@ -34,23 +57,30 @@ const GamePage: Component = props => {
 
   return (
     <>
+      <Show when={isGameLoading()}>
+        <GameLoadingOverlay />
+      </Show>
       <Show when={isInitialized()}>
         <Overlay />
         <HotKeys />
       </Show>
-      <Show when={cardSystemStore}>
+      <Show when={cardSystemStore && !reconnecting()}>
         <Show when={!selectedDeckId() && !isSpectating()}>
           <DeckPicker
             onStart={async settings => {
+              beginLoadProfile('new game join', { gameId: props.params.gameId, deckId: settings.deckId });
               setSelectedDeckId(settings.deckId);
               const deckStore = getDeckStore();
               let deck = structuredClone(unwrap(deckStore.decks[settings.deckId]));
-              const cardSystem = await setCardSystem(deck.system || cardSystemStore.system);
+              const cardSystem = await profileAsync('setCardSystem', () =>
+                setCardSystem(deck.system || cardSystemStore.system),
+              );
               setSearchParams({ system: cardSystem.uri }, { replace: true });
 
               settings.deck = deck;
               settings.cardSystem = cardSystem;
-              loadDeckAndJoin(settings);
+              await profileAsync('loadDeckAndJoin', () => loadDeckAndJoin(settings, initCardSystem));
+              endLoadProfile({ deckId: settings.deckId });
             }}
           />
         </Show>

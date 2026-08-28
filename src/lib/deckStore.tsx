@@ -102,11 +102,17 @@ export async function hydrateDeck(originalDeck: Deck) {
   await Promise.all(
     [
       deckCards.map(async card => {
-        const updatedCard = await fetchCardInfo(card, cache).catch(() => card);
+        const updatedCard =
+          card.detail && card.detail.name
+            ? card
+            : await fetchCardInfo(card, cache).catch(() => card);
         deck.cards[getCardKey(updatedCard)] = updatedCard;
       }),
       inPlayCards.map(async card => {
-        const updatedCard = await fetchCardInfo(card, cache).catch(() => card);
+        const updatedCard =
+          card.detail && card.detail.name
+            ? card
+            : await fetchCardInfo(card, cache).catch(() => card);
         deck.inPlay[getCardKey(updatedCard)] = updatedCard;
       }),
     ].flat(),

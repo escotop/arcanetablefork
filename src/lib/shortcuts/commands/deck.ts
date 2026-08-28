@@ -8,7 +8,7 @@ export function drawCards(playArea: PlayArea, count: number = 1) {
 }
 
 export function peekFromTop(playArea: PlayArea, count = 1) {
-  doXTimes(count, () => transferCard(playArea.deck.cards[0], playArea.deck, playArea.peekZone), 5);
+  void playArea.peekCards(count);
 }
 
 export function searchDeck(playArea: PlayArea) {
