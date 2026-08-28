@@ -3,7 +3,7 @@ import { createEffect, createRoot } from 'solid-js';
 import { createStore, SetStoreFunction } from 'solid-js/store';
 import { CatmullRomCurve3, Euler, Group, Object3D, Vector3 } from 'three';
 import { animateObject } from './animations';
-import { getSerializableCard, setCardData } from './card';
+import { getSearchLine, getSerializableCard, setCardData } from './card';
 import { Card, CARD_HEIGHT, CARD_WIDTH, CardZone, SCROLL_SPEED } from './constants';
 import {
   cardsById,
@@ -106,17 +106,18 @@ export class CardGrid implements CardZone {
   }
 
   filterCards() {
-    let filterText = peekFilterText().toLowerCase();
-    let filters = filterText.split(',');
+    const filterText = peekFilterText().toLowerCase();
+    const filters = filterText
+      .split(',')
+      .map(filter => filter.trim())
+      .filter(Boolean);
 
-    if (filterText.length) {
+    if (filters.length) {
       let filterScores = this.cards
         .map(card => {
-          let indexOf = filters.reduce(
-            (a, b) => Math.min(a, card.detail.search.indexOf(b)),
-            Infinity,
-          );
-          let indexScore = indexOf < 0 ? 0 : 1 - indexOf / card.detail.search.length;
+          const haystack = (card.detail.search ?? getSearchLine(card.detail)).toLowerCase();
+          let indexOf = filters.reduce((a, b) => Math.min(a, haystack.indexOf(b)), Infinity);
+          let indexScore = indexOf < 0 ? 0 : 1 - indexOf / haystack.length;
           return {
             score: indexScore,
             card,

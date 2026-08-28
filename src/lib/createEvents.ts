@@ -1,5 +1,6 @@
 import { Card, CardZone } from './constants';
 import { expect, zonesById } from './globals';
+import { serializeCardUserDataForLog } from './gameLogEvents';
 import { Intersection, Object3D } from 'three';
 import { AnimationOpts, serializeAnimation } from './animations';
 import { resolveStackAnchor } from './footprintOverlap';
@@ -28,7 +29,7 @@ export function createTransferCardEvent<AddOptions extends {}>(
   return {
     type: 'transferCard',
     payload: {
-      userData: card.mesh.userData,
+      userData: serializeCardUserDataForLog(card.mesh.userData),
       fromZoneId: fromZone?.id,
       toZoneId: toZone?.id,
       extendedOptions: {
@@ -50,6 +51,18 @@ export function createTapEvent(object3D: Object3D) {
       userData: {
         id: object3D.userData.id,
         isTapped: !object3D.userData.isTapped,
+      },
+    },
+  } as const;
+}
+
+export function createFlipEvent(object3D: Object3D) {
+  return {
+    type: 'flip',
+    payload: {
+      userData: {
+        id: object3D.userData.id,
+        isFlipped: !!object3D.userData.isFlipped,
       },
     },
   } as const;

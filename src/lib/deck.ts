@@ -501,21 +501,6 @@ export function loadCardList(cardList: string): CardEntry[] {
 
 export { formatDeckListLine, getCardCollectorNumber } from './deckListFormat';
 
-export interface FetchCardInfoOptions {
-  logImport?: boolean;
-}
-
-type ImportResolveSource =
-  | 'cache'
-  | 'named'
-  | 'set-collector'
-  | 'set-collector-search'
-  | 'set-search'
-  | 'set-search-collector-fallback'
-  | 'named-without-set'
-  | 'default-fallback'
-  | 'not-found';
-
 function matchesSetSearchResult(
   card: { name?: string; set?: string; collector_number?: string },
   name: string,
@@ -545,7 +530,6 @@ function fetchCardInfoCacheKey(entry: CardEntry, urlString: string) {
 export async function fetchCardInfo(
   entry: CardEntry,
   cache?: Map<string, DetailedCardEntry>,
-  options?: FetchCardInfoOptions,
 ): Promise<DetailedCardEntry> {
   const url = new URL(cardSystem.cardDetailEndpoint);
   url.searchParams.set('exact', entry.name);
@@ -561,25 +545,19 @@ export async function fetchCardInfo(
   const cacheKey = fetchCardInfoCacheKey(entry, urlString);
 
   if (cache && cache.has(cacheKey)) {
-    const cached = cache.get(cacheKey)!;
-    if (options?.logImport) {
-      await logImportResolution(entry, cached, { source: 'cache' });
-    }
-    return cached;
+    return cache.get(cacheKey)!;
   }
 
   let result: DetailedCardEntry | undefined;
-  let source: ImportResolveSource = 'not-found';
 
   try {
-    const resolved = await fetchCardDetailPayload(entry);
-    if (!resolved) {
+    const payload = await fetchCardDetailPayload(entry);
+    if (!payload) {
       throw new Error('Card not found');
     }
-    source = resolved.source;
     result = {
       ...entry,
-      ...populateCardInfo(resolved.payload, entry),
+      ...populateCardInfo(payload, entry),
     };
   } catch (e) {
     console.error(e);
@@ -594,76 +572,7 @@ export async function fetchCardInfo(
     cache.set(cacheKey, result);
   }
 
-  if (options?.logImport && result) {
-    await logImportResolution(entry, result, { source });
-  }
-
   return result;
-}
-
-async function logImportResolution(
-  entry: CardEntry,
-  result: DetailedCardEntry,
-  context: { source: ImportResolveSource },
-) {
-  let printings: CardPrintingOption[] = [];
-  try {
-    const query = entry.set
-      ? `!"${entry.name.replace(/"/g, '\\"')}" set:${entry.set} unique:prints`
-      : undefined;
-    const response = await fetchCardPrintings(entry.name, 1, query);
-    printings = response.data;
-    if (printings.length === 0 && entry.set) {
-      const fallback = await fetchCardPrintings(entry.name, 1);
-      printings = fallback.data;
-    }
-  } catch (error) {
-    console.warn('[deck-import] could not load printings list', error);
-  }
-
-  const detailSet = (result.detail as { set?: string } | undefined)?.set;
-  const imageUrl =
-    resolveImageUrl(result.detail?.image_uris) ??
-    resolveImageUrl(result.detail?.card_faces?.[0]?.image_uris);
-
-  console.groupCollapsed(
-    `[deck-import] ${entry.qty ?? 1}x ${entry.name}${entry.set ? ` [${entry.set}]` : ''}${entry.collector_number ? ` #${entry.collector_number}` : ''}`,
-  );
-  console.log('requested', {
-    name: entry.name,
-    set: entry.set,
-    collector_number: entry.collector_number,
-    qty: entry.qty,
-  });
-  console.log('found', result.found !== false && !!(result.id || result.detail?.name));
-  console.log('resolveSource', context.source);
-  console.log(
-    'availablePrintings',
-    printings.map(printing => ({
-      id: printing.id,
-      set: printing.set,
-      set_name: printing.set_name,
-      collector_number: printing.collector_number,
-      lang: printing.lang,
-    })),
-  );
-  console.log('selected', {
-    id: result.id,
-    set: result.set,
-    collector_number: getCardCollectorNumber(result),
-    detailSet,
-    imageUrl,
-    requestedSet: entry.set,
-    requestedCollectorNumber: entry.collector_number,
-    setMatchesRequest:
-      !entry.set ||
-      result.set?.toLowerCase() === entry.set.toLowerCase() ||
-      detailSet?.toLowerCase() === entry.set.toLowerCase(),
-    collectorMatchesRequest:
-      !entry.collector_number ||
-      getCardCollectorNumber(result)?.toLowerCase() === entry.collector_number.toLowerCase(),
-  });
-  console.groupEnd();
 }
 
 async function fetchCardDetailBySetCollector(
@@ -682,19 +591,17 @@ async function fetchCardDetailBySetCollector(
   return payload;
 }
 
-async function fetchCardDetailPayload(
-  entry: CardEntry,
-): Promise<{ payload: CardEntryDetail; source: ImportResolveSource } | null> {
+async function fetchCardDetailPayload(entry: CardEntry): Promise<CardEntryDetail | null> {
   const { name, set, collector_number } = entry;
 
   if (set && collector_number) {
     if (cardSystem.collectorLookup) {
       const byCollector = await fetchCardDetailBySetCollector(set, collector_number);
-      if (byCollector) return { payload: byCollector, source: 'set-collector' };
+      if (byCollector) return byCollector;
     }
 
     const exact = await fetchCardDetailViaSetSearch(name, set, collector_number);
-    if (exact) return { payload: exact, source: 'set-collector-search' };
+    if (exact) return exact;
   }
 
   const url = new URL(cardSystem.cardDetailEndpoint);
@@ -717,26 +624,19 @@ async function fetchCardDetailPayload(
       payloadCollector?.toLowerCase() === collector_number.toLowerCase();
 
     if (setMatches && collectorMatches) {
-      return { payload, source: 'named' };
+      return payload;
     }
   }
 
   return resolveSetOrDefault(entry);
 }
 
-async function resolveSetOrDefault(
-  entry: CardEntry,
-): Promise<{ payload: CardEntryDetail; source: ImportResolveSource } | null> {
-  const { name, set, collector_number } = entry;
+async function resolveSetOrDefault(entry: CardEntry): Promise<CardEntryDetail | null> {
+  const { name, set } = entry;
 
   if (set) {
     const fromSearch = await fetchCardDetailViaSetSearch(name, set);
-    if (fromSearch) {
-      return {
-        payload: fromSearch,
-        source: collector_number ? 'set-search-collector-fallback' : 'set-search',
-      };
-    }
+    if (fromSearch) return fromSearch;
   }
 
   const url = new URL(cardSystem.cardDetailEndpoint);
@@ -746,10 +646,7 @@ async function resolveSetOrDefault(
 
   const payload = await res.json();
   if (payload?.object === 'error' || !(payload?.id || payload?.name)) return null;
-  return {
-    payload,
-    source: set ? 'default-fallback' : 'named-without-set',
-  };
+  return payload;
 }
 
 async function fetchCardDetailViaSetSearch(

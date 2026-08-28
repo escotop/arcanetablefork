@@ -3,7 +3,7 @@ import { CatmullRomCurve3, Euler, Group, Object3D, Vector3 } from 'three';
 import { animateObject } from './animations';
 import { cleanupCard, getSerializableCard, setCardData } from './card';
 import { Card, CARD_HEIGHT, CardZone } from './constants';
-import { cardsById, getProjectionVec, setHoverSignal, settings, zonesById } from './globals';
+import { cardsById, getProjectionVec, isEventCatchUpComplete, setHoverSignal, settings, zonesById } from './globals';
 import { getGlobalRotation } from './utils';
 import { createStore, SetStoreFunction } from 'solid-js/store';
 import { createRoot } from 'solid-js';
@@ -51,9 +51,7 @@ export class Hand implements CardZone {
     let max = 5;
     let min = 1;
     let value = Math.min(this.cards.length / 100, 1);
-    const result = lerp(max, min, value);
-    console.log({ result });
-    return result;
+    return lerp(max, min, value);
   }
 
   private updateUiTether() {
@@ -116,11 +114,19 @@ export class Hand implements CardZone {
 
   enableLocalHand() {
     this.isLocalHand = true;
+    this.resetInteractivity();
     for (const card of this.cards) {
       card.mesh.removeEventListener('mousein', this.cardMouseIn);
       card.mesh.removeEventListener('mouseout', this.cardMouseOut);
       card.mesh.addEventListener('mousein', this.cardMouseIn);
       card.mesh.addEventListener('mouseout', this.cardMouseOut);
+    }
+  }
+
+  resetInteractivity() {
+    this.isInteractive = true;
+    for (const card of this.cards) {
+      if (card.mesh) card.mesh.userData.isAnimating = false;
     }
   }
 
@@ -155,8 +161,9 @@ export class Hand implements CardZone {
     });
 
     let initialRotation = getGlobalRotation(card.mesh);
+    const animateEntry = !skipAnimation && isEventCatchUpComplete();
 
-    if (skipAnimation) {
+    if (!animateEntry) {
       card.mesh.position.copy(restingPosition);
       card.mesh.rotation.set(0, 0, 0);
       if (destroy) {
@@ -167,6 +174,7 @@ export class Hand implements CardZone {
     } else {
       this.isInteractive = false;
       animateObject(card.mesh, {
+        completeOnCancel: true,
         path: new CatmullRomCurve3([initialPosition, restingPosition]),
         to: {
           rotation: new Euler(0, 0, 0),

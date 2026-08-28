@@ -227,6 +227,7 @@ async function applyGameStateSnapshot(snapshot: GameStateSnapshot, gameId: strin
 
     setProcessedEvents(0);
     await processEvents();
+    Object.values(playAreas).forEach(area => area?.reapplyBattlefieldOrientations());
     await finalizeAfterReplay(gameId);
     lastSeenImportVersion = nextGameState.importVersion as number;
   } finally {
@@ -243,6 +244,7 @@ async function handleRemoteGameStateImport(gameId: string) {
     setCounters([]);
     setProcessedEvents(0);
     await processEvents();
+    Object.values(playAreas).forEach(area => area?.reapplyBattlefieldOrientations());
     await finalizeAfterReplay(gameId);
   } finally {
     setGameStateImportInProgress(false);

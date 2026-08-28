@@ -38,6 +38,7 @@ import {
 } from './globals';
 import { counters } from './ui/counterDialog';
 import { cleanupFromNode, isValidMaterial } from './utils';
+import { serializeCardUserDataForLog } from './gameLogEvents';
 
 export interface CardUserData {
   cardBack?: Material;
@@ -647,7 +648,7 @@ export function getSerializableCard(cardMesh: Object3D) {
   return {
     detail: cardMesh.userData.card.detail,
     id: cardMesh.userData.id,
-    userData: cardMesh.userData,
+    userData: serializeCardUserDataForLog(cardMesh.userData),
     position: cardMesh.position.toArray(),
     rotation: cardMesh.rotation.toArray(),
   };

@@ -5,6 +5,7 @@ import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import { getPlayAreaPlayerColor, textColorOnBackground } from './playerColor';
 import { animateObject } from './animations';
 import {
+  applyCardOrientation,
   cloneCard,
   getRotationFromCardState,
   initializeCardMesh,
@@ -25,7 +26,6 @@ import {
   doXTimes,
   expect,
   flushDispatchEventQueue,
-  focusCamera,
   getLocalPlayerClientId,
   isEventCatchUpComplete,
   sendEvent,
@@ -33,12 +33,12 @@ import {
 } from './globals';
 import { Hand } from './hand';
 import { transferCard } from './transferCard';
-import { getFocusCameraPositionRelativeTo } from './utils';
 import { getCardKey, hydrateDeck } from './deckStore';
 import { cardFromDeckEntry, preloadStackTextures } from './cardLoading';
 import { Deck as DeckData } from './constants';
 import {
   createDismissZoneEvent,
+  createFlipEvent,
   createPeekCardsEvent,
   createTransferEntireZoneEvent,
   createTransferCardEvent,
@@ -213,6 +213,14 @@ export class PlayArea {
     this.hand.updatePositions?.();
     this.deck.updatePositions?.();
     this.battlefieldZone.updatePositions?.();
+  }
+
+  reapplyBattlefieldOrientations() {
+    for (const card of this.battlefieldZone.cards) {
+      if (card.mesh) {
+        applyCardOrientation(card.mesh);
+      }
+    }
   }
 
   updateNameTag(name: string, color = getPlayAreaPlayerColor(this)) {
@@ -557,7 +565,9 @@ export class PlayArea {
 
   flip(cardMesh: Mesh) {
     setCardData(cardMesh, 'isFlipped', !cardMesh.userData.isFlipped);
-    this.emitEvent({ type: 'flip', payload: { userData: cardMesh.userData } });
+    if (this.isLocalPlayArea && isEventCatchUpComplete()) {
+      dispatchGameEvent(createFlipEvent(cardMesh));
+    }
     this.applyFlipVisual(cardMesh);
   }
 
@@ -574,7 +584,6 @@ export class PlayArea {
       return;
     }
 
-    const focusCameraTarget = getFocusCameraPositionRelativeTo(cardMesh);
     animateObject(cardMesh, {
       completeOnCancel: true,
       duration: 0.4,
@@ -590,13 +599,6 @@ export class PlayArea {
         setCardData(cardMesh, `zone.${zone.id}.rotation`, cardMesh.rotation.toArray());
       },
     });
-
-    if (focusCamera.userData.target === cardMesh.uuid) {
-      animateObject(focusCamera, {
-        duration: 0.4,
-        to: focusCameraTarget,
-      });
-    }
   }
 
   tap(cardMesh: Mesh, options: { skipAnimation?: boolean } = {}) {

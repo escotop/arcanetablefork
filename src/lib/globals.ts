@@ -41,6 +41,7 @@ import {
 import type { PlayArea } from './playArea';
 import TextureLoaderWorker from './textureLoaderWorker?worker';
 import { type TextureLoaderWorkerType } from './textureLoaderWorker';
+import { sanitizeGameLogEvent } from './gameLogEvents';
 import { cleanupFromNode, getFocusCameraPositionRelativeTo } from './utils';
 import { Selection } from './selection';
 import { captureConsole } from './console-capture';
@@ -516,6 +517,7 @@ export function sendEvent(event) {
   event.clientID = getLocalPlayerClientId();
   event.locallyApplied = true;
   logger.warn('sendEvent', event.type);
+  sanitizeGameLogEvent(event);
   gameLog.push([event]);
 }
 
@@ -536,6 +538,7 @@ export async function flushDispatchEventQueue() {
       events,
       clientID: events[0].clientID,
     };
+    sanitizeGameLogEvent(event);
     logger.log('[dispatchGameEvent]', event);
     gameLog.push([event]);
   });
@@ -729,11 +732,11 @@ export function kickPlayer(targetClientId: number, gameId: string) {
 export function updateFocusCamera(target: Object3D) {
   if (focusCamera.userData.isAnimating) return;
 
-  let { position, rotation, lookAt } = getFocusCameraPositionRelativeTo(target);
+  const { position, lookAt, up } = getFocusCameraPositionRelativeTo(target);
 
   focusCamera.position.copy(position);
+  focusCamera.up.copy(up);
   focusCamera.lookAt(lookAt);
-  focusCamera.rotation.copy(rotation);
 }
 
 export function mouseToScreen(mouse: THREE.Vector2): THREE.Vector2 {

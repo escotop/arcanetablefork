@@ -2,7 +2,13 @@ import uniqBy from 'lodash-es/uniqBy';
 import { nanoid } from 'nanoid';
 import { Object3D, Vector3 } from 'three';
 import { animateObject, queueAnimationGroup, rehydrateAnimation } from './lib/animations';
-import { cloneCard, splitUserdata, setCardData, ensureCardMesh } from './lib/card';
+import {
+  cloneCard,
+  splitUserdata,
+  setCardData,
+  ensureCardMesh,
+  loadCardTextures,
+} from './lib/card';
 import { Card } from './lib/constants';
 import * as Sentry from '@sentry/solidstart';
 import {
@@ -395,6 +401,23 @@ function isCardInZone(card: Card, zone?: { cards?: Card[] }) {
   return zone.cards.some(entry => entry.id === card.id || String(entry.id) === String(card.id));
 }
 
+function findZoneContainingCard(card: Card, playArea?: PlayArea) {
+  if (!playArea) return undefined;
+
+  const zones = [
+    playArea.deck,
+    playArea.hand,
+    playArea.battlefieldZone,
+    playArea.graveyardZone,
+    playArea.exileZone,
+    playArea.peekZone,
+    playArea.revealZone,
+    playArea.tokenSearchZone,
+  ];
+
+  return zones.find(zone => isCardInZone(card, zone));
+}
+
 function ensureCardReady(card: Card | undefined, clientId?: number): Card | undefined {
   if (!card) return undefined;
   const ownerId = clientId ?? card.clientId;
@@ -439,7 +462,7 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
     card = ensureCardReady(card, playArea?.clientId) ?? card;
   }
 
-  if (card?.mesh && event.payload?.userData) {
+  if (card?.mesh && event.payload?.userData && event.type !== 'transferCard') {
     applyEventUserData(card, event.payload.userData);
   }
   if (!isEphemeralEvent(event)) {
@@ -659,19 +682,29 @@ const EVENTS = {
 
     if (!card) return;
 
-    if (!isCardInZone(card, fromZone)) {
+    let resolvedFromZone = fromZone;
+    if (!isCardInZone(card, resolvedFromZone)) {
       if (isCardInZone(card, toZone)) return;
-      if (fromZone?.zone !== 'deck') return;
+      const actualZone = findZoneContainingCard(card, playArea);
+      if (actualZone) {
+        resolvedFromZone = actualZone;
+      } else if (resolvedFromZone?.zone !== 'deck') {
+        return;
+      }
     }
 
     const clientId = playArea?.clientId ?? card.clientId;
-    if (fromZone?.zone === 'deck') {
-      (fromZone as Deck).prepareCardForRemoval(card);
+    if (resolvedFromZone?.zone === 'deck') {
+      (resolvedFromZone as Deck).prepareCardForRemoval(card);
     } else if (!card.mesh && clientId !== undefined) {
       ensureCardMesh(card, clientId);
     }
 
     if (!card.mesh) return;
+
+    if (event.payload?.userData) {
+      applyEventUserData(card, event.payload.userData);
+    }
 
     if (
       event.clientID === getLocalPlayerClientId() &&
@@ -680,14 +713,14 @@ const EVENTS = {
       event.payload.extendedOptions.addOptions.skipAnimation = true;
     }
 
-    await transferCard(card, fromZone, toZone, {
+    await transferCard(card, resolvedFromZone, toZone, {
       ...(event.payload.extendedOptions ?? {}),
       preventTransmit: true,
     });
     const remote = isRemotePlayerEvent(event);
     if (toZone?.zone === 'hand') {
       playDrawSound(remote);
-    } else if (fromZone?.zone === 'hand' && toZone?.zone === 'battlefield') {
+    } else if (resolvedFromZone?.zone === 'hand' && toZone?.zone === 'battlefield') {
       playPlayCardSound(remote);
     }
   },
@@ -720,9 +753,11 @@ const EVENTS = {
       playArea?.tap(card.mesh, { skipAnimation: !isEventCatchUpComplete() });
     }
   },
-  flip(event: Event, playArea: PlayArea, card: Card) {
-    if (card?.mesh) {
-      playArea?.applyFlipVisual(card.mesh, { animate: isEventCatchUpComplete() });
+  async flip(event: Event, playArea: PlayArea, card: Card) {
+    if (!card?.mesh) return;
+    playArea?.applyFlipVisual(card.mesh, { animate: isEventCatchUpComplete() });
+    if (card.mesh.userData.isDoubleSided) {
+      await loadCardTextures(card);
     }
   },
   clone(event: Event, playArea: PlayArea) {

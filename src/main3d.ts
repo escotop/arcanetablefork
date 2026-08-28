@@ -179,6 +179,7 @@ async function waitForGameLogReplay() {
   const logLength = gameLog.length;
   const caughtUp = await profileAsync('gameLog replay', () => waitForGameLogCatchUp());
   syncPlayAreasFromGameLog();
+  Object.values(playAreas).forEach(area => area?.reapplyBattlefieldOrientations());
   markLoadProfile('gameLog replay counts', {
     eventsReplayed: processedEvents() - replayStart,
     gameLogLength: logLength,

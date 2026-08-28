@@ -2,6 +2,7 @@ import { setCardData, updateModifiers, ensureCardMesh, loadCardTextures } from '
 import { Card, CardZone } from './constants';
 import { cardsById, sendEvent } from './globals';
 import { Deck } from './deck';
+import { serializeCardUserDataForLog } from './gameLogEvents';
 import { onStackCardAdded } from './cardLoading';
 import type { CardStack } from './cardStack';
 import * as Sentry from '@sentry/solidstart';
@@ -98,7 +99,7 @@ export async function transferCard<AddOptions extends {}>(
     sendEvent({
       type: 'transferCard',
       payload: {
-        userData: card.mesh.userData,
+        userData: serializeCardUserDataForLog(card.mesh.userData),
         fromZoneId: fromZone?.id,
         toZoneId: toZone?.id,
         extendedOptions: {

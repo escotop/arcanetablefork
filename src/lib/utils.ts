@@ -5,7 +5,7 @@ import set from 'lodash-es/set';
 import { twMerge } from 'tailwind-merge';
 import { Box3, Euler, Intersection, Matrix4, Mesh, Object3D, Quaternion, Vector3 } from 'three';
 import { CARD_STACK_OFFSET, CARD_THICKNESS, CARD_WIDTH } from './constants';
-import { cardsById, getLocalPlayerClientId } from './globals';
+import { cardsById, camera } from './globals';
 import { createAnimationEvent } from './createEvents';
 import { animateObject } from './animations';
 import { resolveStackAnchor } from './footprintOverlap';
@@ -92,31 +92,21 @@ export function getGlobalRotation(mesh: Object3D) {
   return euler;
 }
 export function getFocusCameraPositionRelativeTo(target: Object3D) {
-  let distance = 26;
+  const distance = 26;
   const box = new Box3().setFromObject(target);
-  const targetWorldPosition = box.getCenter(new Vector3());
+  const lookAt = box.getCenter(new Vector3());
 
-  let worldDirection = target.getWorldDirection(new Vector3());
-  let rotation = getGlobalRotation(target);
+  const worldQuat = target.getWorldQuaternion(new Quaternion());
+  const frontNormal = new Vector3(0, 0, 1).applyQuaternion(worldQuat).normalize();
+  const backNormal = frontNormal.clone().negate();
+  const up = new Vector3(0, 1, 0).applyQuaternion(worldQuat).normalize();
 
-  let isOwner = target.userData.clientId === getLocalPlayerClientId();
-  let isDoubleSided = target.userData.isDoubleSided;
+  // Face whose normal points toward the main camera is the one the player sees.
+  const toCamera = camera.position.clone().sub(lookAt).normalize();
+  const faceNormal = frontNormal.dot(toCamera) >= backNormal.dot(toCamera) ? frontNormal : backNormal;
+  const position = lookAt.clone().add(faceNormal.multiplyScalar(distance));
 
-  if (target.userData.isFlipped && !(isOwner && !isDoubleSided)) {
-    worldDirection.multiply(new Vector3(-1, -1, -1));
-    rotation.y += Math.PI;
-    rotation.z *= -1;
-  }
-
-  let position = targetWorldPosition.clone().add(
-    worldDirection.multiply(new Vector3(distance, distance, distance)),
-  );
-
-  return {
-    position,
-    rotation,
-    lookAt: targetWorldPosition,
-  };
+  return { position, lookAt, up };
 }
 
 export async function sha1(input) {
@@ -195,7 +185,7 @@ export function restackItems(anchor: Vector3, items: Object3D[]) {
       return animateObject(item, {
         completeOnCancel: true,
         duration: 0,
-        to: { position, quarternion: new Quaternion() },
+        to: { position, quarternion: getRotationFromCardState(item.userData) },
       });
     }),
   );

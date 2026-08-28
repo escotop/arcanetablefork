@@ -80,10 +80,17 @@ const PeekMenu: Component = props => {
                 ref={inputRef}
                 placeholder='Search'
                 value={peekFilterText()}
-                onKeyUp={e => {
+                onKeyDown={e => {
+                  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    (e.currentTarget as HTMLInputElement).select();
+                    return;
+                  }
                   const area = playArea();
                   if (!area) return;
                   if (e.code === 'Escape') {
+                    e.preventDefault();
                     area.dismissFromZone(area.peekZone);
                   }
                 }}

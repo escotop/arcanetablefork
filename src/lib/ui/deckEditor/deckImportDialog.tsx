@@ -68,7 +68,7 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
     const cards: Record<string, DetailedCardEntry> = {};
 
     for (const entry of newCardEntries) {
-      const card = await fetchCardInfo(entry, cache, { logImport: true });
+      const card = await fetchCardInfo(entry, cache);
       cards[getCardKey(card)] = card;
     }
 

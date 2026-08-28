@@ -202,8 +202,10 @@ export function animateObject(obj: Object3D, opts: AnimationOpts) {
 export function cancelAnimation(obj: Object3D) {
   const { animationMap, animatingObjects } = animationGroupQueue.at(-1)!;
   let animation = animationMap.get(obj.uuid);
+  if (!animation) return;
   animationMap.delete(obj.uuid);
   animatingObjects.delete(animation);
+  obj.userData.isAnimating = false;
 }
 
 function renderAnimation(animation, delta: number): boolean {
