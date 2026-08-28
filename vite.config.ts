@@ -16,16 +16,17 @@ import { writeFileSync } from 'node:fs';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const hostname = env.VITE_SITE_URL;
+  const hostname =
+    env.VITE_SITE_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined) ||
+    'http://localhost:3000';
   let nitro;
 
   return {
     plugins: [
       solidStart(),
-      sentryVitePlugin(),
-      sitemapPlugin({
-        hostname,
-      }),
+      ...(env.SENTRY_AUTH_TOKEN ? [sentryVitePlugin()] : []),
+      sitemapPlugin({ hostname }),
       nitroV2Plugin({
         preset: 'static',
         prerender: {
