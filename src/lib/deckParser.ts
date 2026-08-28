@@ -11,6 +11,14 @@ const cardCategory = (open, close) =>
 export const cardCategories = (open, close) =>
   a.sequenceOf([a.many1(cardCategory(open, close)), a.char(close)]).map(r => r?.[0]);
 
+const collectorNumber = a
+  .sequenceOf([
+    a.optionalWhitespace,
+    a.char('#'),
+    a.everyCharUntil(a.choice([a.whitespace, a.char('['), a.char('\n'), a.endOfInput])),
+  ])
+  .map(r => r?.[2]?.trim());
+
 export const card = a
   .sequenceOf([
     a.possibly(a.digits),
@@ -22,8 +30,9 @@ export const card = a
     a.possibly(cardCategories('<', '>')),
     a.everyCharUntil(a.choice([a.char('['), a.char('\n'), a.endOfInput])),
     a.possibly(cardCategories('[', ']')),
+    a.possibly(collectorNumber),
   ])
-  .map(([rawQty, _, name, set, __, cats1, ___, categories]) => {
+  .map(([rawQty, _, name, set, __, cats1, ___, categories, collector_number]) => {
     if (categories?.length === 1 && !set) {
       set = categories[0];
       categories = cats1 || [];
@@ -32,7 +41,13 @@ export const card = a
       set = set.split(':')[0];
     }
     let qty = parseInt(rawQty, 10);
-    return { qty: isNaN(qty) ? 1 : qty, name: name.trim(), set, categories };
+    return {
+      qty: isNaN(qty) ? 1 : qty,
+      name: name.trim(),
+      set,
+      categories,
+      collector_number: collector_number || undefined,
+    };
   });
 
 const comment = a

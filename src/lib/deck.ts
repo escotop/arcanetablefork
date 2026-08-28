@@ -25,6 +25,7 @@ import {
   DetailedCardEntry,
 } from './constants';
 import { deck as deckParser } from './deckParser';
+import { getCardCollectorNumber } from './deckListFormat';
 import { cardsById, cardSystem, getProjectionVec, setHoverSignal, zonesById } from './globals';
 import { cleanupMesh, getGlobalRotation, shuffleItems } from './utils';
 import { createRoot } from 'solid-js';
@@ -498,9 +499,53 @@ export function loadCardList(cardList: string): CardEntry[] {
   return deckParser.run(cardList).result.filter(card => card.name.length);
 }
 
+export { formatDeckListLine, getCardCollectorNumber } from './deckListFormat';
+
+export interface FetchCardInfoOptions {
+  logImport?: boolean;
+}
+
+type ImportResolveSource =
+  | 'cache'
+  | 'named'
+  | 'set-collector'
+  | 'set-collector-search'
+  | 'set-search'
+  | 'set-search-collector-fallback'
+  | 'named-without-set'
+  | 'default-fallback'
+  | 'not-found';
+
+function matchesSetSearchResult(
+  card: { name?: string; set?: string; collector_number?: string },
+  name: string,
+  set: string,
+  collectorNumber?: string,
+): boolean {
+  if (card.name !== name) return false;
+
+  if (collectorNumber) {
+    if (card.collector_number) {
+      return (
+        card.collector_number.toLowerCase() === collectorNumber.toLowerCase() &&
+        (!card.set || card.set.toLowerCase() === set.toLowerCase())
+      );
+    }
+    // Search already included cn: — minimal search payloads may omit set/collector_number.
+    return !card.set || card.set.toLowerCase() === set.toLowerCase();
+  }
+
+  return !card.set || card.set.toLowerCase() === set.toLowerCase();
+}
+
+function fetchCardInfoCacheKey(entry: CardEntry, urlString: string) {
+  return `${urlString}:${entry.qty ?? 1}:${entry.set ?? ''}:${entry.collector_number ?? ''}`;
+}
+
 export async function fetchCardInfo(
   entry: CardEntry,
   cache?: Map<string, DetailedCardEntry>,
+  options?: FetchCardInfoOptions,
 ): Promise<DetailedCardEntry> {
   const url = new URL(cardSystem.cardDetailEndpoint);
   url.searchParams.set('exact', entry.name);
@@ -513,34 +558,231 @@ export async function fetchCardInfo(
   }
 
   let urlString = url.toString();
+  const cacheKey = fetchCardInfoCacheKey(entry, urlString);
 
-  if (cache && cache.has(urlString + entry.qty)) {
-    return cache.get(urlString + entry.qty)!;
+  if (cache && cache.has(cacheKey)) {
+    const cached = cache.get(cacheKey)!;
+    if (options?.logImport) {
+      await logImportResolution(entry, cached, { source: 'cache' });
+    }
+    return cached;
   }
 
-  let result = await fetch(urlString, { cache: 'force-cache' })
-    .then(r => {
-      if (r.status !== 404) return r;
-      url.searchParams.delete('set');
-      return fetch(url.toString(), { cache: 'force-cache' });
-    })
-    .then(r => r.json())
-    .then(async payload => {
-      if (payload?.object === 'error' || !(payload?.id || payload?.name)) {
-        throw new Error(payload?.details ?? 'Card not found');
-      }
-      return {
-        ...entry,
-        ...populateCardInfo(payload, entry),
-      };
-    })
-    .catch(e => console.error(e));
+  let result: DetailedCardEntry | undefined;
+  let source: ImportResolveSource = 'not-found';
 
-  if (cache) {
-    cache.set(urlString + entry.qty, result);
+  try {
+    const resolved = await fetchCardDetailPayload(entry);
+    if (!resolved) {
+      throw new Error('Card not found');
+    }
+    source = resolved.source;
+    result = {
+      ...entry,
+      ...populateCardInfo(resolved.payload, entry),
+    };
+  } catch (e) {
+    console.error(e);
+    result = {
+      ...entry,
+      found: false,
+      detail: { name: entry.name } as CardEntryDetail,
+    };
+  }
+
+  if (cache && result) {
+    cache.set(cacheKey, result);
+  }
+
+  if (options?.logImport && result) {
+    await logImportResolution(entry, result, { source });
   }
 
   return result;
+}
+
+async function logImportResolution(
+  entry: CardEntry,
+  result: DetailedCardEntry,
+  context: { source: ImportResolveSource },
+) {
+  let printings: CardPrintingOption[] = [];
+  try {
+    const query = entry.set
+      ? `!"${entry.name.replace(/"/g, '\\"')}" set:${entry.set} unique:prints`
+      : undefined;
+    const response = await fetchCardPrintings(entry.name, 1, query);
+    printings = response.data;
+    if (printings.length === 0 && entry.set) {
+      const fallback = await fetchCardPrintings(entry.name, 1);
+      printings = fallback.data;
+    }
+  } catch (error) {
+    console.warn('[deck-import] could not load printings list', error);
+  }
+
+  const detailSet = (result.detail as { set?: string } | undefined)?.set;
+  const imageUrl =
+    resolveImageUrl(result.detail?.image_uris) ??
+    resolveImageUrl(result.detail?.card_faces?.[0]?.image_uris);
+
+  console.groupCollapsed(
+    `[deck-import] ${entry.qty ?? 1}x ${entry.name}${entry.set ? ` [${entry.set}]` : ''}${entry.collector_number ? ` #${entry.collector_number}` : ''}`,
+  );
+  console.log('requested', {
+    name: entry.name,
+    set: entry.set,
+    collector_number: entry.collector_number,
+    qty: entry.qty,
+  });
+  console.log('found', result.found !== false && !!(result.id || result.detail?.name));
+  console.log('resolveSource', context.source);
+  console.log(
+    'availablePrintings',
+    printings.map(printing => ({
+      id: printing.id,
+      set: printing.set,
+      set_name: printing.set_name,
+      collector_number: printing.collector_number,
+      lang: printing.lang,
+    })),
+  );
+  console.log('selected', {
+    id: result.id,
+    set: result.set,
+    collector_number: getCardCollectorNumber(result),
+    detailSet,
+    imageUrl,
+    requestedSet: entry.set,
+    requestedCollectorNumber: entry.collector_number,
+    setMatchesRequest:
+      !entry.set ||
+      result.set?.toLowerCase() === entry.set.toLowerCase() ||
+      detailSet?.toLowerCase() === entry.set.toLowerCase(),
+    collectorMatchesRequest:
+      !entry.collector_number ||
+      getCardCollectorNumber(result)?.toLowerCase() === entry.collector_number.toLowerCase(),
+  });
+  console.groupEnd();
+}
+
+async function fetchCardDetailBySetCollector(
+  set: string,
+  collectorNumber: string,
+): Promise<CardEntryDetail | null> {
+  const url = new URL(cardSystem.cardDetailEndpoint);
+  url.searchParams.set('set', set);
+  url.searchParams.set('collector_number', collectorNumber);
+
+  const res = await fetch(url.toString(), { cache: 'force-cache' });
+  if (!res.ok) return null;
+
+  const payload = await res.json();
+  if (payload?.object === 'error' || !(payload?.id || payload?.name)) return null;
+  return payload;
+}
+
+async function fetchCardDetailPayload(
+  entry: CardEntry,
+): Promise<{ payload: CardEntryDetail; source: ImportResolveSource } | null> {
+  const { name, set, collector_number } = entry;
+
+  if (set && collector_number) {
+    if (cardSystem.collectorLookup) {
+      const byCollector = await fetchCardDetailBySetCollector(set, collector_number);
+      if (byCollector) return { payload: byCollector, source: 'set-collector' };
+    }
+
+    const exact = await fetchCardDetailViaSetSearch(name, set, collector_number);
+    if (exact) return { payload: exact, source: 'set-collector-search' };
+  }
+
+  const url = new URL(cardSystem.cardDetailEndpoint);
+  url.searchParams.set('exact', name);
+  if (entry.id) url.searchParams.set('id', entry.id);
+  if (set) url.searchParams.set('set', set);
+
+  let res = await fetch(url.toString(), { cache: 'force-cache' });
+  if (res.ok) {
+    const payload = await res.json();
+    if (payload?.object === 'error' || !(payload?.id || payload?.name)) {
+      return resolveSetOrDefault(entry);
+    }
+
+    const payloadSet = payload.set as string | undefined;
+    const payloadCollector = payload.collector_number as string | undefined;
+    const setMatches = !set || payloadSet?.toLowerCase() === set.toLowerCase();
+    const collectorMatches =
+      !collector_number ||
+      payloadCollector?.toLowerCase() === collector_number.toLowerCase();
+
+    if (setMatches && collectorMatches) {
+      return { payload, source: 'named' };
+    }
+  }
+
+  return resolveSetOrDefault(entry);
+}
+
+async function resolveSetOrDefault(
+  entry: CardEntry,
+): Promise<{ payload: CardEntryDetail; source: ImportResolveSource } | null> {
+  const { name, set, collector_number } = entry;
+
+  if (set) {
+    const fromSearch = await fetchCardDetailViaSetSearch(name, set);
+    if (fromSearch) {
+      return {
+        payload: fromSearch,
+        source: collector_number ? 'set-search-collector-fallback' : 'set-search',
+      };
+    }
+  }
+
+  const url = new URL(cardSystem.cardDetailEndpoint);
+  url.searchParams.set('exact', name);
+  const res = await fetch(url.toString(), { cache: 'force-cache' });
+  if (!res.ok) return null;
+
+  const payload = await res.json();
+  if (payload?.object === 'error' || !(payload?.id || payload?.name)) return null;
+  return {
+    payload,
+    source: set ? 'default-fallback' : 'named-without-set',
+  };
+}
+
+async function fetchCardDetailViaSetSearch(
+  name: string,
+  set: string,
+  collectorNumber?: string,
+): Promise<CardEntryDetail | null> {
+  const searchUrl = new URL(cardSystem.cardSearchEndpoint);
+  let query = `!"${name.replace(/"/g, '\\"')}" set:${set}`;
+  if (collectorNumber) {
+    query += ` cn:${collectorNumber}`;
+  }
+  searchUrl.searchParams.set('q', query);
+  searchUrl.searchParams.set('page', '1');
+
+  const searchRes = await fetch(searchUrl.toString(), { cache: 'force-cache' });
+  if (!searchRes.ok) return null;
+
+  const body = await searchRes.json();
+  const match = (body.data ?? []).find(
+    (card: { name?: string; set?: string; id?: string; collector_number?: string }) =>
+      matchesSetSearchResult(card, name, set, collectorNumber),
+  );
+  if (!match?.id) return null;
+
+  const detailUrl = new URL(cardSystem.cardDetailEndpoint);
+  detailUrl.searchParams.set('id', match.id);
+  const detailRes = await fetch(detailUrl.toString(), { cache: 'force-cache' });
+  if (!detailRes.ok) return null;
+
+  const payload = await detailRes.json();
+  if (payload?.object === 'error' || !(payload?.id || payload?.name)) return null;
+  return payload;
 }
 
 export interface CardPrintingOption {
@@ -708,8 +950,9 @@ export async function fetchCardPrintings(
 export function populateCardInfo(detail: CardEntryDetail, entry?: Card) {
   let fields = {
     found: !!(detail?.id ?? detail?.name),
-    id: entry?.id || detail?.id,
-    set: entry?.set || detail?.set,
+    id: detail?.id || entry?.id,
+    set: detail?.set || entry?.set,
+    collector_number: detail?.collector_number || entry?.collector_number,
     name: entry?.name || detail.name,
     search: detail?.search || getSearchLine(detail),
     popularity: detail?.popularity ?? detail[cardSystem.popularity],

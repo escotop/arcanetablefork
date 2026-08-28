@@ -7,15 +7,16 @@ test('card', () => {
   expect(run.isError).toBe(false);
 
   expect.soft(run.result).toMatchInlineSnapshot(`
-      {
-        "categories": [
-          "Tokens",
-        ],
-        "name": "Alela, Artful Provocateur",
-        "qty": 1,
-        "set": "brc",
-      }
-    `);
+    {
+      "categories": [
+        "Tokens",
+      ],
+      "collector_number": undefined,
+      "name": "Alela, Artful Provocateur",
+      "qty": 1,
+      "set": "brc",
+    }
+  `);
 
   expect.soft(card.run('1x Al')).toMatchInlineSnapshot(`
     {
@@ -24,6 +25,7 @@ test('card', () => {
       "isError": false,
       "result": {
         "categories": null,
+        "collector_number": undefined,
         "name": "Al",
         "qty": 1,
         "set": undefined,
@@ -46,89 +48,99 @@ test('deck', () => {
 1x Avacyn, Angel of Hope (avr) 6 [Protection]
 1x Bojuka Bog (blc) 294 [Land]    `).result,
   ).toMatchInlineSnapshot(`
-      [
-        {
-          "categories": [
-            "Tokens",
-          ],
-          "name": "Alela, Artful Provocateur",
-          "qty": 1,
-          "set": "brc",
-        },
-        {
-          "categories": [
-            "Pump",
-          ],
-          "name": "All That Glitters",
-          "qty": 1,
-          "set": "cmm",
-        },
-        {
-          "categories": [
-            "Evasion",
-          ],
-          "name": "Angelic Destiny",
-          "qty": 1,
-          "set": "woc",
-        },
-        {
-          "categories": [
-            "Removal",
-          ],
-          "name": "Anguished Unmaking",
-          "qty": 1,
-          "set": "pip",
-        },
-        {
-          "categories": [
-            "Land",
-          ],
-          "name": "Arcane Sanctum",
-          "qty": 1,
-          "set": "moc",
-        },
-        {
-          "categories": [
-            "Lifegain",
-          ],
-          "name": "Archangel of Thune",
-          "qty": 1,
-          "set": "m14",
-        },
-        {
-          "categories": [
-            "Ramp",
-          ],
-          "name": "Ardenn, Intrepid Archaeologist",
-          "qty": 1,
-          "set": "cmr",
-        },
-        {
-          "categories": [
-            "Recursion",
-          ],
-          "name": "Athreos, God of Passage",
-          "qty": 1,
-          "set": "plst",
-        },
-        {
-          "categories": [
-            "Protection",
-          ],
-          "name": "Avacyn, Angel of Hope",
-          "qty": 1,
-          "set": "avr",
-        },
-        {
-          "categories": [
-            "Land",
-          ],
-          "name": "Bojuka Bog",
-          "qty": 1,
-          "set": "blc",
-        },
-      ]
-    `);
+    [
+      {
+        "categories": [
+          "Tokens",
+        ],
+        "collector_number": undefined,
+        "name": "Alela, Artful Provocateur",
+        "qty": 1,
+        "set": "brc",
+      },
+      {
+        "categories": [
+          "Pump",
+        ],
+        "collector_number": undefined,
+        "name": "All That Glitters",
+        "qty": 1,
+        "set": "cmm",
+      },
+      {
+        "categories": [
+          "Evasion",
+        ],
+        "collector_number": undefined,
+        "name": "Angelic Destiny",
+        "qty": 1,
+        "set": "woc",
+      },
+      {
+        "categories": [
+          "Removal",
+        ],
+        "collector_number": undefined,
+        "name": "Anguished Unmaking",
+        "qty": 1,
+        "set": "pip",
+      },
+      {
+        "categories": [
+          "Land",
+        ],
+        "collector_number": undefined,
+        "name": "Arcane Sanctum",
+        "qty": 1,
+        "set": "moc",
+      },
+      {
+        "categories": [
+          "Lifegain",
+        ],
+        "collector_number": undefined,
+        "name": "Archangel of Thune",
+        "qty": 1,
+        "set": "m14",
+      },
+      {
+        "categories": [
+          "Ramp",
+        ],
+        "collector_number": undefined,
+        "name": "Ardenn, Intrepid Archaeologist",
+        "qty": 1,
+        "set": "cmr",
+      },
+      {
+        "categories": [
+          "Recursion",
+        ],
+        "collector_number": undefined,
+        "name": "Athreos, God of Passage",
+        "qty": 1,
+        "set": "plst",
+      },
+      {
+        "categories": [
+          "Protection",
+        ],
+        "collector_number": undefined,
+        "name": "Avacyn, Angel of Hope",
+        "qty": 1,
+        "set": "avr",
+      },
+      {
+        "categories": [
+          "Land",
+        ],
+        "collector_number": undefined,
+        "name": "Bojuka Bog",
+        "qty": 1,
+        "set": "blc",
+      },
+    ]
+  `);
 });
 
 test('deck', () => {
@@ -140,50 +152,55 @@ test('deck', () => {
 1x Winds of Rath (mkc) 93 [Removal]
 1x Zur the Enchanter (dmr) 206 [Commander{top}] `).result,
   ).toMatchInlineSnapshot(`
-      [
-        {
-          "categories": [
-            "Maybeboard{noDeck}{noPrice}",
-            "Lifegain",
-          ],
-          "name": "Underworld Coinsmith",
-          "qty": 1,
-          "set": "jou",
-        },
-        {
-          "categories": [
-            "Lifegain",
-          ],
-          "name": "Vampiric Link",
-          "qty": 1,
-          "set": "plc",
-        },
-        {
-          "categories": [
-            "Removal",
-          ],
-          "name": "Vow of Duty",
-          "qty": 1,
-          "set": "c21",
-        },
-        {
-          "categories": [
-            "Removal",
-          ],
-          "name": "Winds of Rath",
-          "qty": 1,
-          "set": "mkc",
-        },
-        {
-          "categories": [
-            "Commander{top}",
-          ],
-          "name": "Zur the Enchanter",
-          "qty": 1,
-          "set": "dmr",
-        },
-      ]
-    `);
+    [
+      {
+        "categories": [
+          "Maybeboard{noDeck}{noPrice}",
+          "Lifegain",
+        ],
+        "collector_number": undefined,
+        "name": "Underworld Coinsmith",
+        "qty": 1,
+        "set": "jou",
+      },
+      {
+        "categories": [
+          "Lifegain",
+        ],
+        "collector_number": undefined,
+        "name": "Vampiric Link",
+        "qty": 1,
+        "set": "plc",
+      },
+      {
+        "categories": [
+          "Removal",
+        ],
+        "collector_number": undefined,
+        "name": "Vow of Duty",
+        "qty": 1,
+        "set": "c21",
+      },
+      {
+        "categories": [
+          "Removal",
+        ],
+        "collector_number": undefined,
+        "name": "Winds of Rath",
+        "qty": 1,
+        "set": "mkc",
+      },
+      {
+        "categories": [
+          "Commander{top}",
+        ],
+        "collector_number": undefined,
+        "name": "Zur the Enchanter",
+        "qty": 1,
+        "set": "dmr",
+      },
+    ]
+  `);
 });
 
 test('mtgo format', () => {
@@ -200,24 +217,28 @@ test('mtgo format', () => {
       "result": [
         {
           "categories": [],
+          "collector_number": undefined,
           "name": "Altar of the Pantheon",
           "qty": 1,
           "set": "THB",
         },
         {
           "categories": [],
+          "collector_number": undefined,
           "name": "Arcane Signet",
           "qty": 1,
           "set": "M3C",
         },
         {
           "categories": [],
+          "collector_number": undefined,
           "name": "Archangel Avacyn",
           "qty": 1,
           "set": "SOI",
         },
         {
           "categories": [],
+          "collector_number": undefined,
           "name": "Arlinn Kord",
           "qty": 1,
           "set": "SOI",
@@ -232,30 +253,32 @@ test('mtga format', () => {
     deck.run(`1 Barkchannel Pathway <prerelease> [KHM] (F)
 1 Beast Whisperer <magic 30> [DMU]`),
   ).toMatchInlineSnapshot(`
-      {
-        "data": null,
-        "index": 79,
-        "isError": false,
-        "result": [
-          {
-            "categories": [
-              "prerelease",
-            ],
-            "name": "Barkchannel Pathway",
-            "qty": 1,
-            "set": "KHM",
-          },
-          {
-            "categories": [
-              "magic 30",
-            ],
-            "name": "Beast Whisperer",
-            "qty": 1,
-            "set": "DMU",
-          },
-        ],
-      }
-    `);
+    {
+      "data": null,
+      "index": 79,
+      "isError": false,
+      "result": [
+        {
+          "categories": [
+            "prerelease",
+          ],
+          "collector_number": undefined,
+          "name": "Barkchannel Pathway",
+          "qty": 1,
+          "set": "KHM",
+        },
+        {
+          "categories": [
+            "magic 30",
+          ],
+          "collector_number": undefined,
+          "name": "Beast Whisperer",
+          "qty": 1,
+          "set": "DMU",
+        },
+      ],
+    }
+  `);
 });
 
 test('mtga extended', () => {
@@ -268,6 +291,7 @@ test('mtga extended', () => {
         "categories": [
           "magic 30",
         ],
+        "collector_number": undefined,
         "name": "Beast Whisperer",
         "qty": 1,
         "set": "DMU",
@@ -293,18 +317,21 @@ test('mtg.wtf', () => {
       "result": [
         {
           "categories": [],
+          "collector_number": undefined,
           "name": "Byrke, Long Ear of the Law",
           "qty": 1,
           "set": "BLB",
         },
         {
           "categories": [],
+          "collector_number": undefined,
           "name": "Serra Redeemer",
           "qty": 1,
           "set": "BLB",
         },
         {
           "categories": [],
+          "collector_number": undefined,
           "name": "Colossification",
           "qty": 1,
           "set": "BLB",
@@ -322,10 +349,21 @@ test('edhrec clipboard', () => {
       "isError": false,
       "result": {
         "categories": null,
+        "collector_number": undefined,
         "name": "Test",
         "qty": 1,
         "set": undefined,
       },
     }
   `);
+});
+
+test('card with set and collector number', () => {
+  expect(card.run('1 Orcish Bowmasters [ltr] #433').result).toEqual({
+    qty: 1,
+    name: 'Orcish Bowmasters',
+    set: 'ltr',
+    categories: [],
+    collector_number: '433',
+  });
 });

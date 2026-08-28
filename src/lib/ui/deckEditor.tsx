@@ -5,6 +5,7 @@ import {
   createMemo,
   createSignal,
   For,
+  JSX,
   Match,
   on,
   onCleanup,
@@ -33,6 +34,7 @@ import { DetailedCardEntry, Deck, FORMATS, CardSystem } from '../constants';
 import {
   CardPrintingOption,
   fetchCardInfo,
+  formatDeckListLine,
   getPrintingPreviewUrl,
   populateCardInfo,
   prefetchCardPrintings,
@@ -69,8 +71,10 @@ import { Portal } from 'solid-js/web';
 import {
   Dialog,
   DialogContent,
+  DialogContentExtended,
   DialogFooter,
   DialogHeader,
+  DialogOverlay,
   DialogTitle,
 } from '~/components/ui/dialog';
 import { toast } from 'solid-sonner';
@@ -106,6 +110,7 @@ export const DeckEditor: Component<Props> = props => {
   const [printingPickerKey, setPrintingPickerKey] = createSignal<string>();
   const [importDialogOpen, setImportDialogOpen] = createSignal(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
+  const [closeConfirmDialogOpen, setCloseConfirmDialogOpen] = createSignal(false);
   const [typeFilter, setTypeFilter] = createSignal<string | null>(null);
   let formRef: HTMLFormElement;
 
@@ -171,6 +176,14 @@ export const DeckEditor: Component<Props> = props => {
 
   function openDeleteDialog() {
     setDeleteDialogOpen(true);
+  }
+
+  function closeConfirmDialog() {
+    setCloseConfirmDialogOpen(false);
+  }
+
+  function openCloseConfirmDialog() {
+    setCloseConfirmDialogOpen(true);
   }
 
   const updateDeck: SetStoreFunction<Deck> = (...params: any[]) => {
@@ -414,7 +427,7 @@ export const DeckEditor: Component<Props> = props => {
 
     let cards = Object.values(deck.cards)
       .filter(card => card.qty)
-      .map(card => [card.qty, card.name, card.set && `[${card.set}]`].filter(Boolean).join(' '));
+      .map(card => formatDeckListLine(card));
 
     let content = [cards].flat().join('\n');
 
@@ -504,7 +517,7 @@ export const DeckEditor: Component<Props> = props => {
               variant='outline'
               type='button'
               onClick={() => {
-                if (isDirty()) return setSearchParams({ dialog: 'editor-confirm-close' });
+                if (isDirty()) return openCloseConfirmDialog();
                 props.onClose();
               }}>
               Close
@@ -931,36 +944,39 @@ export const DeckEditor: Component<Props> = props => {
           <DeckImportDialog
             onClose={closeImportDialog}
             onImport={importedDeck => {
-              setDeck(reconcile(importedDeck));
+              setDeck('cards', reconcile(importedDeck.cards ?? {}, { merge: false }));
+              if (importedDeck.name) setDeck('name', importedDeck.name);
+              if (importedDeck.system && importedDeck.system !== deck.system) {
+                setDeck('system', importedDeck.system);
+              }
               setIsDirty(true);
               closeImportDialog();
             }}
           />
         </Show>
-        <Show when={searchParams.dialog === 'editor-confirm-close'}>
-          <Dialog open onOpenChange={isOpen => !isOpen && closeCurrentDialog()}>
-            <DialogContent class='z-[70]'>
-              <DialogHeader>
-                <DialogTitle>Unsaved Changes</DialogTitle>
-              </DialogHeader>
-              <p>Are you sure you want to close the deck editor?</p>
-              <p>
-                All <b>unsaved changes</b> will <b>be lost</b>
-              </p>
-              <DialogFooter>
-                <Button variant='ghost' onclick={closeCurrentDialog}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={() => {
-                    closeCurrentDialog();
-                    props.onClose();
-                  }}>
-                  Close Without Saving
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+        <Show when={closeConfirmDialogOpen()}>
+          <EditorOverlayDialog onClose={closeConfirmDialog}>
+            <DialogHeader>
+              <DialogTitle>Unsaved Changes</DialogTitle>
+            </DialogHeader>
+            <p>Are you sure you want to close the deck editor?</p>
+            <p>
+              All <b>unsaved changes</b> will <b>be lost</b>
+            </p>
+            <DialogFooter>
+              <Button variant='ghost' type='button' onClick={closeConfirmDialog}>
+                Cancel
+              </Button>
+              <Button
+                type='button'
+                onClick={() => {
+                  closeConfirmDialog();
+                  props.onClose();
+                }}>
+                Close Without Saving
+              </Button>
+            </DialogFooter>
+          </EditorOverlayDialog>
         </Show>
         <Show when={deleteDialogOpen()}>
           <ConfirmDeleteDialog
@@ -1026,25 +1042,40 @@ function EmptyGridContainer(props: {
   );
 }
 
+function EditorOverlayDialog(props: { onClose(): void; children: JSX.Element }) {
+  return (
+    <Portal>
+      <div class='fixed inset-0 z-[70] flex items-start justify-center sm:items-center'>
+        <Dialog modal open onOpenChange={isOpen => !isOpen && props.onClose()}>
+          <DialogOverlay class='z-[70]' />
+          <DialogContentExtended
+            class='z-[70] max-w-lg'
+            onInteractOutside={e => e.preventDefault()}>
+            {props.children}
+          </DialogContentExtended>
+        </Dialog>
+      </div>
+    </Portal>
+  );
+}
+
 function ConfirmDeleteDialog(props: { name: string; onClose(): void; onDelete(): void }) {
   return (
-    <Dialog open onOpenChange={isOpen => !isOpen && props.onClose()}>
-      <DialogContent class='z-[70]'>
-        <DialogHeader>
-          <DialogTitle>Delete Deck?</DialogTitle>
-        </DialogHeader>
-        <p>
-          Are you sure you want to delete <b>{props.name}</b>? This cannot be undone.
-        </p>
-        <DialogFooter>
-          <Button variant='ghost' type='button' onClick={props.onClose}>
-            Cancel
-          </Button>
-          <Button type='button' variant='destructive' onClick={props.onDelete}>
-            Delete Deck
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <EditorOverlayDialog onClose={props.onClose}>
+      <DialogHeader>
+        <DialogTitle>Delete Deck?</DialogTitle>
+      </DialogHeader>
+      <p>
+        Are you sure you want to delete <b>{props.name}</b>? This cannot be undone.
+      </p>
+      <DialogFooter>
+        <Button variant='ghost' type='button' onClick={props.onClose}>
+          Cancel
+        </Button>
+        <Button type='button' variant='destructive' onClick={props.onDelete}>
+          Delete Deck
+        </Button>
+      </DialogFooter>
+    </EditorOverlayDialog>
   );
 }

@@ -41,6 +41,8 @@ export interface CardEntryDetail {
   search: string;
   type_line: string;
   popularity: number;
+  set?: string;
+  collector_number?: string;
   all_parts?: CardDetailPart[];
   card_faces?: CardEntryDetail[];
 }
@@ -68,6 +70,7 @@ export interface CardEntry {
   qty: number;
   categories: string[];
   set: string;
+  collector_number?: string;
 }
 
 export interface DetailedCardEntry extends CardEntry {
@@ -146,6 +149,8 @@ export interface CardSystem {
   popularity: string;
   imageUriFormat: 'standard' | 'scryfall';
   types: string[];
+  /** When true, cardDetailEndpoint accepts set + collector_number for exact print lookup. */
+  collectorLookup?: boolean;
 }
 
 export interface LoadSettings {

@@ -59,19 +59,24 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
   }
 
   async function parseDeckList(cardListText: string) {
-    let newCardEntries = loadCardList(cardListText);
-    let newCardList = await Promise.all(newCardEntries.map(entry => fetchCardInfo(entry, cache)));
-
-    let cards: Record<string, DetailedCardEntry> = {};
-
-    for (const card of newCardList) {
-      const key = getCardKey(card);
-      cards[key] = card;
+    if (!cardListText.trim()) {
+      updateDeck('cards', reconcile({}));
+      return;
     }
+
+    const newCardEntries = loadCardList(cardListText);
+    const cards: Record<string, DetailedCardEntry> = {};
+
+    for (const entry of newCardEntries) {
+      const card = await fetchCardInfo(entry, cache, { logImport: true });
+      cards[getCardKey(card)] = card;
+    }
+
     updateDeck('cards', reconcile(cards));
   }
 
   onMount(() => {
+    cache.clear();
     window.addEventListener('drop', handleDrop, { passive: false });
   });
 

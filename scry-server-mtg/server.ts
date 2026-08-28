@@ -183,6 +183,7 @@ app.get('/', c => {
       uri: `${baseUrl}`,
       cardDetailEndpoint: `${baseUrl}/cards/named`,
       cardSearchEndpoint: `${baseUrl}/cards/search`,
+      collectorLookup: true,
       // cardBack: `${baseUrl}/res/card-back.webp`,
       imageUriFormat: 'standard',
       types: ['creature', 'planeswalker', 'land', 'instant', 'sorcery', 'enchantment', 'artifact'],
@@ -208,7 +209,28 @@ app.get('/cards/named', async c => {
   const id = c.req.query('id');
   const exact = c.req.query('exact');
   const set = c.req.query('set');
+  const collectorNumber = c.req.query('collector_number');
   const baseUrl = getBaseUrl(c.req.raw);
+
+  if (set && collectorNumber) {
+    const res = await scryfallFetch(
+      `/cards/${encodeURIComponent(set)}/${encodeURIComponent(collectorNumber)}`,
+    );
+    if (res.status === 404) {
+      return errorResponse(
+        'not_found',
+        `No card found for set "${set}" #${collectorNumber}`,
+        404,
+      );
+    }
+    if (res.status === 429) return errorResponse('rate_limited', 'Scryfall rate limit hit', 503);
+    if (!res.ok) return errorResponse('upstream_error', `Scryfall returned ${res.status}`, 503);
+    const card = (await res.json()) as ScryfallCard;
+    return new Response(JSON.stringify(mapCard(card, baseUrl)), {
+      status: 200,
+      headers: cacheHeaders(),
+    });
+  }
 
   if (id) {
     const res = await scryfallFetch(`/cards/${encodeURIComponent(id)}`);
