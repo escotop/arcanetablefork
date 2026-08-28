@@ -162,9 +162,11 @@ export const [settings, setSettings] = createLocalStore('settings', {
 
 export function cardShowsCounterModifiers(mesh?: THREE.Object3D) {
   if (!mesh) return false;
+  if (mesh.userData?.isToken) return true;
+
   const mods = mesh.userData?.modifiers;
   if (!mods) return false;
-  if (mesh.userData.isToken) return true;
+
   const declared = mods.counters;
   if (!declared) return false;
   return Object.values(declared).some(

@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { Component, createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
+import { Component, createEffect, createSignal, Match, onCleanup, Show, Switch } from 'solid-js';
 import { Button } from '~/components/ui/button';
 import { Command, CommandInput } from '~/components/ui/command';
 import { Menubar, MenubarContent, MenubarMenu, MenubarTrigger } from '~/components/ui/menubar';
@@ -11,22 +11,23 @@ import {
   doXTimes,
   getLocalPlayArea,
   hoverSignal,
-  provider,
   sendEvent,
   setPeekFilterText,
 } from '../globals';
 import styles from './peekMenu.module.css';
 
 const TokenSearchMenu: Component = props => {
-  let userData = () => hoverSignal()?.mesh?.userData;
   const playArea = () => getLocalPlayArea();
   const [peekCards, setPeekCards] = createSignal<Card[]>([]);
   let inputRef;
 
-  
-  onMount(() => {
+  createEffect(() => {
     const area = playArea();
-    if (!area) return;
+    if (!area) {
+      setPeekCards([]);
+      return;
+    }
+
     const unsub = area.tokenSearchZone.subscribeToCardList(cardList => {
       setPeekCards(cardList);
       if (cardList?.length > 0 && inputRef) {
@@ -34,9 +35,7 @@ const TokenSearchMenu: Component = props => {
       }
     });
 
-    onCleanup(() => {
-      unsub();
-    });
+    onCleanup(unsub);
   });
 
   const cardMesh = () => hoverSignal()?.mesh;
@@ -64,46 +63,19 @@ const TokenSearchMenu: Component = props => {
 
   return (
     <>
-      <Show when={peekCards()?.length > 0 && playArea()}>
-        {area => (
-          <>
-        <Show when={tether()}>
-          <div class={styles.peekActions} style={`--x: ${tether().x}px; --y: ${tether().y}px;`}>
-            <Menubar>
-              <MenubarMenu>
-                <MenubarTrigger>Add</MenubarTrigger>
-                <MenubarContent>
-                  <div class='py-1.5 px-2'>Add Tokens</div>
-                  <NumberFieldMenuItem
-                    onSubmit={count => {
-                      let card = cardsById.get(cardMesh().userData.id)!;
-                      doXTimes(count, () => addToBattlefield(card), 50);
-                    }}
-                  />
-                </MenubarContent>
-
-                <Button
-                  variant='ghost'
-                  onClick={() => {
-                    area.tokenSearchZone.removeCard(cardMesh());
-                    cleanupCard(cardsById.get(cardMesh().userData.id));
-                  }}>
-                  Dismiss
-                </Button>
-              </MenubarMenu>
-            </Menubar>
-          </div>
-        </Show>
+      <Show when={peekCards()?.length > 0 && playArea()?.tokenSearchZone?.observable}>
         <div class={styles.searchContainer}>
           <div class={styles.search}>
             <h2 class='text-white text-xl text-left mb-4'>
-              Tokens | {area.tokenSearchZone.observable.cardCount}
+              Tokens | {playArea()!.tokenSearchZone.observable.cardCount}
             </h2>
             <Command>
               <CommandInput
                 ref={inputRef}
                 placeholder='Search'
                 onKeyUp={e => {
+                  const area = playArea();
+                  if (!area) return;
                   if (e.code === 'Escape') {
                     area.dismissFromZone(area.tokenSearchZone);
                   }
@@ -119,6 +91,8 @@ const TokenSearchMenu: Component = props => {
                       <Button
                         variant='ghost'
                         onClick={() => {
+                          const area = playArea();
+                          if (!area) return;
                           area.tokenSearchZone.viewGrid();
                           setViewField(false);
                         }}>
@@ -129,6 +103,8 @@ const TokenSearchMenu: Component = props => {
                       <Button
                         variant='ghost'
                         onClick={() => {
+                          const area = playArea();
+                          if (!area) return;
                           area.tokenSearchZone.viewField();
                           setViewField(true);
                         }}>
@@ -138,7 +114,11 @@ const TokenSearchMenu: Component = props => {
                   </Switch>
                   <Button
                     variant='ghost'
-                    onClick={() => area.dismissFromZone(area.tokenSearchZone)}>
+                    onClick={() => {
+                      const area = playArea();
+                      if (!area) return;
+                      area.dismissFromZone(area.tokenSearchZone);
+                    }}>
                     Dismiss
                   </Button>
                 </MenubarMenu>
@@ -146,8 +126,41 @@ const TokenSearchMenu: Component = props => {
             </Command>
           </div>
         </div>
-          </>
-        )}
+        <Show when={tether() && cardMesh()}>
+          <div
+            class={styles.peekActions}
+            style={`--x: ${tether()!.x}px; --y: ${tether()!.y}px;`}>
+            <Menubar>
+              <MenubarMenu>
+                <MenubarTrigger>Add</MenubarTrigger>
+                <MenubarContent>
+                  <div class='py-1.5 px-2'>Add Tokens</div>
+                  <NumberFieldMenuItem
+                    onSubmit={count => {
+                      const mesh = cardMesh();
+                      const area = playArea();
+                      if (!mesh || !area) return;
+                      let card = cardsById.get(mesh.userData.id)!;
+                      doXTimes(count, () => addToBattlefield(card), 50);
+                    }}
+                  />
+                </MenubarContent>
+
+                <Button
+                  variant='ghost'
+                  onClick={() => {
+                    const mesh = cardMesh();
+                    const area = playArea();
+                    if (!mesh || !area) return;
+                    area.tokenSearchZone.removeCard(mesh);
+                    cleanupCard(cardsById.get(mesh.userData.id));
+                  }}>
+                  Dismiss
+                </Button>
+              </MenubarMenu>
+            </Menubar>
+          </div>
+        </Show>
       </Show>
     </>
   );
