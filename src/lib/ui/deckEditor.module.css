@@ -1,8 +1,8 @@
 .container {
   position: fixed;
   inset: 0;
-  z-index: 40;
-  background-color: hsla(var(--background) / 0.8);
+  z-index: 60;
+  background-color: hsl(var(--background));
   pointer-events: auto;
   overflow: hidden;
 }

@@ -100,7 +100,7 @@ const PrintingPickerModal: Component<Props> = props => {
 
   return (
     <div
-      class='fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur-sm'
+      class='fixed inset-0 z-[70] flex flex-col bg-background/95 backdrop-blur-sm'
       onContextMenu={e => e.preventDefault()}>
       <header class='flex shrink-0 items-center justify-between gap-4 border-b px-4 py-3'>
         <div class='min-w-0'>

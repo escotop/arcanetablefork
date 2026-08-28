@@ -1,0 +1,216 @@
+import { Component, createSignal, For, JSX, Show } from 'solid-js';
+import { Portal } from 'solid-js/web';
+import { Button } from '~/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '~/components/ui/dialog';
+import { createDeckStore } from '../deckStore';
+import { useCardSystemContext } from '../cardSystemContext';
+import { colorHashDark } from '../globals';
+import PencilIcon from 'lucide-solid/icons/pencil';
+import { DeckEditor } from './deckEditor';
+import styles from './deckPicker.module.css';
+import { Deck } from '../constants';
+import { unwrap } from 'solid-js/store';
+
+interface DeckManagerDialogProps {
+  open: boolean;
+  onOpenChange?: (open: boolean) => void;
+  title?: string;
+  hideClose?: boolean;
+  selectedDeckId?: string;
+  onSelectDeck?: (id: string) => void;
+  footerStart?: JSX.Element;
+  footer?: JSX.Element;
+}
+
+export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
+  const [deckStore, setDeckStore] = createDeckStore();
+  const [cardSystemStore] = useCardSystemContext();
+  const [editingDeck, setEditingDeck] = createSignal<Deck>();
+  const [selectedDeckId, setSelectedDeckId] = createSignal(
+    props.selectedDeckId ?? deckStore?.systems[cardSystemStore.system]?.[0],
+  );
+
+  function shouldShowSystem(system: string) {
+    if (!cardSystemStore) return false;
+    if (cardSystemStore.system === 'unsorted' && system === 'unsorted') return false;
+    return system !== cardSystemStore.system;
+  }
+
+  function currentSelection() {
+    return props.selectedDeckId ?? selectedDeckId();
+  }
+
+  function handleSelect(deckId: string) {
+    if (props.selectedDeckId === undefined) {
+      setSelectedDeckId(deckId);
+    }
+    props.onSelectDeck?.(deckId);
+  }
+
+  return (
+    <>
+      <Show when={editingDeck()} keyed>
+        {deck => (
+          <Portal>
+            <DeckEditor
+              onClose={() => setEditingDeck()}
+              deck={structuredClone(unwrap(deck))}
+              onChange={updatedDeck => {
+                let fromSystem = unwrap(editingDeck()?.system) || 'unsorted';
+                let toSystem = updatedDeck.system || 'unsorted';
+
+                setDeckStore('systems', fromSystem, (entries = []) =>
+                  entries.filter(id => id !== deck.id),
+                );
+
+                setDeckStore('systems', 'unsorted', (entries = []) =>
+                  entries.filter(id => id !== deck.id),
+                );
+
+                setDeckStore('systems', toSystem, (entries = []) => [
+                  updatedDeck.id,
+                  ...entries.filter(id => id !== updatedDeck.id),
+                ]);
+                setDeckStore('decks', { [updatedDeck.id]: updatedDeck });
+              }}
+              onDelete={() => {
+                setDeckStore('decks', deck.id, undefined);
+                let fromSystem = deck.system || 'unsorted';
+                setDeckStore('systems', fromSystem, entries =>
+                  entries.filter(id => id !== deck.id),
+                );
+              }}
+            />
+          </Portal>
+        )}
+      </Show>
+      <Show when={!editingDeck()}>
+        <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+          <DialogContent class='max-w-3xl' hideClose={props.hideClose}>
+            <DialogHeader>
+              <DialogTitle>{props.title ?? 'Your Decks'}</DialogTitle>
+            </DialogHeader>
+            <div class='flex flex-col gap-5'>
+              <div>
+                <h2>{cardSystemStore?.systems?.[cardSystemStore.system]?.name}</h2>
+                <div class='grid grid-cols-3 gap-4 my-2'>
+                  <For each={deckStore.systems[cardSystemStore?.system] ?? []}>
+                    {deckId => {
+                      let deck = () => deckStore.decks[deckId];
+                      return (
+                        <Show when={deck()}>
+                          <DeckOption
+                            deck={deck()!}
+                            isSelected={
+                              props.onSelectDeck ? deck()!.id === currentSelection() : false
+                            }
+                            onSelect={() => handleSelect(deck()!.id)}
+                            onEdit={() => setEditingDeck(deck())}
+                            selectable={!!props.onSelectDeck}
+                          />
+                        </Show>
+                      );
+                    }}
+                  </For>
+                </div>
+
+                <For each={Object.entries(deckStore.systems)}>
+                  {([system, deckIds]) => (
+                    <Show when={shouldShowSystem(system) && deckIds.length > 0}>
+                      <h2>{cardSystemStore.systems[system]?.name ?? system}</h2>
+                      <div class='grid grid-cols-3 gap-4 my-2'>
+                        <For each={deckIds}>
+                          {deckId => {
+                            let deck = deckStore.decks[deckId];
+                            return (
+                              <Show when={deck}>
+                                <DeckOption
+                                  deck={deck}
+                                  isSelected={
+                                    props.onSelectDeck ? deck.id === currentSelection() : false
+                                  }
+                                  onSelect={() => handleSelect(deck.id)}
+                                  onEdit={() => setEditingDeck(deck)}
+                                  selectable={!!props.onSelectDeck}
+                                />
+                              </Show>
+                            );
+                          }}
+                        </For>
+                      </div>
+                    </Show>
+                  )}
+                </For>
+              </div>
+              <DialogFooter>
+                {props.footerStart}
+                <Button variant='outline' type='button' onClick={() => setEditingDeck({})}>
+                  Create Deck
+                </Button>
+                {props.footer ?? (
+                  <Button variant='ghost' type='button' onClick={() => props.onOpenChange?.(false)}>
+                    Close
+                  </Button>
+                )}
+              </DialogFooter>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </Show>
+    </>
+  );
+};
+
+interface DeckOptionProps {
+  onSelect(): void;
+  onEdit(): void;
+  isSelected: boolean;
+  selectable: boolean;
+  deck: Deck;
+}
+
+function DeckOption(props: DeckOptionProps) {
+  return (
+    <div
+      style='position: relative; aspect-ratio: 626/457;'
+      class='relative rounded-lg overflow-hidden shadow-lg'
+      classList={{ [styles.selectedRadioItem]: props.isSelected }}>
+      <button
+        style='width: 100%; height: 100%;'
+        type='button'
+        onClick={() => props.selectable && props.onSelect()}
+        disabled={!props.selectable}>
+        <div
+          class='bg-cover'
+          style={`background-image: url(${
+            props.deck.coverImage ?? '/arcane-table-back.webp'
+          }); height: 100%;`}></div>
+        <div class='absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent py-4 px-2 text-left'>
+          <h3 class='text-white text-xl font-semibold'>{props.deck?.name}</h3>
+          <div class='flex flex-row gap-2 pt-2 flex-wrap'>
+            <For each={props.deck.tags}>
+              {tag => (
+                <span
+                  class='text-white rounded-md h-7 px-3 text-sm inline-flex items-center justify-center whitespace-nowrap'
+                  style={`background-color: ${colorHashDark.hex(tag.name)};`}>
+                  {tag.name}
+                </span>
+              )}
+            </For>
+          </div>
+        </div>
+      </button>
+      <div class='absolute top-2 right-2'>
+        <button type='button' style='cursor: pointer;' onClick={props.onEdit}>
+          <PencilIcon style='color: white; filter: drop-shadow(2px 4px 6px black);' />
+        </button>
+      </div>
+    </div>
+  );
+}

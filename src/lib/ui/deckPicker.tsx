@@ -1,4 +1,4 @@
-import { Component, createEffect, createSignal, For, Match, onMount, Show, Switch } from 'solid-js';
+import { createSignal, Match, Switch } from 'solid-js';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -15,35 +15,27 @@ import {
   NumberFieldLabel,
 } from '~/components/ui/number-field';
 import {
-  labelVariants,
   TextField,
   TextFieldInput,
   TextFieldLabel,
 } from '~/components/ui/text-field';
 import { createDeckStore } from '../deckStore';
 import { useCardSystemContext } from '../cardSystemContext';
-import { colorHashDark, setIsSpectating, startSpectating } from '../globals';
-import PencilIcon from 'lucide-solid/icons/pencil';
-import { cn } from '../cnUtil';
-import { DeckEditor } from './deckEditor';
-import styles from './deckPicker.module.css';
+import { setIsSpectating } from '../globals';
+import { DeckManagerDialog } from './deckManager';
 import CopyLinkButton from '~/components/ui/copy-link-button';
-import { Deck, DEFAULT_COMMANDER_LIFE, LoadSettings } from '../constants';
-import { useSearchParams } from '@solidjs/router';
-import { unwrap } from 'solid-js/store';
+import { DEFAULT_COMMANDER_LIFE, LoadSettings } from '../constants';
 
 interface Props {
   onStart(settings: LoadSettings): void;
 }
 
 export default function DeckPicker(props: Props) {
-  const [deckStore, setDeckStore] = createDeckStore();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [cardSystemStore, { setCardSystem }] = useCardSystemContext();
+  const [deckStore] = createDeckStore();
+  const [cardSystemStore] = useCardSystemContext();
   const [selectedDeckId, setSelectedDeckId] = createSignal<string>(
     deckStore?.systems[cardSystemStore.system]?.[0],
   );
-  const [editingDeck, setEditingDeck] = createSignal<Deck>();
   const [sessionOptions, setSessionOptions] = createSignal();
 
   async function onSubmit(e: SubmitEvent & { currentTarget: HTMLFormElement }) {
@@ -58,133 +50,39 @@ export default function DeckPicker(props: Props) {
     props.onStart(startOptions);
   }
 
-  function shouldShowSystem(system: string) {
-    if (cardSystemStore.system === 'unsorted' && system === 'unsorted') return false;
-    return system !== cardSystemStore.system;
-  }
-
   return (
-    <>
-      <Show when={editingDeck()} keyed>
-        {deck => (
-          <DeckEditor
-            onClose={() => setEditingDeck()}
-            deck={structuredClone(unwrap(deck))}
-            onChange={updatedDeck => {
-              let fromSystem = unwrap(editingDeck()?.system) || 'unsorted';
-              let toSystem = updatedDeck.system || 'unsorted';
-
-              setDeckStore('systems', fromSystem, (entries = []) =>
-                entries.filter(id => id !== deck.id),
-              );
-
-              setDeckStore('systems', 'unsorted', (entries = []) =>
-                entries.filter(id => id !== deck.id),
-              );
-
-              setDeckStore('systems', toSystem, (entries = []) => [
-                updatedDeck.id,
-                ...entries.filter(id => id !== updatedDeck.id),
-              ]);
-              setDeckStore('decks', { [updatedDeck.id]: updatedDeck });
-            }}
-            onDelete={() => {
-              setDeckStore('decks', deck.id, undefined);
-              let fromSystem = deck.system || 'unsorted';
-              setDeckStore('systems', fromSystem, entries => entries.filter(id => id !== deck.id));
-            }}
+    <Switch>
+      <Match when={!sessionOptions()}>
+        <SessionOptions
+          onSubmit={session => {
+            setSessionOptions(session);
+          }}
+          onSpectate={() => setIsSpectating(true)}
+        />
+      </Match>
+      <Match when>
+        <form class='contents' onSubmit={onSubmit}>
+          <input type='hidden' name='deckId' value={selectedDeckId()} />
+          <DeckManagerDialog
+            open
+            hideClose
+            title='Select A Deck'
+            selectedDeckId={selectedDeckId()}
+            onSelectDeck={setSelectedDeckId}
+            footerStart={
+              <Button variant='ghost' type='button' onClick={() => setSessionOptions()}>
+                Back
+              </Button>
+            }
+            footer={
+              <Button type='submit' disabled={!selectedDeckId()}>
+                Start Playtest
+              </Button>
+            }
           />
-        )}
-      </Show>
-      <Show when={!editingDeck()}>
-        <Switch>
-          <Match when={!sessionOptions()}>
-            <SessionOptions
-              onSubmit={session => {
-                setSessionOptions(session);
-              }}
-              onSpectate={() => setIsSpectating(true)}
-            />
-          </Match>
-          <Match when>
-            <Dialog open={!editingDeck()}>
-              <DialogContent class='max-w-3xl' hideClose>
-                <DialogHeader>
-                  <DialogTitle>Select A Deck</DialogTitle>
-                </DialogHeader>
-                <form class='flex flex-col gap-5' onSubmit={onSubmit}>
-                  <div>
-                    <input type='hidden' name='deckId' value={selectedDeckId()} />
-                    <h2>{cardSystemStore.systems[cardSystemStore.system]?.name}</h2>
-                    <div class='grid grid-cols-3 gap-4 my-2'>
-                      <For each={deckStore.systems[cardSystemStore.system]}>
-                        {(deckId, i) => {
-                          let deck = () => deckStore.decks[deckId];
-                          return (
-                            <Show when={deck()}>
-                              <DeckOption
-                                deck={deck()}
-                                isSelected={deck().id === selectedDeckId()}
-                                onSelect={() => setSelectedDeckId(deck().id)}
-                                onEdit={() => setEditingDeck(deck())}
-                              />
-                            </Show>
-                          );
-                        }}
-                      </For>
-                    </div>
-
-                    <For each={Object.entries(deckStore.systems)}>
-                      {([system, deckIds]) => (
-                        <Show when={shouldShowSystem(system) && deckIds.length > 0}>
-                          <h2>{cardSystemStore.systems[system]?.name ?? system}</h2>
-                          <div class='grid grid-cols-3 gap-4 my-2'>
-                            <For each={deckIds}>
-                              {(deckId, i) => {
-                                let deck = deckStore.decks[deckId];
-                                return (
-                                  <Show when={deck}>
-                                    <DeckOption
-                                      deck={deck}
-                                      isSelected={deck.id === selectedDeckId()}
-                                      onSelect={() => setSelectedDeckId(deck.id)}
-                                      onEdit={() => setEditingDeck(deck)}
-                                    />
-                                  </Show>
-                                );
-                              }}
-                            </For>
-                          </div>
-                        </Show>
-                      )}
-                    </For>
-                  </div>
-                  <DialogFooter>
-                    <Button variant='ghost' onClick={() => setSessionOptions()}>
-                      Back
-                    </Button>
-                    {
-                      // <Button
-                      //   disabled={!selectedDeckId()}
-                      //   variant='ghost'
-                      //   onClick={() => setEditingDeck(deckStore.decks[selectedDeckId()])}>
-                      //   Edit Deck
-                      // </Button>
-                    }{' '}
-                    <Button variant='outline' type='button' onClick={() => setEditingDeck({})}>
-                      Create Deck
-                    </Button>
-                    <Button type='submit' disabled={!selectedDeckId()}>
-                      Start Playtest
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </Match>
-        </Switch>
-      </Show>
-    </>
+        </form>
+      </Match>
+    </Switch>
   );
 }
 
@@ -250,48 +148,5 @@ function SessionOptions(props: SessionOptionsProps) {
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-interface DeckOptionProps {
-  onSelect(): void;
-  onEdit(): void;
-  isSelected: boolean;
-  deck: Deck;
-}
-
-function DeckOption(props: DeckOptionProps) {
-  return (
-    <div
-      style='position: relative; aspect-ratio: 626/457;'
-      class='relative rounded-lg overflow-hidden shadow-lg'
-      classList={{ [styles.selectedRadioItem]: props.isSelected }}>
-      <button style='width: 100%; height: 100%;' type='button' onClick={props.onSelect}>
-        <div
-          class='bg-cover'
-          style={`background-image: url(${
-            props.deck.coverImage ?? '/arcane-table-back.webp'
-          }); height: 100%;`}></div>
-        <div class='absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent py-4 px-2 text-left'>
-          <h3 class='text-white text-xl font-semibold'>{props.deck?.name}</h3>
-          <div class='flex flex-row gap-2 pt-2 flex-wrap'>
-            <For each={props.deck.tags}>
-              {tag => (
-                <span
-                  class='text-white rounded-md h-7 px-3 text-sm inline-flex items-center justify-center whitespace-nowrap'
-                  style={`background-color: ${colorHashDark.hex(tag.name)};`}>
-                  {tag.name}
-                </span>
-              )}
-            </For>
-          </div>
-        </div>
-      </button>
-      <div class='absolute top-2 right-2'>
-        <button type='button' style='cursor: pointer;' onClick={props.onEdit}>
-          <PencilIcon style='color: white; filter: drop-shadow(2px 4px 6px black);' />
-        </button>
-      </div>
-    </div>
   );
 }

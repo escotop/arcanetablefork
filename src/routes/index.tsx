@@ -1,15 +1,26 @@
 import { A, useNavigate } from '@solidjs/router';
 import { nanoid } from 'nanoid';
-import { createSignal, For, onMount } from 'solid-js';
+import { createSignal, For, lazy, onMount, Show, Suspense } from 'solid-js';
 import MetaTags, { JsonLd } from '~/lib/meta-tags';
 import { SHORTCUTS, BATTLEFIELD_SHORTCUTS, OVERLAY_SHORTCUTS } from '~/lib/shortcuts/hotkeys-table';
 import { useClientCardSystemContext } from '~/lib/cardSystemProviderClient';
 import softwareLd from '~/lib/json-ld/software.json';
 import faqLd from '~/lib/json-ld/faq.json';
 import BrandingHeader from '~/components/branding/header';
+import ClientOnly from '~/lib/clientOnly';
+
+const ManageDecksButton = lazy(() =>
+  import('~/lib/ui/manageDecksButton').then(module => ({ default: module.ManageDecksButton })),
+);
+
+const DeckManagerDialog = lazy(() =>
+  import('~/lib/ui/deckManager').then(module => ({ default: module.DeckManagerDialog })),
+);
 
 export default function Page(props) {
   const [startUrl, setStartUrl] = createSignal(`/game/${nanoid()}`);
+  const [manageDecksOpen, setManageDecksOpen] = createSignal(false);
+  const cardSystemCtx = useClientCardSystemContext();
 
   onMount(() => {
     setStartUrl(`/game/${nanoid()}`);
@@ -40,7 +51,7 @@ export default function Page(props) {
         }}
       />
       <div class='mx-auto flex flex-col'>
-        <Hero startUrl={startUrl()} />
+        <Hero startUrl={startUrl()} onManageDecks={() => setManageDecksOpen(true)} />
         <CardSystems startUrl={startUrl()} />
         <TheTable startUrl={startUrl()} />
         <Multiplayer />
@@ -53,6 +64,17 @@ export default function Page(props) {
         <Sparkstone />
         <Footer />
       </div>
+      <ClientOnly>
+        <Show when={cardSystemCtx && manageDecksOpen()}>
+          <Suspense>
+            <DeckManagerDialog
+              open={manageDecksOpen()}
+              onOpenChange={setManageDecksOpen}
+              title='Your Decks'
+            />
+          </Suspense>
+        </Show>
+      </ClientOnly>
     </div>
   );
 }
@@ -63,7 +85,7 @@ const posterStyle = `
   aspect-ratio: 2/3;
 `;
 
-function Hero(props: { startUrl: string }) {
+function Hero(props: { startUrl: string; onManageDecks: () => void }) {
   return (
     <header
       class='relative bg-cover bg-center bg-gray-800 rounded-lg'
@@ -77,11 +99,18 @@ function Hero(props: { startUrl: string }) {
         <p class='text-xl text-gray-300 mb-8 max-w-md'>
           A 3D card table in your browser. No installs, no accounts. Just share a link and play.
         </p>
-        <A
-          href={props.startUrl}
-          class='bg-indigo-600 text-white px-6 py-3 rounded-xl hover:bg-indigo-700 transition'>
-          Start Now
-        </A>
+        <div class='flex gap-4 flex-wrap justify-center'>
+          <A
+            href={props.startUrl}
+            class='bg-indigo-600 text-white px-6 py-3 rounded-xl hover:bg-indigo-700 transition'>
+            Start Now
+          </A>
+          <ClientOnly>
+            <Suspense>
+              <ManageDecksButton onClick={props.onManageDecks} />
+            </Suspense>
+          </ClientOnly>
+        </div>
       </div>
     </header>
   );

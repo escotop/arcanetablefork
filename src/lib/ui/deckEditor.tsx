@@ -182,6 +182,18 @@ export const DeckEditor: Component<Props> = props => {
     }
   }
 
+  function openPrintingPicker(storageKey: string) {
+    if (!supportsCardPrintings() || !(deck.cards[storageKey]?.qty > 0)) return;
+    setPrintingPickerKey(storageKey);
+  }
+
+  function handlePrintingContextMenu(event: MouseEvent, storageKey: string) {
+    if (!supportsCardPrintings() || !(deck.cards[storageKey]?.qty > 0)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openPrintingPicker(storageKey);
+  }
+
   let isEditing = () => !!props?.deck?.id;
 
   onMount(() => {
@@ -709,11 +721,7 @@ export const DeckEditor: Component<Props> = props => {
                         updateDeck={updateDeck}
                         onChangePrinting={changeCardPrinting}
                         onPreview={src => setSearchParams({ dialog: 'card-preview', src })}
-                        onOpenPrintings={
-                          supportsCardPrintings()
-                            ? () => setPrintingPickerKey(storageKey)
-                            : undefined
-                        }
+                        onOpenPrintings={() => openPrintingPicker(storageKey)}
                       />
                     )}
                   </For>
@@ -741,7 +749,8 @@ export const DeckEditor: Component<Props> = props => {
                         --distance: ${random(20, 100)}px;
                         content-visibility: auto;
                       `}
-                        class='fade-in-from-below'>
+                        class='fade-in-from-below'
+                        onContextMenu={e => handlePrintingContextMenu(e, cardKey())}>
                         <img
                           crossOrigin=''
                           src={
