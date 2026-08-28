@@ -303,6 +303,14 @@ export function getRotationFromCardState(userData) {
   return q;
 }
 
+export function applyCardOrientation(cardMesh: Object3D, zoneId?: string) {
+  cardMesh.quaternion.copy(getRotationFromCardState(cardMesh.userData));
+  const id = zoneId ?? cardMesh.userData.zoneId;
+  if (id && cardMesh.userData.zone?.[id]) {
+    setCardData(cardMesh, `zone.${id}.rotation`, cardMesh.rotation.toArray());
+  }
+}
+
 export function splitUserdata(userData: CardUserData) {
   const [transferable, _, cloneable] = splitProps(
     userData,

@@ -184,6 +184,8 @@ export function animateObject(obj: Object3D, opts: AnimationOpts) {
   if (opts.to?.rotation) {
     opts.from.quarternion = new Quaternion().setFromEuler(opts.from.rotation);
     opts.to.quarternion = new Quaternion().setFromEuler(opts.to.rotation);
+  } else if (opts.to?.quarternion && !opts.from.quarternion) {
+    opts.from.quarternion = obj.quaternion.clone();
   }
 
   let animation = {
@@ -213,7 +215,7 @@ function renderAnimation(animation, delta: number): boolean {
     let from = animation.from?.position ?? animation.to?.position;
     animation.obj.position.copy(from.clone().lerp(animation.to.position, delta));
   }
-  if (animation.to?.rotation) {
+  if (animation.to?.rotation || animation.to?.quarternion) {
     let from = animation.from?.quarternion ?? animation.to?.quarternion;
     animation.obj.quaternion.copy(from.clone().slerp(animation.to.quarternion!.clone(), delta));
   }

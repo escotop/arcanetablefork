@@ -194,12 +194,14 @@ export class PlayArea {
     this.applyNameTagOrientation();
 
     if (state?.battlefield?.cards) {
-      state.battlefield.cards.forEach(mesh => {
-        let card = initializeCardMesh(mesh.userData.card, clientId);
+      state.battlefield.cards.forEach(serialized => {
+        let card = initializeCardMesh(serialized.userData.card, clientId);
+        setCardData(card.mesh, 'isTapped', serialized.userData.isTapped ?? false);
+        setCardData(card.mesh, 'isFlipped', serialized.userData.isFlipped ?? false);
         setCardData(card.mesh, 'isPublic', true);
         this.battlefieldZone.addCard(card, {
           skipAnimation: true,
-          positionArray: mesh.position,
+          positionArray: serialized.position,
         });
       });
     }
@@ -554,19 +556,25 @@ export class PlayArea {
   }
 
   flip(cardMesh: Mesh) {
-    let focusCameraTarget = getFocusCameraPositionRelativeTo(cardMesh);
     setCardData(cardMesh, 'isFlipped', !cardMesh.userData.isFlipped);
     this.emitEvent({ type: 'flip', payload: { userData: cardMesh.userData } });
+    this.applyFlipVisual(cardMesh);
+  }
 
-    const zone = zonesById.get(cardMesh.userData.zoneId)!;
+  applyFlipVisual(cardMesh: Mesh, options: { animate?: boolean } = {}) {
+    const zone = zonesById.get(cardMesh.userData.zoneId);
+    if (!zone) return;
 
-    let rotation = new Euler().fromArray(cardMesh.userData.zone[zone.id].rotation);
-    let vec = new Vector3();
-    cardMesh.getWorldDirection(vec);
-    rotation.y += Math.PI;
-    rotation.z *= -1;
-    setCardData(cardMesh, `zone.${zone.id}.rotation`, rotation.toArray());
+    const animate = options.animate ?? isEventCatchUpComplete();
+    const targetQuaternion = getRotationFromCardState(cardMesh.userData);
 
+    if (!animate) {
+      cardMesh.quaternion.copy(targetQuaternion);
+      setCardData(cardMesh, `zone.${zone.id}.rotation`, cardMesh.rotation.toArray());
+      return;
+    }
+
+    const focusCameraTarget = getFocusCameraPositionRelativeTo(cardMesh);
     animateObject(cardMesh, {
       completeOnCancel: true,
       duration: 0.4,
@@ -576,7 +584,10 @@ export class PlayArea {
         new Vector3().fromArray(cardMesh.userData.zone[zone.id].position),
       ]),
       to: {
-        rotation,
+        quarternion: targetQuaternion,
+      },
+      onComplete: () => {
+        setCardData(cardMesh, `zone.${zone.id}.rotation`, cardMesh.rotation.toArray());
       },
     });
 
@@ -588,22 +599,30 @@ export class PlayArea {
     }
   }
 
-  tap(cardMesh: Mesh) {
-    let initialAngle = cardMesh.userData.isFlipped ? Math.PI : 0;
-    let angleDelta = cardMesh.userData.isTapped ? -Math.PI / 2 : 0;
+  tap(cardMesh: Mesh, options: { skipAnimation?: boolean } = {}) {
+    const zone = zonesById.get(cardMesh.userData.zoneId);
+    const targetQuaternion = getRotationFromCardState(cardMesh.userData);
+    const skipAnimation = options.skipAnimation ?? !isEventCatchUpComplete();
 
-    if (cardMesh.userData.isFlipped) {
-      angleDelta = -angleDelta;
+    if (skipAnimation) {
+      cardMesh.quaternion.copy(targetQuaternion);
+      if (zone) {
+        setCardData(cardMesh, `zone.${zone.id}.rotation`, cardMesh.rotation.toArray());
+      }
+      return Promise.resolve();
     }
-    let rotation = cardMesh.rotation.clone();
-    rotation.z = angleDelta + initialAngle;
 
     return new Promise<void>(onComplete => {
       animateObject(cardMesh, {
         completeOnCancel: true,
-        to: { rotation },
+        to: { quarternion: targetQuaternion },
         duration: 0.2,
-        onComplete,
+        onComplete: () => {
+          if (zone) {
+            setCardData(cardMesh, `zone.${zone.id}.rotation`, cardMesh.rotation.toArray());
+          }
+          onComplete();
+        },
       });
     });
   }

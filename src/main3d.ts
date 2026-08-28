@@ -91,7 +91,7 @@ import { transferCard } from './lib/transferCard';
 import { setCounters } from './lib/ui/counterDialog';
 import { resolveStackAnchor } from './lib/footprintOverlap';
 import { restackItemsLocally } from './lib/utils';
-import { processEvents, waitForGameLogCatchUp } from './remoteEvents';
+import { processEvents, syncPlayAreasFromGameLog, waitForGameLogCatchUp, waitForMultiplayerGameState } from './remoteEvents';
 import { setupGameStateImportObserver } from './lib/gameStateSnapshot';
 import { getDeckStore } from './lib/deckStore';
 import { unwrap } from 'solid-js/store';
@@ -146,13 +146,12 @@ function loadGameMeta(gameId: string): StoredGameMeta | null {
   }
 }
 
-function waitForProviderSync(gameId: string): Promise<{
+function waitForProviderSync(maxWaitMs = 8000): Promise<{
   synced: boolean;
   timedOut: boolean;
-  skipped?: boolean;
 }> {
-  if (hasPersistedGameState() || !getStoredJoinBinding(gameId)) {
-    return Promise.resolve({ synced: false, timedOut: false, skipped: true });
+  if (!provider) {
+    return Promise.resolve({ synced: false, timedOut: false });
   }
 
   return new Promise(resolve => {
@@ -171,7 +170,7 @@ function waitForProviderSync(gameId: string): Promise<{
       if (synced) finish(true, false);
     };
     provider.on('sync', onSync);
-    setTimeout(() => finish(false, true), 8000);
+    setTimeout(() => finish(false, true), maxWaitMs);
   });
 }
 
@@ -179,6 +178,7 @@ async function waitForGameLogReplay() {
   const replayStart = processedEvents();
   const logLength = gameLog.length;
   const caughtUp = await profileAsync('gameLog replay', () => waitForGameLogCatchUp());
+  syncPlayAreasFromGameLog();
   markLoadProfile('gameLog replay counts', {
     eventsReplayed: processedEvents() - replayStart,
     gameLogLength: logLength,
@@ -250,7 +250,7 @@ export async function tryReconnectToGame(
   initCardSystem?: (uri: string) => Promise<unknown>,
 ): Promise<boolean> {
   const playerSessionId = getOrCreatePlayerSessionId(gameId);
-  const providerSync = await profileAsync('provider sync', () => waitForProviderSync(gameId));
+  const providerSync = await profileAsync('provider sync', () => waitForProviderSync());
   markLoadProfile('provider sync result', providerSync);
   const joinClientId = await profileAsync('resolve join client', () =>
     resolveJoinClientId(gameLog, gameId, playerSessionId, processEvents),
@@ -286,6 +286,12 @@ export async function localInit(gameOptions: GameOptions) {
     }));
     setPlayers(newPlayers);
     handlePingAwarenessChanges(change);
+    void processEvents().then(() => syncPlayAreasFromGameLog());
+  });
+
+  provider.on('sync', isSynced => {
+    if (!isSynced) return;
+    void waitForGameLogCatchUp({ maxWaitMs: 5000 }).then(() => syncPlayAreasFromGameLog());
   });
 
   outlinePass = new OutlinePass(
@@ -314,7 +320,9 @@ export async function localInit(gameOptions: GameOptions) {
   mouse = new THREE.Vector2();
   cameraMouse = new THREE.Vector2();
 
-  gameLog.observe(processEvents);
+  gameLog.observe(() => {
+    void processEvents().then(() => syncPlayAreasFromGameLog());
+  });
   setupGameStateImportObserver(() => currentGameId);
 
   container.appendChild(renderer.domElement);
@@ -379,6 +387,9 @@ export async function loadDeckAndJoin(
   settings: LoadSettings,
   initCardSystem?: (uri: string) => Promise<unknown>,
 ) {
+  await profileAsync('provider sync (join)', () => waitForProviderSync(15000));
+  await profileAsync('multiplayer state (pre-join)', () => waitForMultiplayerGameState(15000));
+
   const playerSessionId = getOrCreatePlayerSessionId(currentGameId);
   const existingJoinClientId = await profileAsync('resolve join client (new game)', () =>
     resolveJoinClientId(gameLog, currentGameId, playerSessionId, processEvents),
@@ -455,6 +466,7 @@ export async function loadDeckAndJoin(
   readjustPlayAreas();
   renderer.compile(scene, camera);
   markLoadProfile('renderer compile (new game)');
+  await profileAsync('multiplayer state (post-join)', () => waitForMultiplayerGameState(15000));
   setEventCatchUpComplete(true);
 }
 

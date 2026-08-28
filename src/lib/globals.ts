@@ -331,17 +331,19 @@ function parseEnvUrlList(value: string | undefined): string[] | undefined {
 }
 
 function createSyncProvider(gameId: string) {
-  const wsUrl = import.meta.env.VITE_YJS_WS_URL as string | undefined;
-  if (import.meta.env.PROD || wsUrl) {
-    return new WebsocketProvider(wsUrl ?? 'wss://ws.arcanetable.app', gameId, ydoc);
+  const useWebRtc = import.meta.env.VITE_YJS_USE_WEBRTC === 'true';
+  const wsUrl =
+    (import.meta.env.VITE_YJS_WS_URL as string | undefined) ?? 'wss://ws.arcanetable.app';
+
+  if (useWebRtc && !import.meta.env.PROD && !import.meta.env.VITE_YJS_WS_URL) {
+    const signaling =
+      parseEnvUrlList(import.meta.env.VITE_YJS_SIGNALING_URL as string | undefined) ?? [
+        'wss://signaling.arcanetable.app',
+      ];
+    return new WebrtcProvider(gameId, ydoc, { signaling });
   }
 
-  const signaling =
-    parseEnvUrlList(import.meta.env.VITE_YJS_SIGNALING_URL as string | undefined) ?? [
-      'wss://signaling.arcanetable.app',
-    ];
-
-  return new WebrtcProvider(gameId, ydoc, { signaling });
+  return new WebsocketProvider(wsUrl, gameId, ydoc);
 }
 
 export async function init({ gameId }) {

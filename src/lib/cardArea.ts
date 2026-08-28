@@ -4,7 +4,6 @@ import { createStore, SetStoreFunction } from 'solid-js/store';
 import {
   BoxGeometry,
   EdgesGeometry,
-  Euler,
   LineBasicMaterial,
   LineSegments,
   Mesh,
@@ -13,7 +12,7 @@ import {
   Vector3,
 } from 'three';
 import { animateObject } from './animations';
-import { getSerializableCard, setCardData } from './card';
+import { applyCardOrientation, getRotationFromCardState, getSerializableCard, setCardData } from './card';
 import {
   Card,
   CARD_HEIGHT,
@@ -70,7 +69,6 @@ export class CardArea implements CardZone<{ positionArray?: [number, number, num
     const initialPosition = card.mesh.getWorldPosition(new Vector3());
     this.mesh.worldToLocal(initialPosition);
     let position: Vector3;
-    let rotation = new Euler();
 
     if (positionArray) {
       position = new Vector3().fromArray(positionArray);
@@ -101,33 +99,22 @@ export class CardArea implements CardZone<{ positionArray?: [number, number, num
     this.cards.push(card);
     this.setObservable('cardCount', this.cards.length);
 
-    let initialRotation = card.mesh.rotation;
-    if (card.mesh.parent) {
-      initialRotation = new Euler().setFromQuaternion(card.mesh.parent.quaternion.clone().invert());
-    }
-
-    if (card.mesh.userData.isFlipped) {
-      rotation.y += Math.PI;
-    }
-    if (card.mesh.userData.isTapped) {
-      rotation.z -= Math.PI / 2;
-    }
+    const targetQuaternion = getRotationFromCardState(card.mesh.userData);
     setCardData(card.mesh, `zone.${this.id}.position`, position.toArray());
-    setCardData(card.mesh, `zone.${this.id}.rotation`, rotation.toArray());
+    applyCardOrientation(card.mesh, this.id);
 
     if (skipAnimation) {
       card.mesh.position.copy(position);
-      card.mesh.rotation.copy(rotation);
+      card.mesh.quaternion.copy(targetQuaternion);
     } else {
       animateObject(card.mesh, {
         completeOnCancel: true,
         duration: 0.2,
         from: {
-          rotation: initialRotation,
           position: initialPosition,
         },
         to: {
-          rotation,
+          quarternion: targetQuaternion,
           position,
         },
       });

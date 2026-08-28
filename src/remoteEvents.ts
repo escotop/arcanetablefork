@@ -43,6 +43,7 @@ import { readjustPlayAreas } from './main3d';
 import {
   getRegisteredClientIdForSession,
   registerPlayerSession,
+  iterateGameLogEvents,
 } from './lib/playerSession';
 import {
   playCounterSoundForModifierChange,
@@ -258,7 +259,8 @@ async function drainProcessEvents() {
         continue;
       }
       if (event.type === 'waterdrop') continue;
-      let playArea = playAreas[event.clientID];
+      const clientID = Number(event.clientID);
+      let playArea = Number.isFinite(clientID) ? playAreas[clientID] : undefined;
       if (isLoadProfiling()) {
         if (await profileReplayHandle(event.type, () => tryBatchReplayEvent(event, events, playArea))) {
           continue;
@@ -446,33 +448,143 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
   await EVENTS[event.type](event, playArea, card);
 }
 
+function normalizeClientId(clientId: unknown): number | undefined {
+  const id = Number(clientId);
+  return Number.isFinite(id) ? id : undefined;
+}
+
+function removeRemotePlayArea(clientId: number) {
+  const playArea = playAreas[clientId];
+  if (!playArea || playArea.isLocalPlayArea) return;
+
+  table.remove(playArea.mesh);
+  playArea.destroy();
+  setPlayAreas(clientId, undefined);
+  setPlayerCount(count => Math.max(0, count - 1));
+}
+
+function applyJoinEvent(event: Event) {
+  const clientID = normalizeClientId(event.clientID);
+  if (clientID === undefined) return false;
+  if (playAreas[clientID]) return false;
+
+  const playerSessionId = event.payload?.playerSessionId as string | undefined;
+  if (playerSessionId) {
+    const existingClientId = getRegisteredClientIdForSession(playerSessionId);
+    if (existingClientId !== undefined && existingClientId !== clientID) {
+      const existingArea = playAreas[existingClientId];
+      if (existingArea?.isLocalPlayArea) return false;
+      removeRemotePlayArea(existingClientId);
+    }
+    registerPlayerSession(playerSessionId, clientID);
+  }
+
+  const playArea = PlayArea.FromNetworkState({ ...event.payload, clientID, clientId: clientID });
+  playArea.playerSessionId = playerSessionId;
+
+  table.add(playArea.mesh);
+  setPlayAreas(clientID, playArea);
+  setPlayerCount(count => count + 1);
+  readjustPlayAreas();
+  return true;
+}
+
+export function syncPlayAreasFromGameLog() {
+  const activeJoins = new Map<number, Event>();
+
+  for (const rawEvent of iterateGameLogEvents(gameLog)) {
+    if (rawEvent.type === 'kick') {
+      const targetId = normalizeClientId(rawEvent.payload?.targetClientId);
+      if (targetId !== undefined) activeJoins.delete(targetId);
+      continue;
+    }
+
+    if (rawEvent.type !== 'join') continue;
+
+    const clientID = normalizeClientId(rawEvent.clientID);
+    if (clientID === undefined) continue;
+
+    activeJoins.set(clientID, { ...rawEvent, clientID } as Event);
+  }
+
+  for (const event of activeJoins.values()) {
+    applyJoinEvent(event);
+  }
+}
+
+export function getActiveJoinClientIdsFromLog(): Set<number> {
+  const activeJoins = new Set<number>();
+
+  for (const rawEvent of iterateGameLogEvents(gameLog)) {
+    if (rawEvent.type === 'kick') {
+      const targetId = normalizeClientId(rawEvent.payload?.targetClientId);
+      if (targetId !== undefined) activeJoins.delete(targetId);
+      continue;
+    }
+
+    if (rawEvent.type !== 'join') continue;
+
+    const clientID = normalizeClientId(rawEvent.clientID);
+    if (clientID !== undefined) activeJoins.add(clientID);
+  }
+
+  return activeJoins;
+}
+
+export function countRemoteJoinsMissingPlayAreas(localClientId?: number): number {
+  let missing = 0;
+
+  for (const clientId of getActiveJoinClientIdsFromLog()) {
+    if (localClientId !== undefined && clientId === localClientId) continue;
+    if (!playAreas[clientId]) missing++;
+  }
+
+  return missing;
+}
+
+export async function waitForMultiplayerGameState(maxWaitMs = 15000): Promise<boolean> {
+  const deadline = performance.now() + maxWaitMs;
+
+  while (performance.now() < deadline) {
+    await waitForGameLogCatchUp({
+      maxWaitMs: Math.max(250, deadline - performance.now()),
+    });
+    syncPlayAreasFromGameLog();
+
+    const localClientId = getLocalPlayerClientId() ?? provider?.awareness?.clientID;
+    const missingBoards = countRemoteJoinsMissingPlayAreas(localClientId);
+    const remotePlayers = players().filter(
+      player => player.id !== provider?.awareness?.clientID && !player.entry?.isSpectating,
+    );
+    const awarenessMissingBoards = remotePlayers.some(player => !playAreas[player.id]);
+
+    if (missingBoards === 0 && !awarenessMissingBoards) {
+      return true;
+    }
+
+    if (
+      missingBoards === 0 &&
+      remotePlayers.length === 0 &&
+      getActiveJoinClientIdsFromLog().size <= 1
+    ) {
+      return true;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
+
+  syncPlayAreasFromGameLog();
+  const localClientId = getLocalPlayerClientId() ?? provider?.awareness?.clientID;
+  return countRemoteJoinsMissingPlayAreas(localClientId) === 0;
+}
+
 function isRemotePlayerEvent(event: Event) {
   return event.clientID !== getLocalPlayerClientId();
 }
 
 const EVENTS = {
   join(event: Event) {
-    if (playAreas[event.clientID]) {
-      return;
-    }
-
-    const playerSessionId = event.payload?.playerSessionId as string | undefined;
-    if (playerSessionId) {
-      const existingClientId = getRegisteredClientIdForSession(playerSessionId);
-      if (existingClientId !== undefined && existingClientId !== event.clientID) {
-        return;
-      }
-      registerPlayerSession(playerSessionId, event.clientID);
-    }
-
-    let playArea = PlayArea.FromNetworkState({ ...event.payload, clientID: event.clientID });
-    playArea.playerSessionId = playerSessionId;
-
-    table.add(playArea.mesh);
-    setPlayAreas(event.clientID, playArea);
-    setPlayerCount(count => count + 1);
-
-    readjustPlayAreas();
+    applyJoinEvent(event);
   },
   concede(event: Event, playArea: PlayArea) {
     onConcede(event.clientID);
@@ -605,12 +717,12 @@ const EVENTS = {
   tap(event: Event, playArea: PlayArea, card: Card) {
     if (card?.mesh) {
       playTapSound(isRemotePlayerEvent(event));
-      playArea?.tap(card.mesh);
+      playArea?.tap(card.mesh, { skipAnimation: !isEventCatchUpComplete() });
     }
   },
   flip(event: Event, playArea: PlayArea, card: Card) {
     if (card?.mesh) {
-      playArea?.flip(card.mesh);
+      playArea?.applyFlipVisual(card.mesh, { animate: isEventCatchUpComplete() });
     }
   },
   clone(event: Event, playArea: PlayArea) {
