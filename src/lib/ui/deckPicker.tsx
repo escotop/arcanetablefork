@@ -38,16 +38,14 @@ export default function DeckPicker(props: Props) {
   );
   const [sessionOptions, setSessionOptions] = createSignal();
 
-  async function onSubmit(e: SubmitEvent & { currentTarget: HTMLFormElement }) {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const data = Object.fromEntries(formData.entries());
+  async function startPlaytest() {
+    const deckId = selectedDeckId();
+    if (!deckId) return;
 
-    e.currentTarget.reset();
-
-    const startOptions = { ...(sessionOptions() ?? {}), ...data };
-
-    props.onStart(startOptions);
+    props.onStart({
+      ...(sessionOptions() ?? {}),
+      deckId,
+    });
   }
 
   return (
@@ -61,26 +59,23 @@ export default function DeckPicker(props: Props) {
         />
       </Match>
       <Match when>
-        <form class='contents' onSubmit={onSubmit}>
-          <input type='hidden' name='deckId' value={selectedDeckId()} />
-          <DeckManagerDialog
-            open
-            hideClose
-            title='Select A Deck'
-            selectedDeckId={selectedDeckId()}
-            onSelectDeck={setSelectedDeckId}
-            footerStart={
-              <Button variant='ghost' type='button' onClick={() => setSessionOptions()}>
-                Back
-              </Button>
-            }
-            footer={
-              <Button type='submit' disabled={!selectedDeckId()}>
-                Start Playtest
-              </Button>
-            }
-          />
-        </form>
+        <DeckManagerDialog
+          open
+          hideClose
+          title='Select A Deck'
+          selectedDeckId={selectedDeckId()}
+          onSelectDeck={setSelectedDeckId}
+          footerStart={
+            <Button variant='ghost' type='button' onClick={() => setSessionOptions()}>
+              Back
+            </Button>
+          }
+          footer={
+            <Button type='button' disabled={!selectedDeckId()} onClick={startPlaytest}>
+              Start Playtest
+            </Button>
+          }
+        />
       </Match>
     </Switch>
   );
