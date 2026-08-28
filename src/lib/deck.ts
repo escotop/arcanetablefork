@@ -11,6 +11,7 @@ import {
   getSearchLine,
   getSerializableCard,
   loadCardTextures,
+  resolveImageUrl,
   setCardData,
 } from './card';
 import {
@@ -525,6 +526,9 @@ export async function fetchCardInfo(
     })
     .then(r => r.json())
     .then(async payload => {
+      if (payload?.object === 'error' || !(payload?.id || payload?.name)) {
+        throw new Error(payload?.details ?? 'Card not found');
+      }
       return {
         ...entry,
         ...populateCardInfo(payload, entry),
@@ -548,6 +552,7 @@ export interface CardPrintingOption {
   lang?: string;
   released_at?: string;
   image_uris?: CardEntryDetail['image_uris'];
+  card_faces?: Array<Pick<CardEntryDetail, 'image_uris' | 'name'>>;
 }
 
 export interface CardPrintingsResponse {
@@ -562,12 +567,10 @@ export function supportsCardPrintings() {
 }
 
 export function getPrintingPreviewUrl(printing: CardPrintingOption) {
-  const uris = printing.image_uris;
-  if (!uris) return undefined;
-  if (cardSystem.imageUriFormat === 'scryfall') {
-    return (uris as { large?: string }).large;
-  }
-  return Object.values(uris.full ?? {})[0];
+  return (
+    resolveImageUrl(printing.image_uris) ??
+    resolveImageUrl(printing.card_faces?.[0]?.image_uris)
+  );
 }
 
 export function getPrintingLabel(printing: CardPrintingOption) {
@@ -628,9 +631,20 @@ async function enrichPrintingOptions(
   return printings.map(printing => enriched.get(printing.id) ?? printing);
 }
 
-export async function fetchCardPrintings(
+const printingsCache = new Map<string, CardPrintingsResponse>();
+const printingsInflight = new Map<string, Promise<CardPrintingsResponse>>();
+
+function printingsCacheKey(name: string, page: number, query?: string) {
+  return `${name}\0${page}\0${query ?? ''}`;
+}
+
+export function prefetchCardPrintings(name: string, page = 1, query?: string) {
+  void fetchCardPrintings(name, page, query);
+}
+
+async function loadCardPrintings(
   name: string,
-  page = 1,
+  page: number,
   query?: string,
 ): Promise<CardPrintingsResponse> {
   const url = new URL(cardSystem.cardSearchEndpoint);
@@ -658,6 +672,7 @@ export async function fetchCardPrintings(
         lang: card.lang,
         released_at: card.released_at,
         image_uris: card.image_uris,
+        card_faces: card.card_faces,
       })),
   );
 
@@ -667,6 +682,27 @@ export async function fetchCardPrintings(
     total_pages: body.total_pages ?? 0,
     total_cards: body.total_cards ?? 0,
   };
+}
+
+export async function fetchCardPrintings(
+  name: string,
+  page = 1,
+  query?: string,
+): Promise<CardPrintingsResponse> {
+  const key = printingsCacheKey(name, page, query);
+  const cached = printingsCache.get(key);
+  if (cached) return cached;
+
+  const inflight = printingsInflight.get(key);
+  if (inflight) return inflight;
+
+  const promise = loadCardPrintings(name, page, query).then(result => {
+    printingsCache.set(key, result);
+    printingsInflight.delete(key);
+    return result;
+  });
+  printingsInflight.set(key, promise);
+  return promise;
 }
 
 export function populateCardInfo(detail: CardEntryDetail, entry?: Card) {

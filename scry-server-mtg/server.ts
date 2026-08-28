@@ -117,8 +117,11 @@ async function scryfallFetch(path: string): Promise<Response> {
 function imageUris(
   card: { name: string; image_uris?: Record<string, string> },
   baseUrl: string,
+  preferSmall = false,
 ): ImageUris | undefined {
-  const normal = card.image_uris?.normal ?? card.image_uris?.large;
+  const normal = preferSmall
+    ? (card.image_uris?.small ?? card.image_uris?.normal ?? card.image_uris?.large)
+    : (card.image_uris?.normal ?? card.image_uris?.large);
   const crop = card.image_uris?.art_crop;
   if (!normal && !crop) return undefined;
   return {
@@ -129,14 +132,18 @@ function imageUris(
   };
 }
 
-function mapCard(card: ScryfallCard, baseUrl: string): Record<string, unknown> {
+function mapCard(
+  card: ScryfallCard,
+  baseUrl: string,
+  preferSmall = false,
+): Record<string, unknown> {
   const { image_uris: _iu, card_faces: _cf, ...rest } = card;
   return {
     id: card.id,
     ...rest,
     card_faces: (card.card_faces ?? []).map(face => ({
       ...face,
-      image_uris: imageUris(face, baseUrl),
+      image_uris: imageUris(face, baseUrl, preferSmall),
     })),
     name: card.name,
     all_parts: (card.all_parts ?? []).map(part => ({
@@ -146,7 +153,7 @@ function mapCard(card: ScryfallCard, baseUrl: string): Record<string, unknown> {
     type: (card.type_line ?? '').replace(/^Summon\b/i, 'Creature —'),
     effect: card.oracle_text ?? '',
     flavor: card.flavor_text ?? '',
-    image_uris: imageUris(card, baseUrl),
+    image_uris: imageUris(card, baseUrl, preferSmall),
   };
 }
 
@@ -269,7 +276,7 @@ app.get('/cards/search', async c => {
       ...baseBody,
       total_cards: totalCards,
       total_pages: Math.ceil(totalCards / 175),
-      data: list.data.map(card => minimalCard(mapCard(card, baseUrl))),
+      data: list.data.map(card => minimalCard(mapCard(card, baseUrl, true))),
     }),
     { status: 200, headers: cacheHeaders() },
   );

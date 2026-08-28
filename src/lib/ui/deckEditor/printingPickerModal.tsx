@@ -165,6 +165,7 @@ const PrintingPickerModal: Component<Props> = props => {
                         alt=''
                         class='h-full w-full object-cover'
                         loading='lazy'
+                        decoding='async'
                       />
                       <Show when={isSelected()}>
                         <Badge class='absolute left-2 top-2 shadow-md'>Selected</Badge>

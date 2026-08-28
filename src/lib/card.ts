@@ -321,17 +321,42 @@ export function splitUserdata(userData: CardUserData) {
 }
 
 function getImageUris(card: { detail: CardEntryDetail }, face = 0) {
-  return card?.detail?.card_faces?.[face]?.image_uris ?? card?.detail?.image_uris;
+  const faceUris = card?.detail?.card_faces?.[face]?.image_uris;
+  const topUris = card?.detail?.image_uris;
+  if (faceUris && resolveImageUrl(faceUris)) return faceUris;
+  return topUris;
+}
+
+type ImageUriSource =
+  | CardEntryDetail['image_uris']
+  | {
+      full?: Record<string, string>;
+      art?: Record<string, string>;
+      large?: string;
+      normal?: string;
+      art_crop?: string;
+    };
+
+export function resolveImageUrl(
+  uris: ImageUriSource | undefined,
+  format: 'standard' | 'scryfall' = cardSystem.imageUriFormat,
+) {
+  if (!uris) return undefined;
+  if (format === 'scryfall') {
+    return uris.large ?? uris.normal;
+  }
+
+  const full = Object.values(uris.full ?? {});
+  if (full.length > 0) return full[0];
+
+  const art = Object.values(uris.art ?? {});
+  if (art.length > 0) return art[0];
+
+  return uris.large ?? uris.normal;
 }
 
 export function getCardImage(card: DetailedCardEntry, face = 0) {
-  const uris = getImageUris(card, face);
-  if (cardSystem.imageUriFormat === 'scryfall') {
-    return uris?.large;
-  }
-  let options = Object.values(uris?.full ?? {});
-  const selection = (Math.random() * options.length) | 0;
-  return options[selection];
+  return resolveImageUrl(getImageUris(card, face));
 }
 
 export function getCardArtImage(card: { detail: CardEntryDetail }) {
@@ -339,8 +364,8 @@ export function getCardArtImage(card: { detail: CardEntryDetail }) {
   if (cardSystem.imageUriFormat === 'scryfall') {
     return uris?.art_crop;
   }
-  let options = Object.values(uris?.art ?? {});
-  return options?.[(Math.random() * options.length) | 0];
+  const art = Object.values(uris?.art ?? {});
+  return art[0];
 }
 
 export function initializeCardMesh(card: Card, clientId: string | number): Card {

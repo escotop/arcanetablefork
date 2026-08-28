@@ -33,7 +33,9 @@ import { DetailedCardEntry, Deck, FORMATS, CardSystem } from '../constants';
 import {
   CardPrintingOption,
   fetchCardInfo,
+  getPrintingPreviewUrl,
   populateCardInfo,
+  prefetchCardPrintings,
   supportsCardPrintings,
 } from '../deck';
 import { cardSystem, colorHashDark } from '../globals';
@@ -169,21 +171,55 @@ export const DeckEditor: Component<Props> = props => {
     setIsDirty(true);
   };
 
+  function withPrintingImages(
+    entry: DetailedCardEntry,
+    printing: CardPrintingOption,
+  ): DetailedCardEntry {
+    if (getCardImage(entry) || !getPrintingPreviewUrl(printing)) return entry;
+
+    return {
+      ...entry,
+      detail: {
+        ...entry.detail,
+        image_uris: printing.image_uris ?? entry.detail?.image_uris,
+        card_faces: printing.card_faces ?? entry.detail?.card_faces,
+      },
+    };
+  }
+
   async function changeCardPrinting(storageKey: string, printing: CardPrintingOption) {
     const previous = deck.cards[storageKey];
     if (!previous) return;
 
     const qty = previous.qty;
-    const updated = await fetchCardInfo({
+    let updated = await fetchCardInfo({
       name: previous.name,
       id: printing.id,
       set: printing.set,
       qty,
       categories: previous.categories ?? [],
-    });
+    }).catch(() => undefined);
+
+    if (!updated?.id) {
+      updated = withPrintingImages(
+        {
+          ...previous,
+          id: printing.id,
+          set: printing.set ?? previous.set,
+        },
+        printing,
+      );
+    } else {
+      updated = withPrintingImages(updated, printing);
+    }
+
     if (!updated?.id) return;
 
-    const nextEntry = { ...updated, qty };
+    const nextEntry = {
+      ...updated,
+      qty,
+      categories: previous.categories ?? updated.categories ?? [],
+    };
     updateDeck('cards', storageKey, nextEntry);
 
     if (deck.inPlay?.[previous.name]?.id === previous.id) {
@@ -193,6 +229,8 @@ export const DeckEditor: Component<Props> = props => {
 
   function openPrintingPicker(storageKey: string) {
     if (!supportsCardPrintings() || !(deck.cards[storageKey]?.qty > 0)) return;
+    const entry = deck.cards[storageKey];
+    if (entry?.name) prefetchCardPrintings(entry.name);
     setPrintingPickerKey(storageKey);
   }
 
@@ -759,9 +797,14 @@ export const DeckEditor: Component<Props> = props => {
                         content-visibility: auto;
                       `}
                         class='fade-in-from-below'
-                        onContextMenu={e => handlePrintingContextMenu(e, cardKey())}>
+                        onContextMenu={e => handlePrintingContextMenu(e, cardKey())}
+                        onMouseDown={e => {
+                          if (e.button !== 2 || !supportsCardPrintings() || !(deckCard()?.qty > 0)) {
+                            return;
+                          }
+                          if (card.name) prefetchCardPrintings(card.name);
+                        }}>
                         <img
-                          crossOrigin=''
                           src={
                             getCardImage(card) ??
                             cardSystem.fallbackImage ??

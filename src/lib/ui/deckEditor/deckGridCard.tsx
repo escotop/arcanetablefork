@@ -7,7 +7,7 @@ import SearchIcon from 'lucide-solid/icons/search';
 import random from 'lodash-es/random';
 import { getCardImage } from '~/lib/card';
 import { DetailedCardEntry, Deck } from '~/lib/constants';
-import { CardPrintingOption, supportsCardPrintings } from '~/lib/deck';
+import { CardPrintingOption, prefetchCardPrintings, supportsCardPrintings } from '~/lib/deck';
 import { cardSystem } from '~/lib/globals';
 import PrintingSelect from './printingSelect';
 
@@ -43,9 +43,13 @@ const DeckGridCard: Component<Props> = props => {
         e.preventDefault();
         e.stopPropagation();
         props.onOpenPrintings?.();
+      }}
+      onMouseDown={e => {
+        if (e.button !== 2 || !supportsCardPrintings() || !(props.card()?.qty > 0)) return;
+        const name = props.card()?.name;
+        if (name) prefetchCardPrintings(name);
       }}>
       <img
-        crossOrigin=''
         src={
           getCardImage(props.card()) ??
           cardSystem.fallbackImage ??
