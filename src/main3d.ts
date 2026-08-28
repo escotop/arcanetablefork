@@ -10,7 +10,9 @@ import { clearSpanishPreview } from './lib/spanishCardPreview';
 import {
   CARD_STACK_OFFSET,
   CARD_THICKNESS,
+  DEFAULT_COMMANDER_LIFE,
   GameOptions,
+  isMagicCardSystem,
   LoadSettings,
   LOOK_EASE,
   LOOK_STRENGTH_X,
@@ -121,6 +123,7 @@ let currentGameId: string;
 interface StoredGameMeta {
   name: string;
   life: number;
+  commanderLife?: number;
   cardSystemUri: string;
   deckId?: string;
 }
@@ -220,6 +223,11 @@ async function reclaimLocalPlayArea(
   provider.awareness.setLocalStateField('playerSessionId', playerSessionId);
   if (meta?.name) provider.awareness.setLocalStateField('name', meta.name);
   if (meta?.life !== undefined) provider.awareness.setLocalStateField('life', meta.life);
+  if (meta?.commanderLife !== undefined) {
+    provider.awareness.setLocalStateField('commanderLife', meta.commanderLife);
+  } else if (isMagicCardSystem(cardSystem)) {
+    provider.awareness.setLocalStateField('commanderLife', DEFAULT_COMMANDER_LIFE);
+  }
   provider.awareness.setLocalStateField(
     'color',
     settings.playerColor ?? resolvePlayerColor({ name: meta?.name }),
@@ -408,6 +416,12 @@ export async function loadDeckAndJoin(
 
   playArea.subscribeEvents(sendEvent);
   provider.awareness.setLocalStateField('life', settings.startingLife);
+  if (isMagicCardSystem(settings.cardSystem)) {
+    provider.awareness.setLocalStateField(
+      'commanderLife',
+      settings.startingCommanderLife ?? DEFAULT_COMMANDER_LIFE,
+    );
+  }
   provider.awareness.setLocalStateField('name', settings.name);
   provider.awareness.setLocalStateField('playerSessionId', playerSessionId);
   provider.awareness.setLocalStateField(
@@ -420,6 +434,11 @@ export async function loadDeckAndJoin(
   saveGameMeta(currentGameId, {
     name: settings.name,
     life: settings.startingLife,
+    ...(isMagicCardSystem(settings.cardSystem)
+      ? {
+          commanderLife: settings.startingCommanderLife ?? DEFAULT_COMMANDER_LIFE,
+        }
+      : {}),
     cardSystemUri: settings.cardSystem.uri ?? '',
     deckId: settings.deck?.id,
   });

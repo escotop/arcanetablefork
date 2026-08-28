@@ -31,6 +31,7 @@ export interface PlayerAwarenessSnapshot {
   playerSessionId?: string;
   name?: string;
   life?: number;
+  commanderLife?: number;
   color?: string;
   counters?: Record<string, number>;
   isSpectating?: boolean;
@@ -76,6 +77,7 @@ function capturePlayerAwareness(): PlayerAwarenessSnapshot[] {
     playerSessionId: entry.playerSessionId,
     name: entry.name,
     life: entry.life,
+    commanderLife: entry.commanderLife,
     color: entry.color,
     counters: entry.counters ? { ...entry.counters } : undefined,
     isSpectating: entry.isSpectating,
@@ -159,6 +161,7 @@ function restoreLocalAwareness(snapshots: PlayerAwarenessSnapshot[], gameId: str
     playerSessionId,
     name: snapshot.name ?? localState.name,
     life: snapshot.life ?? localState.life,
+    commanderLife: snapshot.commanderLife ?? localState.commanderLife,
     color: snapshot.color ?? localState.color,
     counters: snapshot.counters ?? localState.counters,
     isSpectating: snapshot.isSpectating ?? localState.isSpectating,

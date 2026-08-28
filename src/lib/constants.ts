@@ -151,12 +151,22 @@ export interface CardSystem {
 export interface LoadSettings {
   name: string;
   startingLife: number;
+  startingCommanderLife?: number;
   deck: Deck;
   cardSystem: CardSystem;
 }
 
 export interface GameOptions extends LoadSettings {
   gameId: string;
+}
+
+export const DEFAULT_COMMANDER_LIFE = 21;
+
+export function isMagicCardSystem(
+  system: Pick<CardSystem, 'imageUriFormat' | 'id'> | undefined,
+): boolean {
+  if (!system) return false;
+  return system.imageUriFormat === 'scryfall' || system.id === 'scry-server-mtg';
 }
 
 export const FORMATS = [

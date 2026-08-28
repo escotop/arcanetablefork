@@ -28,7 +28,7 @@ import { cn } from '../cnUtil';
 import { DeckEditor } from './deckEditor';
 import styles from './deckPicker.module.css';
 import CopyLinkButton from '~/components/ui/copy-link-button';
-import { Deck, LoadSettings } from '../constants';
+import { Deck, DEFAULT_COMMANDER_LIFE, LoadSettings } from '../constants';
 import { useSearchParams } from '@solidjs/router';
 import { unwrap } from 'solid-js/store';
 
@@ -201,7 +201,11 @@ function SessionOptions(props: SessionOptionsProps) {
 
     e.currentTarget.reset();
 
-    props.onSubmit({ ...data, startingLife: parseInt(data.startingLife) });
+    props.onSubmit({
+      ...data,
+      startingLife: parseInt(data.startingLife as string, 10),
+      startingCommanderLife: parseInt(data.startingCommanderLife as string, 10),
+    });
   }
 
   return (
@@ -217,14 +221,24 @@ function SessionOptions(props: SessionOptionsProps) {
             <TextFieldLabel for='name'>Name</TextFieldLabel>
             <TextFieldInput required type='text' id='name' name='name' />
           </TextField>
-          <NumberField value={40}>
-            <NumberFieldLabel>Starting Life</NumberFieldLabel>
-            <div class='relative'>
-              <NumberFieldInput name='startingLife' />
-              <NumberFieldIncrementTrigger />
-              <NumberFieldDecrementTrigger />
-            </div>
-          </NumberField>
+          <div class='flex gap-4 items-end'>
+            <NumberField value={40}>
+              <NumberFieldLabel>Starting Life</NumberFieldLabel>
+              <div class='relative'>
+                <NumberFieldInput name='startingLife' />
+                <NumberFieldIncrementTrigger />
+                <NumberFieldDecrementTrigger />
+              </div>
+            </NumberField>
+            <NumberField value={DEFAULT_COMMANDER_LIFE}>
+              <NumberFieldLabel>Commander Health</NumberFieldLabel>
+              <div class='relative'>
+                <NumberFieldInput name='startingCommanderLife' />
+                <NumberFieldIncrementTrigger />
+                <NumberFieldDecrementTrigger />
+              </div>
+            </NumberField>
+          </div>
 
           <DialogFooter>
             <CopyLinkButton variant='ghost' class='mr-auto' />
