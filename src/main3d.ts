@@ -460,7 +460,30 @@ function onDocumentScroll(event: WheelEvent) {
   }
 }
 
-let isDragging = false;
+let postDragClickGuard: (() => void) | null = null;
+
+function activatePostDragClickGuard() {
+  postDragClickGuard?.();
+
+  let active = true;
+  const onClickCapture = (event: MouseEvent) => {
+    if (!active) return;
+    active = false;
+    cleanup();
+    event.stopImmediatePropagation();
+  };
+  const cleanup = () => {
+    document.removeEventListener('click', onClickCapture, true);
+    clearTimeout(timer);
+    if (postDragClickGuard === cleanup) {
+      postDragClickGuard = null;
+    }
+  };
+
+  document.addEventListener('click', onClickCapture, true);
+  const timer = window.setTimeout(cleanup, 50);
+  postDragClickGuard = cleanup;
+}
 
 function isUnderLocalDeck(object: THREE.Object3D): boolean {
   const localArea = getLocalPlayArea();
@@ -532,11 +555,6 @@ function onDocumentClick(event: PointerEvent) {
   setContextMenuSignal();
   raycaster.setFromCamera(mouse, camera);
   let intersects = raycaster.intersectObject(scene);
-
-  if (isDragging) {
-    isDragging = false;
-    return;
-  }
 
   if (selection.onClick(event, intersects[0]?.object)) return;
 
@@ -715,92 +733,103 @@ function getBattlefieldDropPosition(
 
 async function onDocumentDrop(event) {
   event.preventDefault();
-  selection.completeRectangleSelection(event);
+  if (selection.isDown || selection.helper.enabled) {
+    selection.completeRectangleSelection(event);
+  }
   if (!dragTargets?.length) return;
-  raycaster.setFromCamera(mouse, camera);
 
-  let intersections = raycaster.intersectObject(scene);
+  const dragged = dragTargets.slice();
+  dragTargets = [];
 
-  let targetsById = Object.fromEntries(dragTargets.map(target => [target.userData.id, target]));
-  let intersection = intersections.find(
-    i =>
-      !targetsById[i.object.userData.id] &&
-      (i.object.userData.isInteractive ||
-        i.object.userData.zone ||
-        i.object.userData.location === 'deck'),
-  );
-  if (!intersection) return;
+  try {
+    raycaster.setFromCamera(mouse, camera);
 
-  let shouldClearSelection = false;
-  const toZone = resolveDropZone(intersection.object);
-  if (!toZone) return;
-  const toZoneId = toZone.id;
+    let intersections = raycaster.intersectObject(scene);
 
-  restackItemsLocally(dragTargets, intersections);
+    let targetsById = Object.fromEntries(dragged.map(target => [target.userData.id, target]));
+    let intersection = intersections.find(
+      i =>
+        !targetsById[i.object.userData.id] &&
+        (i.object.userData.isInteractive ||
+          i.object.userData.zone ||
+          i.object.userData.location === 'deck'),
+    );
+    if (!intersection) return;
 
-  for (const target of dragTargets ?? []) {
-    setCardData(target, 'isDragging', false);
+    let shouldClearSelection = false;
+    const toZone = resolveDropZone(intersection.object);
+    if (!toZone) return;
+    const toZoneId = toZone.id;
 
-    let fromZoneId = target.userData.zoneId;
-    let fromZone = zonesById.get(fromZoneId)!;
-    expect(!!fromZone, `fromZone not found `, { fromZone });
+    restackItemsLocally(dragged, intersections);
 
-    if (fromZoneId && fromZoneId === toZoneId) {
-      setCardData(target, `zone.${toZone.id}.position`, target.position.toArray());
-      setCardData(target, `zone.${toZone.id}.rotation`, target.rotation.toArray());
+    for (const target of dragged) {
+      setCardData(target, 'isDragging', false);
+
+      let fromZoneId = target.userData.zoneId;
+      let fromZone = zonesById.get(fromZoneId)!;
+      expect(!!fromZone, `fromZone not found `, { fromZone });
+
+      if (fromZoneId && fromZoneId === toZoneId) {
+        setCardData(target, `zone.${toZone.id}.position`, target.position.toArray());
+        setCardData(target, `zone.${toZone.id}.rotation`, target.rotation.toArray());
+        dispatchGameEvent(
+          createAnimationEvent(target, {
+            duration: 0.2,
+            to: {
+              position: target.position,
+              rotation: target.rotation,
+            },
+          }),
+        );
+        continue;
+      }
+
+      let card = cardsById.get(target.userData.id)!;
+      let position =
+        toZone.zone === 'battlefield'
+          ? getBattlefieldDropPosition(toZone, intersection, dragged, target)
+          : toZone.mesh.worldToLocal(intersection.point.clone());
+      expect(!!card, `card not found`, { card });
+
       dispatchGameEvent(
-        createAnimationEvent(target, {
-          duration: 0.2,
-          to: {
-            position: target.position,
-            rotation: target.rotation,
+        createTransferCardEvent(card, fromZone, toZone, {
+          addOptions: {
+            skipLocalAnimation: true,
+            ...(toZone.zone === 'deck'
+              ? { location: 'top' as const }
+              : { positionArray: position.toArray() }),
           },
         }),
       );
-      continue;
+      shouldClearSelection = true;
     }
 
-    let card = cardsById.get(target.userData.id)!;
-    let position =
-      toZone.zone === 'battlefield'
-        ? getBattlefieldDropPosition(toZone, intersection, dragTargets, target)
-        : toZone.mesh.worldToLocal(intersection.point.clone());
-    expect(!!card, `card not found`, { card });
+    await flushDispatchEventQueue();
 
-    dispatchGameEvent(
-      createTransferCardEvent(card, fromZone, toZone, {
-        addOptions: {
-          skipLocalAnimation: true,
-          ...(toZone.zone === 'deck'
-            ? { location: 'top' as const }
-            : { positionArray: position.toArray() }),
-        },
-      }),
-    );
-    shouldClearSelection = true;
+    if (shouldClearSelection) {
+      selection.clearSelection();
+    }
+
+    if (dragged.length) {
+      setHoverSignal(signal => {
+        let mesh = signal?.mesh ?? dragged[0];
+        focusOn(mesh);
+        const tether = getCardMeshTetherPoint(mesh);
+        return {
+          mouse,
+          ...(signal ?? {}),
+          tether,
+          mesh,
+        };
+      });
+    }
+  } finally {
+    for (const target of dragged) {
+      setCardData(target, 'isDragging', false);
+    }
+    activatePostDragClickGuard();
   }
-
-  await flushDispatchEventQueue();
-
-  if (shouldClearSelection) {
-    selection.clearSelection();
-  }
-
-  if (dragTargets.length) {
-    setHoverSignal(signal => {
-      let mesh = signal?.mesh ?? dragTargets[0];
-      focusOn(mesh);
-      const tether = getCardMeshTetherPoint(mesh);
-      return {
-        mouse,
-        ...(signal ?? {}),
-        tether,
-        mesh,
-      };
-    });
-  }
-
-  dragTargets = [];
 }
 
 function onWindowResize() {
@@ -839,7 +868,6 @@ function onRendererMouseMove(event) {
   selection.onMove(event);
 
   if (dragTargets?.length) {
-    isDragging = true;
     raycaster.setFromCamera(mouse, camera);
 
     let intersections = raycaster.intersectObject(scene);
