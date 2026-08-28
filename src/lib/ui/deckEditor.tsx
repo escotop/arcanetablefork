@@ -77,8 +77,6 @@ import { toast } from 'solid-sonner';
 import { Alert, AlertDescription, AlertTitle } from '~/components/ui/alert';
 import { AlertDialog, AlertDialogContent } from '~/components/ui/alert-dialog';
 import intersectionObserver from '../intersectionObserver';
-import CopyIcon from 'lucide-solid/icons/copy';
-import CheckIcon from 'lucide-solid/icons/check';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import DeckImportDialog from './deckEditor/deckImportDialog';
 import useCardGrouping, { getSimpleType } from './deckEditor/cardGroupings';
@@ -107,6 +105,7 @@ export const DeckEditor: Component<Props> = props => {
   const [isDirty, setIsDirty] = createSignal(false);
   const [printingPickerKey, setPrintingPickerKey] = createSignal<string>();
   const [importDialogOpen, setImportDialogOpen] = createSignal(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
   const [typeFilter, setTypeFilter] = createSignal<string | null>(null);
   let formRef: HTMLFormElement;
 
@@ -164,6 +163,14 @@ export const DeckEditor: Component<Props> = props => {
 
   function closeImportDialog() {
     setImportDialogOpen(false);
+  }
+
+  function closeDeleteDialog() {
+    setDeleteDialogOpen(false);
+  }
+
+  function openDeleteDialog() {
+    setDeleteDialogOpen(true);
   }
 
   const updateDeck: SetStoreFunction<Deck> = (...params: any[]) => {
@@ -682,8 +689,7 @@ export const DeckEditor: Component<Props> = props => {
                   </DropdownMenuItem>
                   <Show when={isEditing()}>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => setSearchParams({ dialog: 'editor-confirm-delete' })}>
+                    <DropdownMenuItem onClick={openDeleteDialog}>
                       <div class='flex gap-2'>
                         <DeleteIcon class='text-muted-foreground' />
                         <span>Delete Deck</span>
@@ -956,12 +962,12 @@ export const DeckEditor: Component<Props> = props => {
             </DialogContent>
           </Dialog>
         </Show>
-        <Show when={searchParams.dialog === 'editor-confirm-delete'}>
+        <Show when={deleteDialogOpen()}>
           <ConfirmDeleteDialog
             name={deck.name}
-            onClose={closeCurrentDialog}
+            onClose={closeDeleteDialog}
             onDelete={() => {
-              closeCurrentDialog();
+              closeDeleteDialog();
               props.onDelete();
               props.onClose();
             }}
@@ -1021,51 +1027,20 @@ function EmptyGridContainer(props: {
 }
 
 function ConfirmDeleteDialog(props: { name: string; onClose(): void; onDelete(): void }) {
-  let [value, setValue] = createSignal('');
-  const [isCopied, setIsCopied] = createSignal(false);
-
   return (
     <Dialog open onOpenChange={isOpen => !isOpen && props.onClose()}>
-      <DialogContent>
+      <DialogContent class='z-[70]'>
         <DialogHeader>
           <DialogTitle>Delete Deck?</DialogTitle>
         </DialogHeader>
         <p>
-          Are you sure you want to delete <b>{props.name}</b>
+          Are you sure you want to delete <b>{props.name}</b>? This cannot be undone.
         </p>
-        <p>
-          To delete deck
-          <Button
-            style='position: relative;'
-            onClick={() => {
-              navigator.clipboard.writeText(props.name);
-              setIsCopied(true);
-              setTimeout(() => setIsCopied(false), 1250);
-            }}
-            variant='secondary'
-            size='sm'
-            class='flex-inline gap-2 mx-2'>
-            {props.name} <CopyIcon size={14} />
-            <Show when={isCopied()}>
-              <p style='position: absolute; right: 0;' class='pr-3  bg-secondary'>
-                <CheckIcon size={14} />
-              </p>
-            </Show>
-          </Button>
-          type it's name and click delete
-        </p>
-        <TextField value={value()} onChange={value => setValue(value)}>
-          <TextFieldInput required type='text' />
-        </TextField>
-
         <DialogFooter>
-          <Button variant='ghost' onClick={props.onClose}>
+          <Button variant='ghost' type='button' onClick={props.onClose}>
             Cancel
           </Button>
-          <Button
-            disabled={value()?.toLowerCase() !== props.name?.toLowerCase()}
-            variant='destructive'
-            onClick={props.onDelete}>
+          <Button type='button' variant='destructive' onClick={props.onDelete}>
             Delete Deck
           </Button>
         </DialogFooter>

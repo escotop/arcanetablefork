@@ -17,7 +17,7 @@ import PencilIcon from 'lucide-solid/icons/pencil';
 import { DeckEditor } from './deckEditor';
 import styles from './deckPicker.module.css';
 import { Deck } from '../constants';
-import { unwrap } from 'solid-js/store';
+import { produce, unwrap } from 'solid-js/store';
 
 interface DeckManagerDialogProps {
   open: boolean;
@@ -116,10 +116,16 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
                 setDeckStore('decks', { [updatedDeck.id]: updatedDeck });
               }}
               onDelete={() => {
-                setDeckStore('decks', deck.id, undefined);
-                let fromSystem = deck.system || 'unsorted';
-                setDeckStore('systems', fromSystem, entries =>
-                  entries.filter(id => id !== deck.id),
+                const deckId = deck.id;
+                setDeckStore(
+                  produce(state => {
+                    delete state.decks[deckId];
+                    for (const system of Object.keys(state.systems)) {
+                      state.systems[system] = (state.systems[system] ?? []).filter(
+                        id => id !== deckId,
+                      );
+                    }
+                  }),
                 );
               }}
             />
