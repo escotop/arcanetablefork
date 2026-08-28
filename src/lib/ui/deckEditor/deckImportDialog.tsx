@@ -1,5 +1,6 @@
 import { debounce } from 'lodash-es';
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import { createStore, reconcile } from 'solid-js/store';
 import { Button } from '~/components/ui/button';
 import {
@@ -9,7 +10,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogOverlay,
-  DialogPortal,
   DialogTitle,
 } from '~/components/ui/dialog';
 import { TextField, TextFieldTextArea } from '~/components/ui/text-field';
@@ -87,13 +87,14 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
 
   return (
     <Dialog modal open onOpenChange={isOpen => !isOpen && props.onClose()}>
-      <DialogPortal>
-        <DialogOverlay onDragOver={e => e.preventDefault()} />
-        <DialogContentExtended
-          class='max-w-4xl'
-          onInteractOutside={e => {
-            e.preventDefault();
-          }}>
+      <Portal>
+        <div class='fixed inset-0 z-[70] flex items-start justify-center sm:items-center'>
+          <DialogOverlay class='z-[70]' onDragOver={e => e.preventDefault()} />
+          <DialogContentExtended
+            class='z-[70] max-w-4xl'
+            onInteractOutside={e => {
+              e.preventDefault();
+            }}>
           <DialogHeader>
             <DialogTitle>Import Card List</DialogTitle>
           </DialogHeader>
@@ -168,7 +169,8 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
             <Button onClick={() => props.onImport(deck)}>Import Card List</Button>
           </DialogFooter>
         </DialogContentExtended>
-      </DialogPortal>
+        </div>
+      </Portal>
     </Dialog>
   );
 }

@@ -104,6 +104,7 @@ export const DeckEditor: Component<Props> = props => {
   const [cardSystemStore, { setCardSystem }] = useCardSystemContext();
   const [isDirty, setIsDirty] = createSignal(false);
   const [printingPickerKey, setPrintingPickerKey] = createSignal<string>();
+  const [importDialogOpen, setImportDialogOpen] = createSignal(false);
   const [typeFilter, setTypeFilter] = createSignal<string | null>(null);
   let formRef: HTMLFormElement;
 
@@ -155,6 +156,14 @@ export const DeckEditor: Component<Props> = props => {
     setSearchParams({ dialog: undefined, src: undefined }, { replace: true });
   }
 
+  function openImportDialog() {
+    setImportDialogOpen(true);
+  }
+
+  function closeImportDialog() {
+    setImportDialogOpen(false);
+  }
+
   const updateDeck: SetStoreFunction<Deck> = (...params: any[]) => {
     (setDeck as any)(...params);
     setIsDirty(true);
@@ -198,7 +207,7 @@ export const DeckEditor: Component<Props> = props => {
 
   onMount(() => {
     if (!isEditing()) {
-      setSearchParams({ dialog: 'import' });
+      openImportDialog();
     }
   });
 
@@ -616,7 +625,7 @@ export const DeckEditor: Component<Props> = props => {
             </div>
 
             <div class='flex gap-4 justify-end px-2 pb-4'>
-              <Button variant='ghost' onClick={() => setSearchParams({ dialog: 'import' })}>
+              <Button variant='ghost' type='button' onClick={openImportDialog}>
                 Import Card List
               </Button>
               <Button type='submit'>{isEditing() ? 'Update Deck' : 'Create Deck'}</Button>
@@ -709,7 +718,7 @@ export const DeckEditor: Component<Props> = props => {
                         <EmptyGridContainer
                           hasSearchResults={searchParams.totalPages > 0}
                           isSearching={isSearching()}
-                          importCardList={() => setSearchParams({ dialog: 'import' })}
+                          importCardList={openImportDialog}
                         />
                       )
                     }>
@@ -732,7 +741,7 @@ export const DeckEditor: Component<Props> = props => {
                     <EmptyGridContainer
                       hasSearchResults={searchParams.totalPages > 0}
                       isSearching={isSearching()}
-                      importCardList={() => setSearchParams({ dialog: 'import' })}
+                      importCardList={openImportDialog}
                     />
                   }>
                   {(card, i) => {
@@ -869,18 +878,19 @@ export const DeckEditor: Component<Props> = props => {
             }}
           />
         </Show>
-        <Show when={searchParams.dialog === 'import'}>
+        <Show when={importDialogOpen()}>
           <DeckImportDialog
-            onClose={closeCurrentDialog}
-            onImport={deck => {
-              setDeck(reconcile(deck));
-              setSearchParams({ dialog: undefined });
+            onClose={closeImportDialog}
+            onImport={importedDeck => {
+              setDeck(reconcile(importedDeck));
+              setIsDirty(true);
+              closeImportDialog();
             }}
           />
         </Show>
         <Show when={searchParams.dialog === 'editor-confirm-close'}>
           <Dialog open onOpenChange={isOpen => !isOpen && closeCurrentDialog()}>
-            <DialogContent>
+            <DialogContent class='z-[70]'>
               <DialogHeader>
                 <DialogTitle>Unsaved Changes</DialogTitle>
               </DialogHeader>
