@@ -258,7 +258,7 @@ async function drainProcessEvents() {
         addLogMessage(event);
       } catch (e) {
         Sentry.captureException(e, 'addLogMessage');
-        console.error(e);
+        logger.error(e);
       }
       if (shouldSkipLocallyAppliedEvent(event)) {
         if (isLoadProfiling()) recordReplaySkip('local');
@@ -289,7 +289,7 @@ export function processEvents(): Promise<void> {
     .then(() => drainProcessEvents())
     .catch(error => {
       Sentry.captureException(error);
-      console.error(error);
+      logger.error(error);
     })
     .finally(() => {
       drainResolvers.splice(0).forEach(r => r());

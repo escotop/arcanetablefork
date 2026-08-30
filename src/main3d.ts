@@ -73,6 +73,7 @@ import {
   updateFocusCamera,
   zonesById,
 } from './lib/globals';
+import { devLog } from './lib/devLog';
 import {
   getOrCreatePlayerSessionId,
   getStoredJoinBinding,
@@ -188,7 +189,7 @@ async function waitForGameLogReplay() {
     caughtUp,
   });
   if (!caughtUp) {
-    console.warn(
+    devLog.warn(
       '[loadProfile] gameLog replay did not catch up',
       processedEvents(),
       '/',
@@ -950,7 +951,7 @@ export function animate() {
       ticks = ticks % interval;
     }
   } catch (e) {
-    console.error(e);
+    devLog.error(e);
     setCapturedErrors(errors => [...errors, e]);
     isErrored = true;
   }

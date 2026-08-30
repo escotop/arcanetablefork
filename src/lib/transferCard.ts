@@ -6,6 +6,7 @@ import { serializeCardUserDataForLog } from './gameLogEvents';
 import { onStackCardAdded } from './cardLoading';
 import type { CardStack } from './cardStack';
 import * as Sentry from '@sentry/solidstart';
+import { devLog } from './devLog';
 
 interface DefaultAddOptions {
   destroy?: boolean;
@@ -29,7 +30,7 @@ export async function transferCard<AddOptions extends {}>(
   }: ExtendedOptions<AddOptions> = {},
 ) {
   if (!card) {
-    console.warn(`card is undefined`, new Error().stack);
+    devLog.warn(`card is undefined`, new Error().stack);
     Sentry.captureException(new Error(`card is undefined`), {
       extra: {
         userData,

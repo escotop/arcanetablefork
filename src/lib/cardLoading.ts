@@ -32,6 +32,7 @@ export function cardFromDeckEntry(entry: unknown, clientId: number): Card {
     id: record.id || nanoid(),
     clientId,
     detail: record.detail!,
+    customArtUrl: (record as { customArtUrl?: string }).customArtUrl,
     modifiers: {} as Card['modifiers'],
     mesh: record.mesh,
   };

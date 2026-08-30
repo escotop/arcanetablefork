@@ -11,9 +11,11 @@ import {
   MeshStandardMaterial,
   Object3D,
   Quaternion,
+  RGBAFormat,
   Raycaster,
   SRGBColorSpace,
   Texture,
+  UnsignedByteType,
   Vector3,
   Vector3Like,
 } from 'three';
@@ -27,6 +29,13 @@ import {
   DetailedCardEntry,
 } from './constants';
 import {
+  buildPublicImageProxyUrl,
+  getTextureLoadUrl,
+  isImageProxyUrl,
+  needsTextureProxy,
+  normalizeTextureUrl,
+} from './customCardArt';
+import {
   cardBackTexture,
   cardLoadingTexture,
   cardsById,
@@ -39,6 +48,7 @@ import {
 import { counters } from './ui/counterDialog';
 import { cleanupFromNode, isValidMaterial } from './utils';
 import { serializeCardUserDataForLog } from './gameLogEvents';
+import { devLog } from './devLog';
 
 export interface CardUserData {
   cardBack?: Material;
@@ -164,64 +174,17 @@ export async function loadCardTextures(
   card: Card,
   cache: Map<string, Promise<MeshStandardMaterial>> = new Map(),
 ) {
-  const [front, back] = card.mesh.userData.card_face_urls;
+  const [front, back] = syncCardFaceUrls(card);
 
-  // TODO: it would be nice to make a placeholder card
-  // the worker here like we do in the deck editor
   if (!front) throw new Error('front texture not found');
 
-  if (!cache.has(front)) {
-    cache.set(
-      front,
-      textureLoaderWorker.loadTexture(front).then(image => {
-        const map = new Texture(image);
-        map.colorSpace = SRGBColorSpace;
-        map.needsUpdate = true;
-
-        let mat = new MeshStandardMaterial({
-          color: 0xffffff,
-          map,
-          alphaMap,
-        });
-        mat.transparent = true;
-        mat.needsUpdate = true;
-        return mat;
-      }),
-    );
-  }
-
-  let frontPromise = cache.get(front);
-
-  if (frontPromise) {
-    frontPromise.then(mat => {
-      card.mesh.material[4] = mat.clone();
-    });
-  }
+  const frontPromise = loadTextureMaterial(front, cache);
+  frontPromise.then(mat => {
+    card.mesh.material[4] = mat.clone();
+  });
 
   if (back) {
-    if (!cache.has(back)) {
-      cache.set(
-        back,
-        textureLoaderWorker.loadTexture(back).then(image => {
-          const map = new Texture(image);
-          map.colorSpace = SRGBColorSpace;
-          map.needsUpdate = true;
-
-          let mat = new MeshStandardMaterial({
-            color: 0xffffff,
-            map,
-            alphaMap,
-          });
-          mat.transparent = true;
-          mat.needsUpdate = true;
-
-          return mat;
-        }),
-      );
-    }
-
-    let backPromise = cache.get(back)!;
-
+    const backPromise = loadTextureMaterial(back, cache);
     backPromise.then(mat => {
       card.mesh.userData.cardBack = mat.clone();
       if (card.mesh.userData.isPublic) {
@@ -231,6 +194,7 @@ export async function loadCardTextures(
     });
     await backPromise;
   }
+
   await frontPromise;
 }
 
@@ -356,8 +320,199 @@ export function resolveImageUrl(
   return uris.large ?? uris.normal;
 }
 
-export function getCardImage(card: DetailedCardEntry, face = 0) {
-  return resolveImageUrl(getImageUris(card, face));
+export function getCardImage(card: DetailedCardEntry | Card, face = 0) {
+  if (face === 0 && card.customArtUrl) {
+    return normalizeTextureUrl(card.customArtUrl);
+  }
+  return normalizeTextureUrl(resolveImageUrl(getImageUris(card, face)));
+}
+
+function getNearestPowerOfTwo(value: number) {
+  return 2 ** Math.round(Math.log2(value));
+}
+
+function shouldLoadTextureOnMainThread(url: string) {
+  if (isImageProxyUrl(url)) return true;
+
+  try {
+    const parsed = new URL(url, globalThis.location?.origin ?? 'http://localhost');
+    const systemHost = cardSystem.uri ? new URL(cardSystem.uri).host : '';
+    if (parsed.host === systemHost) return false;
+    if (globalThis.location?.origin && parsed.origin === globalThis.location.origin) return false;
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+async function decodeTextureBlob(blob: Blob): Promise<ImageBitmap> {
+  try {
+    return await createImageBitmap(blob, { imageOrientation: 'flipY' });
+  } catch {
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return bitmap;
+
+    ctx.translate(0, bitmap.height);
+    ctx.scale(1, -1);
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    return createImageBitmap(canvas);
+  }
+}
+
+function resizeTextureBitmap(bitmap: ImageBitmap) {
+  const width = getNearestPowerOfTwo(bitmap.width);
+  const height = getNearestPowerOfTwo(bitmap.height);
+  if (width === bitmap.width && height === bitmap.height) {
+    return bitmap;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return bitmap;
+
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+  return createImageBitmap(canvas);
+}
+
+async function loadTextureBitmapViaImage(url: string): Promise<ImageBitmap> {
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
+    img.src = url;
+  });
+
+  const width = getNearestPowerOfTwo(image.naturalWidth || image.width);
+  const height = getNearestPowerOfTwo(image.naturalHeight || image.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Failed to get canvas context');
+
+  ctx.translate(0, height);
+  ctx.scale(1, -1);
+  ctx.drawImage(image, 0, 0, width, height);
+  return createImageBitmap(canvas);
+}
+
+async function loadTextureBitmapMainThread(url: string): Promise<ImageBitmap> {
+  if (isImageProxyUrl(url)) {
+    return loadTextureBitmapViaImage(url);
+  }
+
+  const response = await fetch(url, { mode: 'cors', credentials: 'omit' });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch texture: ${response.status}`);
+  }
+
+  const contentType = response.headers.get('content-type') ?? '';
+  if (contentType && !contentType.startsWith('image/')) {
+    throw new Error(`Unexpected content type: ${contentType}`);
+  }
+
+  const blob = await response.blob();
+  const bitmap = await decodeTextureBlob(blob);
+  return resizeTextureBitmap(bitmap);
+}
+
+async function loadTextureBitmapWithUrl(loadUrl: string): Promise<ImageBitmap> {
+  if (shouldLoadTextureOnMainThread(loadUrl)) {
+    return loadTextureBitmapMainThread(loadUrl);
+  }
+
+  return textureLoaderWorker.loadTexture(loadUrl);
+}
+
+async function loadTextureBitmap(url: string): Promise<ImageBitmap> {
+  const normalized = normalizeTextureUrl(url);
+  if (!normalized) throw new Error('texture url not found');
+
+  const loadUrl = getTextureLoadUrl(normalized) ?? normalized;
+
+  try {
+    return await loadTextureBitmapWithUrl(loadUrl);
+  } catch (error) {
+    if (!needsTextureProxy(normalized)) throw error;
+
+    const fallbackUrl = buildPublicImageProxyUrl(normalized);
+    if (!fallbackUrl || fallbackUrl === loadUrl) throw error;
+
+    return loadTextureBitmapWithUrl(fallbackUrl);
+  }
+}
+
+function createCardTextureMaterial(image: ImageBitmap) {
+  const map = new Texture(image);
+  map.colorSpace = SRGBColorSpace;
+  map.format = RGBAFormat;
+  map.type = UnsignedByteType;
+  map.needsUpdate = true;
+
+  const mat = new MeshStandardMaterial({
+    color: 0xffffff,
+    map,
+    alphaMap,
+  });
+  mat.transparent = true;
+  mat.needsUpdate = true;
+  return mat;
+}
+
+function getFallbackTextureUrl() {
+  return normalizeTextureUrl(cardSystem.fallbackImage ?? '/unknown-card-image.webp');
+}
+
+async function loadTextureMaterial(
+  url: string,
+  cache: Map<string, Promise<MeshStandardMaterial>>,
+): Promise<MeshStandardMaterial> {
+  const normalized = normalizeTextureUrl(url);
+  if (!normalized) throw new Error('texture url not found');
+
+  if (!cache.has(normalized)) {
+    cache.set(
+      normalized,
+      loadTextureBitmap(normalized)
+        .then(image => createCardTextureMaterial(image))
+        .catch(async error => {
+          const loadUrl = getTextureLoadUrl(normalized) ?? normalized;
+          devLog.warn('Failed to load card texture, using fallback:', normalized, 'loadUrl:', loadUrl, error);
+          const fallback = getFallbackTextureUrl();
+          if (!fallback || fallback === normalized) {
+            throw error;
+          }
+          const image = await loadTextureBitmap(fallback);
+          return createCardTextureMaterial(image);
+        }),
+    );
+  }
+
+  return cache.get(normalized)!;
+}
+
+function syncCardFaceUrls(card: Card): [string, string | undefined] {
+  const front =
+    normalizeTextureUrl(card.customArtUrl ?? getCardImage(card) ?? card.mesh?.userData.card_face_urls?.[0]) ??
+    '';
+  const back = card.mesh?.userData.isDoubleSided
+    ? normalizeTextureUrl(getCardImage(card, 1) ?? card.mesh?.userData.card_face_urls?.[1])
+    : undefined;
+
+  if (card.mesh) {
+    card.mesh.userData.card_face_urls = back ? [front, back] : [front];
+  }
+
+  return [front, back];
 }
 
 export function getCardArtImage(card: { detail: CardEntryDetail }) {
@@ -451,7 +606,7 @@ export function setCardData<Field extends keyof CardUserData>(
       let material = cardMesh.userData[value ? 'cardBack' : 'publicCardBack'];
 
       if (!isValidMaterial(material)) {
-        console.warn(`Invalid material assigned to mesh!`, {
+        devLog.warn(`Invalid material assigned to mesh!`, {
           material,
           cardMesh,
         });

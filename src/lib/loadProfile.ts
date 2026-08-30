@@ -1,3 +1,5 @@
+import { devLog } from './devLog';
+
 const PREFIX = '[loadProfile]';
 
 type Mark = {
@@ -44,14 +46,14 @@ export function beginLoadProfile(label: string, detail?: Record<string, unknown>
     handleMs: 0,
     byType: {},
   };
-  console.log(`${PREFIX} ▶ ${label}`, formatDetail(detail));
+  devLog.log(`${PREFIX} ▶ ${label}`, formatDetail(detail));
 }
 
 export function markLoadProfile(label: string, detail?: Record<string, unknown>) {
   if (!session) return;
   const atMs = performance.now() - session.start;
   session.marks.push({ label, atMs, detail });
-  console.log(`${PREFIX}   ${atMs.toFixed(0)}ms  ${label}`, formatDetail(detail));
+  devLog.log(`${PREFIX}   ${atMs.toFixed(0)}ms  ${label}`, formatDetail(detail));
 }
 
 export async function profileAsync<T>(
@@ -116,7 +118,7 @@ export function endLoadProfile(detail?: Record<string, unknown>) {
   if (!session) return;
 
   const totalMs = performance.now() - session.start;
-  console.log(`${PREFIX} ■ ${session.label}  ${totalMs.toFixed(0)}ms total`, formatDetail(detail));
+  devLog.log(`${PREFIX} ■ ${session.label}  ${totalMs.toFixed(0)}ms total`, formatDetail(detail));
 
   if (session.marks.length) {
     console.table(
@@ -135,7 +137,7 @@ export function endLoadProfile(detail?: Record<string, unknown>) {
       .slice(0, 12)
       .map(([type, count]) => `${type}:${count}`)
       .join(', ');
-    console.log(`${PREFIX}   gameLog replay`, {
+    devLog.log(`${PREFIX}   gameLog replay`, {
       wallMs: Math.round(replayWallMs),
       processed: replayStats.processed,
       skippedCatchUp: replayStats.skippedCatchUp,

@@ -19,6 +19,7 @@ import {
   SOUND_VOLUME_STEP,
   updateFocusPanelSize,
 } from '../globals';
+import { devLog } from '../devLog';
 import { Label } from '~/components/ui/label';
 import { Checkbox } from '~/components/ui/checkbox';
 import { Button } from '~/components/ui/button';
@@ -92,7 +93,7 @@ export default function SettingsOverlay(props: {
       downloadGameStateExport(params.gameId);
       toast.success('Game state exported');
     } catch (error) {
-      console.error(error);
+      devLog.error(error);
       toast.error('Failed to export game state');
     }
   }
@@ -121,7 +122,7 @@ export default function SettingsOverlay(props: {
       toast.success('Game state imported');
       props.onClose();
     } catch (error) {
-      console.error(error);
+      devLog.error(error);
       toast.error(error instanceof Error ? error.message : 'Failed to import game state');
     } finally {
       setImporting(false);

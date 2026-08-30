@@ -24,6 +24,8 @@ import {
   CardZone,
   DetailedCardEntry,
 } from './constants';
+import { applyCustomArtToEntry } from './customCardArt';
+import { devLog } from './devLog';
 import { deck as deckParser } from './deckParser';
 import { getCardCollectorNumber } from './deckListFormat';
 import { cardsById, cardSystem, getProjectionVec, setHoverSignal, zonesById } from './globals';
@@ -350,7 +352,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
       this.mesh.remove(cardMesh);
       this.setObservable('cardCount', this.cards.length);
     } else {
-      console.error(`didn't find card`, {
+      devLog.error(`didn't find card`, {
         cardMesh,
         cards: this.cards,
         meshId: cardMesh.userData.id,
@@ -487,6 +489,7 @@ export function expandCardEntries(cardEntries: DetailedCardEntry[]) {
         id: nanoid(),
         clientId: 0,
         detail: card.detail,
+        customArtUrl: card.customArtUrl,
         modifiers: {} as Card['modifiers'],
       });
     }
@@ -560,7 +563,7 @@ export async function fetchCardInfo(
       ...populateCardInfo(payload, entry),
     };
   } catch (e) {
-    console.error(e);
+    devLog.error(e);
     result = {
       ...entry,
       found: false,
@@ -570,6 +573,13 @@ export async function fetchCardInfo(
 
   if (cache && result) {
     cache.set(cacheKey, result);
+  }
+
+  if (result?.customArtUrl) {
+    result = applyCustomArtToEntry(result);
+    if (cache) {
+      cache.set(cacheKey, result);
+    }
   }
 
   return result;

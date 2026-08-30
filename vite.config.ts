@@ -13,6 +13,31 @@ import remarkHasBody from './src/lib/spark/remark-has-body';
 import { sentryVitePlugin } from '@sentry/vite-plugin';
 import sitemapPlugin from 'vite-plugin-sitemap';
 import { writeFileSync } from 'node:fs';
+import { handleImageProxyRequest } from './scripts/image-proxy-handler.mjs';
+
+function imageProxyDevPlugin() {
+  return {
+    name: 'image-proxy-dev',
+    enforce: 'pre',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith('/image-proxy')) {
+          next();
+          return;
+        }
+
+        const requestUrl = new URL(req.url, 'http://localhost');
+        const result = await handleImageProxyRequest(requestUrl.searchParams.get('uri'));
+        const headers = result.headers ?? { 'Content-Type': 'text/plain; charset=utf-8' };
+        res.statusCode = result.status;
+        for (const [key, value] of Object.entries(headers)) {
+          res.setHeader(key, value);
+        }
+        res.end(result.body);
+      });
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -25,6 +50,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       solidStart(),
+      imageProxyDevPlugin(),
       ...(env.SENTRY_AUTH_TOKEN ? [sentryVitePlugin()] : []),
       sitemapPlugin({ hostname }),
       nitroV2Plugin({

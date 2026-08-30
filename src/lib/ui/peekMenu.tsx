@@ -89,9 +89,11 @@ const PeekMenu: Component = props => {
                   }
                   const area = playArea();
                   if (!area) return;
-                  if (e.code === 'Escape') {
+                  if (e.key === 'Escape') {
                     e.preventDefault();
-                    area.dismissFromZone(area.peekZone);
+                    e.stopPropagation();
+                    setPeekFilterText('');
+                    void area.dismissFromZone(area.peekZone);
                   }
                 }}
                 onValueChange={value => {

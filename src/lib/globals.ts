@@ -54,21 +54,16 @@ import { clearWaterdrops } from './waterdropEffect';
 import { clearPingSync } from './pingSync';
 import { resetCameraView, captureLocalCameraView } from './cameraView';
 import { clearSpanishPreview } from './spanishCardPreview';
+import { devLog } from './devLog';
 
 export function expect(test: boolean, message: string, ...supplemental: any) {
   if (!test) {
-    console.error(message, ...supplemental);
+    devLog.error(message, ...supplemental);
     throw new Error(message);
   }
 }
 
-const enableLogger = !import.meta.env.PROD;
-const emptyFunc = () => {};
-
-export const logger = {
-  log: enableLogger ? console.log.bind(console) : emptyFunc,
-  warn: enableLogger ? console.warn.bind(console) : emptyFunc,
-};
+export const logger = devLog;
 export let clock: Clock;
 export let loadingManager: LoadingManager;
 export let textureLoader: TextureLoader;
@@ -358,7 +353,7 @@ export async function init({ gameId }) {
   markLoadProfile('sync provider created', { gameId });
 
   loadingManager.onProgress = function (item, loaded, total) {
-    console.log(item, loaded, total);
+    devLog.log(item, loaded, total);
   };
 
   cardBackTexture = textureLoader.load(cardSystem.cardBack ?? `/arcane-table-back.webp`);

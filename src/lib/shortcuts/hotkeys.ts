@@ -212,6 +212,21 @@ export function HotKeys() {
       e.preventDefault();
       dismissZoomPanel();
       selection.clearSelection();
+
+      const area = playArea();
+      if (!area) return;
+
+      if (area.peekZone.cards.length > 0) {
+        void area.dismissFromZone(area.peekZone);
+        return;
+      }
+      if (area.tokenSearchZone.cards.length > 0) {
+        void area.dismissFromZone(area.tokenSearchZone);
+        return;
+      }
+      if (area.revealZone.cards.length > 0) {
+        void area.dismissFromZone(area.revealZone);
+      }
     });
 
     hotkeys('escape', 'peek', function (e) {

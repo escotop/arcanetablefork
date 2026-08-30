@@ -3,6 +3,7 @@ import { PlayArea } from '~/lib/playArea';
 import { useMenuContext } from './context';
 import { Mesh } from 'three';
 import { cardsById } from '~/lib/globals';
+import { devLog } from '~/lib/devLog';
 import MoveSubMenu from './move-submenu';
 
 export default function HandContextMenu(props: { playArea: PlayArea; targetMesh: Mesh }) {
@@ -10,7 +11,7 @@ export default function HandContextMenu(props: { playArea: PlayArea; targetMesh:
   const getCard = () => {
     const card = cardsById.get(props.targetMesh.userData.id);
     if (!card)
-      console.error(`card not in cardsById map`, JSON.stringify(props.targetMesh.userData));
+      devLog.error(`card not in cardsById map`, JSON.stringify(props.targetMesh.userData));
     return card;
   };
   return (

@@ -41,11 +41,13 @@ import {
   supportsCardPrintings,
 } from '../deck';
 import { cardSystem, colorHashDark } from '../globals';
+import { devLog } from '../devLog';
 import { cn } from '../utils';
 import styles from './deckEditor.module.css';
 import CardList from './deckEditor/cardList';
 import DeckGridCard from './deckEditor/deckGridCard';
 import PrintingPickerModal from './deckEditor/printingPickerModal';
+import { CustomCardArtOption, applyCustomArtToEntry, normalizeTextureUrl } from '~/lib/customCardArt';
 import random from 'lodash-es/random';
 import { Command, CommandInput } from '~/components/ui/command';
 import { ToggleGroup, ToggleGroupItem } from '~/components/ui/toggle-group';
@@ -207,6 +209,23 @@ export const DeckEditor: Component<Props> = props => {
     };
   }
 
+  function changeCardCustomArt(storageKey: string, option: CustomCardArtOption) {
+    const previous = deck.cards[storageKey];
+    if (!previous) return;
+
+    const nextEntry: DetailedCardEntry = applyCustomArtToEntry({
+      ...previous,
+      customArtUrl: normalizeTextureUrl(option.imageUrl) ?? option.imageUrl,
+      detail: previous.detail,
+    });
+
+    updateDeck('cards', storageKey, nextEntry);
+
+    if (deck.inPlay?.[previous.name]?.id === previous.id) {
+      updateDeck('inPlay', previous.name, nextEntry);
+    }
+  }
+
   async function changeCardPrinting(storageKey: string, printing: CardPrintingOption) {
     const previous = deck.cards[storageKey];
     if (!previous) return;
@@ -362,7 +381,7 @@ export const DeckEditor: Component<Props> = props => {
       : searchParams.page && !page;
 
     if (isSearchSame && outdatedSearch) {
-      console.log('tried outdated search');
+      devLog.log('tried outdated search');
       return;
     }
 
@@ -936,6 +955,10 @@ export const DeckEditor: Component<Props> = props => {
             onClose={() => setPrintingPickerKey(undefined)}
             onSelect={printing => {
               void changeCardPrinting(printingPickerKey()!, printing);
+              setPrintingPickerKey(undefined);
+            }}
+            onSelectCustomArt={option => {
+              changeCardCustomArt(printingPickerKey()!, option);
               setPrintingPickerKey(undefined);
             }}
           />

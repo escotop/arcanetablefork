@@ -5,6 +5,7 @@ import { cleanupCard, getSerializableCard, setCardData } from './card';
 import { Card, CARD_HEIGHT, CardZone } from './constants';
 import { cardsById, getProjectionVec, isEventCatchUpComplete, setHoverSignal, settings, zonesById } from './globals';
 import { getGlobalRotation } from './utils';
+import { devLog } from './devLog';
 import { createStore, SetStoreFunction } from 'solid-js/store';
 import { createRoot } from 'solid-js';
 
@@ -253,8 +254,8 @@ export class Hand implements CardZone {
     for (let i = cardIndex; i < this.cards.length; i++) {
       let cardMesh = this.cards[i]?.mesh;
       if (!cardMesh) {
-        console.warn(`card mesh undefined`, new Error().stack);
-        console.warn(i, this.cards.length, this.cards.slice());
+        devLog.warn(`card mesh undefined`, new Error().stack);
+        devLog.warn(i, this.cards.length, this.cards.slice());
         continue;
       }
       if (cardMesh.userData.location !== 'hand' || !cardMesh.userData.resting) continue;

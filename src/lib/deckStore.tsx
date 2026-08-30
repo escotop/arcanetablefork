@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import { createContext, onMount, ParentProps, useContext } from 'solid-js';
 import { CardEntry, Deck, DetailedCardEntry, CardSystem } from './constants';
 import { loadCardList, fetchCardInfo } from './deck';
+import { applyCustomArtToEntry } from './customCardArt';
 import { getCardArtImage } from './card';
 import { DEFAULT_CARD_SYSTEM_URI, setCardSystem as setGlobalCardSystem } from './globals';
 import { useSearchParams } from '@solidjs/router';
@@ -102,17 +103,19 @@ export async function hydrateDeck(originalDeck: Deck) {
   await Promise.all(
     [
       deckCards.map(async card => {
-        const updatedCard =
+        const updatedCard = applyCustomArtToEntry(
           card.detail && card.detail.name
             ? card
-            : await fetchCardInfo(card, cache).catch(() => card);
+            : await fetchCardInfo(card, cache).catch(() => card),
+        );
         deck.cards[getCardKey(updatedCard)] = updatedCard;
       }),
       inPlayCards.map(async card => {
-        const updatedCard =
+        const updatedCard = applyCustomArtToEntry(
           card.detail && card.detail.name
             ? card
-            : await fetchCardInfo(card, cache).catch(() => card);
+            : await fetchCardInfo(card, cache).catch(() => card),
+        );
         deck.inPlay[getCardKey(updatedCard)] = updatedCard;
       }),
     ].flat(),

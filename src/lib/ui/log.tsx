@@ -1,5 +1,6 @@
 import { Component, ErrorBoundary, For, Show } from 'solid-js';
 import { cardsById, logs, players, zonesById } from '../globals';
+import { devLog } from '../devLog';
 import style from './overlay.module.css';
 import { captureException, withSentryErrorBoundary } from '@sentry/solidstart';
 
@@ -10,7 +11,7 @@ const Log: Component = props => {
     <div class={`${style.log} bg-slate-800 text-white p-4 bg-opacity-75`}>
       <SentryErrorBoundry
         fallback={error => {
-          console.error(error, logs);
+          devLog.error(error, logs);
           captureException(error, logs);
           return <p>Sorry, something went wrong</p>;
         }}>

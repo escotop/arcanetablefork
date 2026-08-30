@@ -28,6 +28,7 @@ import {
   flushDispatchEventQueue,
   getLocalPlayerClientId,
   isEventCatchUpComplete,
+  setPeekFilterText,
   sendEvent,
   zonesById,
 } from './globals';
@@ -373,12 +374,18 @@ export class PlayArea {
         toZone: zonesById.get(card.mesh!.userData.previousZoneId),
       }));
 
-    for (const { card, toZone } of transfers) {
-      await transferCard(card, zone, toZone, {
-        preventTransmit: true,
-        addOptions: { skipAnimation: true },
-      });
+    if (zone.zone === 'peek') {
+      setPeekFilterText('');
     }
+
+    await Promise.all(
+      transfers.map(({ card, toZone }) =>
+        transferCard(card, zone, toZone, {
+          preventTransmit: true,
+          addOptions: { skipAnimation: true },
+        }),
+      ),
+    );
   }
 
   async toggleTokenMenu(payload?: { availableTokens: CardReference[]; ids: string[] }) {

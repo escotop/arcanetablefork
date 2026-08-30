@@ -13,6 +13,7 @@ import {
   playAreas,
   resetGameSceneForReplay,
 } from './globals';
+import { devLog } from './devLog';
 import { readjustPlayAreas } from '../main3d';
 import {
   findJoinClientIdForSession,
@@ -276,7 +277,7 @@ export function setupGameStateImportObserver(getGameId: () => string | undefined
 
     void handleRemoteGameStateImport(gameId).catch(error => {
       Sentry.captureException(error);
-      console.error(error);
+      devLog.error(error);
     });
   });
 }

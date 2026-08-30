@@ -71,6 +71,7 @@ export interface CardEntry {
   categories: string[];
   set: string;
   collector_number?: string;
+  customArtUrl?: string;
 }
 
 export interface DetailedCardEntry extends CardEntry {
@@ -82,6 +83,7 @@ export interface Card {
   id: string;
   clientId: number;
   detail: CardEntryDetail;
+  customArtUrl?: string;
   modifiers: {
     pt: Mesh;
     [id: string]: Mesh;
