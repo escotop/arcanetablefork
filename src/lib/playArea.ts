@@ -96,6 +96,7 @@ export class PlayArea {
   public tokenSearchZone;
   public availableTokens?: CardReference[];
   private inProgressActions = new Set<string>();
+  private peekSessionId = 0;
   public index: number;
   public playerSessionId?: string;
   private nameTagElement: HTMLDivElement;
@@ -288,8 +289,12 @@ export class PlayArea {
     if (this.inProgressActions.has(key)) return;
     this.inProgressActions.add(key);
 
+    const sessionId = ++this.peekSessionId;
     const skipAnimation = actualCount > 5;
-    await this.executePeekCards(this.deck, this.peekZone, actualCount, { skipAnimation });
+    await this.executePeekCards(this.deck, this.peekZone, actualCount, {
+      skipAnimation,
+      sessionId,
+    });
 
     if (this.isLocalPlayArea) {
       sendEvent(
@@ -304,12 +309,14 @@ export class PlayArea {
     fromZone: CardZone,
     toZone: CardZone,
     count: number,
-    options?: { skipAnimation?: boolean },
+    options?: { skipAnimation?: boolean; sessionId?: number },
   ) {
     const skipAnimation = options?.skipAnimation ?? count > 5;
+    const sessionId = options?.sessionId ?? ++this.peekSessionId;
     const cardsToMove = fromZone.cards.slice(0, count);
 
     for (const card of cardsToMove) {
+      if (toZone.zone === 'peek' && sessionId !== this.peekSessionId) break;
       await transferCard(card, fromZone, toZone, {
         preventTransmit: true,
         addOptions: { skipAnimation },
@@ -355,6 +362,9 @@ export class PlayArea {
 
   async dismissFromZone(zone: CardZone) {
     if (this.inProgressActions.has(`dismissFromZone.${zone.id}`)) return;
+    if (zone.zone === 'peek') {
+      this.peekSessionId += 1;
+    }
     this.inProgressActions.add(`dismissFromZone.${zone.id}`);
 
     await this.executeDismissZone(zone);

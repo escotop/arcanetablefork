@@ -227,6 +227,24 @@ export const DeckEditor: Component<Props> = props => {
     };
   }
 
+  function updateInPlayMirror(previous: DetailedCardEntry, nextEntry: DetailedCardEntry) {
+    const inPlay = deck.inPlay ?? {};
+    const matchKey = Object.keys(inPlay).find(
+      key =>
+        key === getCardKey(previous) ||
+        key === previous.name ||
+        inPlay[key].id === previous.id,
+    );
+    if (!matchKey) return;
+
+    const nextKey = getCardKey(nextEntry);
+    const qty = inPlay[matchKey].qty ?? nextEntry.qty;
+    if (matchKey !== nextKey) {
+      updateDeck('inPlay', matchKey, undefined);
+    }
+    updateDeck('inPlay', nextKey, { ...nextEntry, qty });
+  }
+
   function changeCardCustomArt(storageKey: string, option: CustomCardArtOption) {
     const previous = deck.cards[storageKey];
     if (!previous) return;
@@ -238,10 +256,7 @@ export const DeckEditor: Component<Props> = props => {
     });
 
     updateDeck('cards', storageKey, nextEntry);
-
-    if (deck.inPlay?.[previous.name]?.id === previous.id) {
-      updateDeck('inPlay', previous.name, nextEntry);
-    }
+    updateInPlayMirror(previous, nextEntry);
   }
 
   async function changeCardPrinting(storageKey: string, printing: CardPrintingOption) {
@@ -253,6 +268,7 @@ export const DeckEditor: Component<Props> = props => {
       name: previous.name,
       id: printing.id,
       set: printing.set,
+      collector_number: printing.collector_number,
       qty,
       categories: previous.categories ?? [],
     }).catch(() => undefined);
@@ -278,10 +294,7 @@ export const DeckEditor: Component<Props> = props => {
       categories: previous.categories ?? updated.categories ?? [],
     };
     updateDeck('cards', storageKey, nextEntry);
-
-    if (deck.inPlay?.[previous.name]?.id === previous.id) {
-      updateDeck('inPlay', previous.name, nextEntry);
-    }
+    updateInPlayMirror(previous, nextEntry);
   }
 
   function openPrintingPicker(storageKey: string) {
@@ -671,12 +684,10 @@ export const DeckEditor: Component<Props> = props => {
                 multiple
                 options={getDeckList()}
                 value={getInPlayList()}
-                optionValue={card => {
-                  return card.name;
-                }}
+                optionValue={card => getCardKey(card)}
                 onChange={cards => {
                   updateDeck({
-                    inPlay: Object.fromEntries(cards.map(card => [card.name, card])),
+                    inPlay: Object.fromEntries(cards.map(card => [getCardKey(card), card])),
                   });
                 }}
                 optionTextValue={(card: DetailedCardEntry) => {

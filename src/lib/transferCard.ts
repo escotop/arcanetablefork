@@ -88,7 +88,12 @@ export async function transferCard<AddOptions extends {}>(
       if (toZone.zone === 'peek' || toZone.zone === 'reveal') {
         setCardData(card.mesh, 'isPublic', true);
       }
-      await loadCardTextures(card);
+      const textureLoad = loadCardTextures(card);
+      if (toZone.zone === 'peek' || toZone.zone === 'tokenSearch') {
+        void textureLoad;
+      } else {
+        await textureLoad;
+      }
     }
     await toZone.addCard(card, addOptions);
     if (toZone.zone === 'graveyard' || toZone.zone === 'exile') {

@@ -4,6 +4,7 @@ import { createContext, onMount, ParentProps, useContext } from 'solid-js';
 import { CardEntry, Deck, DetailedCardEntry, CardSystem } from './constants';
 import { loadCardList, fetchCardInfo } from './deck';
 import { applyCustomArtToEntry } from './customCardArt';
+import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
 import { getCardArtImage } from './card';
 import { DEFAULT_CARD_SYSTEM_URI, setCardSystem as setGlobalCardSystem } from './globals';
 import { useSearchParams } from '@solidjs/router';
@@ -68,6 +69,38 @@ export function getCardKey(entry: CardEntry) {
   return entry?.id ?? [entry.name, entry.set].join(':');
 }
 
+function needsCardHydration(card: DetailedCardEntry) {
+  if (!card.detail?.name) return true;
+  if (card.id && card.detail.id && card.id !== card.detail.id) return true;
+  if (hasRequestedPrinting(card) && !printingMatchesRequest(card.detail, card)) return true;
+  return false;
+}
+
+async function hydrateCardEntry(card: DetailedCardEntry, cache: Map<string, DetailedCardEntry>) {
+  const hydrated = needsCardHydration(card)
+    ? await fetchCardInfo(card, cache).catch(() => card)
+    : card;
+  return applyCustomArtToEntry(hydrated);
+}
+
+function syncInPlayEntries(
+  inPlayCards: DetailedCardEntry[],
+  deckCards: Record<string, DetailedCardEntry>,
+) {
+  return inPlayCards.map(card => {
+    const deckCard =
+      deckCards[getCardKey(card)] ??
+      Object.values(deckCards).find(
+        candidate =>
+          candidate.name === card.name &&
+          (!card.id || candidate.id === card.id) &&
+          (!card.set || !candidate.set || candidate.set === card.set),
+      );
+
+    return deckCard ? { ...deckCard, qty: card.qty ?? deckCard.qty } : card;
+  });
+}
+
 export async function hydrateDeck(originalDeck: Deck) {
   let cache = new Map();
 
@@ -99,26 +132,19 @@ export async function hydrateDeck(originalDeck: Deck) {
   deck.cards = {};
   deck.inPlay = {};
 
-  // populate all card details
   await Promise.all(
-    [
-      deckCards.map(async card => {
-        const updatedCard = applyCustomArtToEntry(
-          card.detail && card.detail.name
-            ? card
-            : await fetchCardInfo(card, cache).catch(() => card),
-        );
-        deck.cards[getCardKey(updatedCard)] = updatedCard;
-      }),
-      inPlayCards.map(async card => {
-        const updatedCard = applyCustomArtToEntry(
-          card.detail && card.detail.name
-            ? card
-            : await fetchCardInfo(card, cache).catch(() => card),
-        );
-        deck.inPlay[getCardKey(updatedCard)] = updatedCard;
-      }),
-    ].flat(),
+    deckCards.map(async card => {
+      const updatedCard = await hydrateCardEntry(card, cache);
+      deck.cards[getCardKey(updatedCard)] = updatedCard;
+    }),
+  );
+
+  const syncedInPlay = syncInPlayEntries(inPlayCards, deck.cards);
+  await Promise.all(
+    syncedInPlay.map(async card => {
+      const updatedCard = await hydrateCardEntry(card, cache);
+      deck.inPlay[getCardKey(updatedCard)] = updatedCard;
+    }),
   );
 
   deck = Object.assign({}, structuredClone(DEFAULT_DECK), deck);
