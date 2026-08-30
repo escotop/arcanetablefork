@@ -61,6 +61,7 @@ import SearchIcon from 'lucide-solid/icons/search';
 import { useSearchParams } from '@solidjs/router';
 import { trackDeep } from '@solid-primitives/deep';
 import DownloadIcon from 'lucide-solid/icons/download';
+import PrinterIcon from 'lucide-solid/icons/printer';
 import {
   Select,
   SelectContent,
@@ -85,6 +86,7 @@ import { AlertDialog, AlertDialogContent } from '~/components/ui/alert-dialog';
 import intersectionObserver from '../intersectionObserver';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import DeckImportDialog from './deckEditor/deckImportDialog';
+import PrintDeckModal from './deckEditor/printDeckModal';
 import useCardGrouping, { getSimpleType } from './deckEditor/cardGroupings';
 import OverflowMenuIcon from 'lucide-solid/icons/ellipsis';
 import DeleteIcon from 'lucide-solid/icons/trash-2';
@@ -111,6 +113,7 @@ export const DeckEditor: Component<Props> = props => {
   const [isDirty, setIsDirty] = createSignal(false);
   const [printingPickerKey, setPrintingPickerKey] = createSignal<string>();
   const [importDialogOpen, setImportDialogOpen] = createSignal(false);
+  const [printDialogOpen, setPrintDialogOpen] = createSignal(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
   const [closeConfirmDialogOpen, setCloseConfirmDialogOpen] = createSignal(false);
   const [typeFilter, setTypeFilter] = createSignal<string | null>(null);
@@ -170,6 +173,21 @@ export const DeckEditor: Component<Props> = props => {
 
   function closeImportDialog() {
     setImportDialogOpen(false);
+  }
+
+  function openPrintDialog() {
+    setPrintDialogOpen(true);
+  }
+
+  function closePrintDialog() {
+    setPrintDialogOpen(false);
+  }
+
+  function getDeckName() {
+    if (formRef?.elements.namedItem('name')) {
+      return String((formRef.elements.namedItem('name') as HTMLInputElement).value || '').trim();
+    }
+    return deck.name?.trim() || 'deck';
   }
 
   function closeDeleteDialog() {
@@ -719,6 +737,14 @@ export const DeckEditor: Component<Props> = props => {
                       <span>Download Deck</span>
                     </div>
                   </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={Object.values(deck.cards).filter(card => card.qty).length < 1}
+                    onClick={openPrintDialog}>
+                    <div class='flex gap-2'>
+                      <PrinterIcon class='text-muted-foreground' />
+                      <span>Print deck</span>
+                    </div>
+                  </DropdownMenuItem>
                   <Show when={isEditing()}>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={openDeleteDialog}>
@@ -975,6 +1001,14 @@ export const DeckEditor: Component<Props> = props => {
               setIsDirty(true);
               closeImportDialog();
             }}
+          />
+        </Show>
+        <Show when={printDialogOpen()}>
+          <PrintDeckModal
+            open={printDialogOpen()}
+            deckName={getDeckName()}
+            cards={getDeckList()}
+            onClose={closePrintDialog}
           />
         </Show>
         <Show when={closeConfirmDialogOpen()}>

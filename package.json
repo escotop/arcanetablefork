@@ -56,6 +56,7 @@
     "comlink": "^4.4.2",
     "fflate": "^0.8.3",
     "hotkeys-js": "^4.0.4",
+    "jspdf": "^4.2.1",
     "lil-gui": "^0.21.0",
     "lodash-es": "^4.18.1",
     "lucide-solid": "^0.562.0",
