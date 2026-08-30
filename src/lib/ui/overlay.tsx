@@ -38,6 +38,7 @@ import CounterDialog from './counterDialog';
 import Log from './log';
 import styles from './overlay.module.css';
 import PeekMenu from './peekMenu';
+import ManaCounters from './manaCounters';
 import { LocalPlayer, NetworkPlayer } from './playerMenu';
 import RevealMenu from './revealMenu';
 import TokenSearchMenu from './tokenMenu';
@@ -219,6 +220,9 @@ export default function Overlay() {
       </Show>
 
       <MainMenu playArea={playArea()!} />
+      <Show when={!isSpectating()}>
+        <ManaCounters />
+      </Show>
       <PeekMenu />
       <RevealMenu />
       <TokenSearchMenu />
