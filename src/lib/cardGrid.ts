@@ -7,13 +7,16 @@ import { getSearchLine, getSerializableCard, setCardData } from './card';
 import { Card, CARD_HEIGHT, CARD_WIDTH, CardZone, SCROLL_SPEED } from './constants';
 import {
   cardsById,
+  cardSystem,
   peekFilterText,
+  peekTypeFilter,
   scrollTarget,
   setHoverSignal,
   setPeekFilterText,
   setScrollTarget,
   zonesById,
 } from './globals';
+import { getCardTypeCategory } from './ui/deckEditor/cardGroupings';
 import { cleanupMesh, getGlobalRotation, isVectorEqual } from './utils';
 
 const CARDS_PER_ROW = 5;
@@ -56,6 +59,8 @@ export class CardGrid implements CardZone {
     createRoot(dispose => {
       this.localFeaturesDispose = dispose;
       createEffect(() => {
+        peekFilterText();
+        peekTypeFilter();
         this.filterCards();
         this.updateCardPositions();
       });
@@ -106,6 +111,17 @@ export class CardGrid implements CardZone {
   }
 
   filterCards() {
+    let candidates = this.cards;
+
+    const typeFilter = peekTypeFilter();
+    if (typeFilter) {
+      const lowerTypes = (cardSystem.types ?? []).map(type => type.toLowerCase());
+      candidates = candidates.filter(card => {
+        if (typeFilter === 'unsorted') return !getCardTypeCategory(card, lowerTypes);
+        return getCardTypeCategory(card, lowerTypes) === typeFilter;
+      });
+    }
+
     const filterText = peekFilterText().toLowerCase();
     const filters = filterText
       .split(',')
@@ -113,7 +129,7 @@ export class CardGrid implements CardZone {
       .filter(Boolean);
 
     if (filters.length) {
-      let filterScores = this.cards
+      let filterScores = candidates
         .map(card => {
           const haystack = (card.detail.search ?? getSearchLine(card.detail)).toLowerCase();
           let indexOf = filters.reduce((a, b) => Math.min(a, haystack.indexOf(b)), Infinity);
@@ -126,6 +142,8 @@ export class CardGrid implements CardZone {
         .filter(card => card.score > 0)
         .sort((a, b) => b.score - a.score);
       this.filteredCards = filterScores.map(score => score.card);
+    } else if (typeFilter) {
+      this.filteredCards = candidates;
     } else {
       this.filteredCards = undefined;
     }
@@ -247,6 +265,7 @@ export class CardGrid implements CardZone {
 
   subscribeToCardList(fn) {
     this.listeners.push(fn);
+    fn(this.cards);
 
     return () => {
       let indexOf = this.listeners.indexOf(fn);

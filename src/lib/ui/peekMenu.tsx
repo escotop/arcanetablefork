@@ -3,15 +3,17 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  For,
   Match,
-  onCleanup,
   Show,
   Switch,
 } from 'solid-js';
 import { Command, CommandInput } from '~/components/ui/command';
 import { Menubar, MenubarItem, MenubarMenu } from '~/components/ui/menubar';
+import { cn } from '~/lib/utils';
 import { Card } from '../constants';
 import {
+  cardSystem,
   cardsById,
   doAfter,
   doXTimes,
@@ -19,10 +21,13 @@ import {
   getLocalPlayerClientId,
   hoverSignal,
   peekFilterText,
+  peekTypeFilter,
   setHoverSignal,
   setPeekFilterText,
+  setPeekTypeFilter,
 } from '../globals';
 import { transferCard } from '../transferCard';
+import useCardGrouping from './deckEditor/cardGroupings';
 import MoveMenu from './moveMenu';
 import styles from './peekMenu.module.css';
 
@@ -31,20 +36,26 @@ const PeekMenu: Component = props => {
   const isOwner = createMemo(() => userData()?.clientId === getLocalPlayerClientId());
   const location = createMemo(() => userData()?.location);
   const playArea = () => getLocalPlayArea();
-  const cardCount = () => playArea()?.peekZone.cards.length ?? 0;
+
+  const peekCards = createMemo(() => {
+    const area = playArea();
+    if (!area) return [] as Card[];
+    area.peekZone.observable.cardCount;
+    return [...area.peekZone.cards];
+  });
+
+  const cardCount = () => peekCards().length;
   const card = () => cardsById.get(hoverSignal()?.mesh?.userData.id);
   const [viewField, setViewField] = createSignal(false);
   let inputRef;
-  const [peekCards, setPeekCards] = createSignal<Card[]>([]);
 
-  createEffect(() => {
+  const cardGrouping = useCardGrouping(cardSystem.types ?? [], peekCards);
+  const visibleCount = createMemo(() => {
+    peekFilterText();
+    peekTypeFilter();
     const area = playArea();
-    if (!area) {
-      setPeekCards([]);
-      return;
-    }
-    const unsub = area.peekZone.subscribeToCardList(setPeekCards);
-    onCleanup(unsub);
+    const filtered = area?.peekZone.filteredCards;
+    return filtered ? filtered.length : cardCount();
   });
 
   function drawAfterRevealing(card: Card) {
@@ -60,6 +71,14 @@ const PeekMenu: Component = props => {
     transferCard(card, area.peekZone, area.hand);
   }
 
+  function dismissPeek() {
+    const area = playArea();
+    if (!area) return;
+    setPeekFilterText('');
+    setPeekTypeFilter(null);
+    void area.dismissFromZone(area.peekZone);
+  }
+
   createEffect(() => {
     if (location() === 'peek' && isOwner() && inputRef) {
       inputRef.focus();
@@ -68,13 +87,56 @@ const PeekMenu: Component = props => {
 
   return (
     <>
-      <Show when={peekCards()?.length > 0 && playArea()?.peekZone?.observable}>
+      <Show when={peekCards().length > 0 && playArea()?.peekZone?.observable}>
         <div class={styles.searchContainer}>
           <div class={styles.search}>
             <h2 class='text-white text-xl text-left mb-4'>
-              Peek — from {peekCards()[0]?.mesh?.userData?.previousLocation} |{' '}
-              {playArea()!.peekZone.observable.cardCount}
+              Peek — from {peekCards()[0]?.mesh?.userData?.previousLocation} | {visibleCount()}
+              <Show when={visibleCount() !== cardCount()}> / {cardCount()}</Show>
             </h2>
+            <div class='mb-3 flex flex-wrap gap-2'>
+              <button
+                type='button'
+                class={cn(
+                  'rounded px-2 py-1 text-sm text-white transition-colors hover:bg-white/10',
+                  !peekTypeFilter() && 'bg-white/20 font-semibold',
+                )}
+                onClick={() => setPeekTypeFilter(null)}>
+                {cardGrouping().totalCount} All
+              </button>
+              <For each={Object.entries(cardGrouping().types)}>
+                {([type, grouping]) => (
+                  <Show when={grouping.count > 0}>
+                    <button
+                      type='button'
+                      class={cn(
+                        'flex gap-1 border-l-2 border-white/30 px-2 py-1 text-sm text-white transition-colors hover:bg-white/10',
+                        peekTypeFilter() === type && 'bg-white/20 font-semibold',
+                      )}
+                      onClick={() =>
+                        setPeekTypeFilter(current => (current === type ? null : type))
+                      }>
+                      <span>{grouping.name}</span>
+                      <span>{grouping.count}</span>
+                    </button>
+                  </Show>
+                )}
+              </For>
+              <Show when={cardGrouping().unsorted.count > 0}>
+                <button
+                  type='button'
+                  class={cn(
+                    'flex gap-1 border-l-2 border-white/30 px-2 py-1 text-sm text-white transition-colors hover:bg-white/10',
+                    peekTypeFilter() === 'unsorted' && 'bg-white/20 font-semibold',
+                  )}
+                  onClick={() =>
+                    setPeekTypeFilter(current => (current === 'unsorted' ? null : 'unsorted'))
+                  }>
+                  <span>Unsorted</span>
+                  <span>{cardGrouping().unsorted.count}</span>
+                </button>
+              </Show>
+            </div>
             <Command>
               <CommandInput
                 ref={inputRef}
@@ -87,13 +149,10 @@ const PeekMenu: Component = props => {
                     (e.currentTarget as HTMLInputElement).select();
                     return;
                   }
-                  const area = playArea();
-                  if (!area) return;
                   if (e.key === 'Escape') {
                     e.preventDefault();
                     e.stopPropagation();
-                    setPeekFilterText('');
-                    void area.dismissFromZone(area.peekZone);
+                    dismissPeek();
                   }
                 }}
                 onValueChange={value => {
@@ -167,13 +226,7 @@ const PeekMenu: Component = props => {
                       </MenubarItem>
                     </Match>
                   </Switch>
-                  <MenubarItem
-                    class='whitespace-nowrap ml-auto'
-                    onClick={() => {
-                      const area = playArea();
-                      if (!area) return;
-                      area.dismissFromZone(area.peekZone);
-                    }}>
+                  <MenubarItem class='whitespace-nowrap ml-auto' onClick={dismissPeek}>
                     Dismiss
                   </MenubarItem>
                 </MenubarMenu>

@@ -1,11 +1,9 @@
 import capitalize from 'lodash-es/capitalize';
 import { Accessor, createMemo } from 'solid-js';
-import { DetailedCardEntry } from '~/lib/constants';
-
 
 interface GroupedEntry {
   name: string;
-  items: DetailedCardEntry[];
+  items: GroupableEntry[];
   count: number;
 }
 
@@ -15,7 +13,30 @@ export interface CardGrouping {
   totalCount: number;
 }
 
-export default function useCardGrouping(types: string[], entries: Accessor<DetailedCardEntry[]>) {
+interface GroupableEntry {
+  detail?: { type?: string; type_line?: string };
+  qty?: number;
+}
+
+export function getSimpleType(entry: GroupableEntry) {
+  const typeText = entry?.detail?.type ?? entry?.detail?.type_line;
+  if (!typeText) return undefined;
+  return typeText.toLowerCase().split(/\s[-—–]\s/)[0]?.trim();
+}
+
+export function matchesCardType(simpleType: string | undefined, candidate: string) {
+  if (!simpleType) return false;
+  const type = candidate.toLowerCase();
+  if (type === 'land') return simpleType.includes('land');
+  return simpleType.endsWith(type) || simpleType.split(/\s+/).includes(type);
+}
+
+export function getCardTypeCategory(entry: GroupableEntry, lowerTypes: string[]) {
+  const simpleType = getSimpleType(entry);
+  return lowerTypes.find(candidate => matchesCardType(simpleType, candidate));
+}
+
+export default function useCardGrouping(types: string[], entries: Accessor<GroupableEntry[]>) {
   const lowerTypes = createMemo(() => (types || []).map(type => type.toLowerCase()));
 
   const grouped = createMemo(() => {
@@ -31,26 +52,19 @@ export default function useCardGrouping(types: string[], entries: Accessor<Detai
     } as CardGrouping;
 
     for (const entry of entries()) {
-      const simpleType = getSimpleType(entry);
-      const type = lowerTypes().find(type => simpleType?.endsWith(type));
+      const type = getCardTypeCategory(entry, lowerTypes());
       if (type) {
         result.types[type].items.push(entry);
-        result.types[type].count += entry.qty;
+        result.types[type].count += entry.qty ?? 1;
       } else {
         result.unsorted.items.push(entry);
-        result.unsorted.count += entry.qty;
+        result.unsorted.count += entry.qty ?? 1;
       }
-      result.totalCount += entry.qty;
+      result.totalCount += entry.qty ?? 1;
     }
 
     return result;
   });
 
-  return grouped
+  return grouped;
 }
-
-function getSimpleType(entry: DetailedCardEntry) {
-  return entry?.detail?.type?.toLowerCase()?.split('—')?.[0]?.trim();
-}
-
-export { getSimpleType };

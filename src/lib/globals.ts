@@ -79,6 +79,7 @@ export let cardsById = new Map<string, Card>();
 export let zonesById = new Map<string, CardZone<unknown>>();
 export let [playAreas, setPlayAreas] = createStore<Record<number, PlayArea>>({});
 export let [peekFilterText, setPeekFilterText] = createSignal('');
+export let [peekTypeFilter, setPeekTypeFilter] = createSignal<string | null>(null);
 export let ydoc = new Doc();
 export let table: Object3D;
 export let gameLog: YArray<any>;
@@ -583,6 +584,7 @@ export function cleanup() {
   cardsById.clear();
   zonesById.clear();
   setPeekFilterText('');
+  setPeekTypeFilter(null);
   setHoverSignal();
   setScrollTarget();
   provider?.destroy();

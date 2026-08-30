@@ -87,7 +87,7 @@ import intersectionObserver from '../intersectionObserver';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import DeckImportDialog from './deckEditor/deckImportDialog';
 import PrintDeckModal from './deckEditor/printDeckModal';
-import useCardGrouping, { getSimpleType } from './deckEditor/cardGroupings';
+import useCardGrouping, { getCardTypeCategory } from './deckEditor/cardGroupings';
 import OverflowMenuIcon from 'lucide-solid/icons/ellipsis';
 import DeleteIcon from 'lucide-solid/icons/trash-2';
 
@@ -505,8 +505,7 @@ export const DeckEditor: Component<Props> = props => {
       const entry = deck.cards[key];
       if (!entry?.qty) return false;
 
-      const simpleType = getSimpleType(entry);
-      const type = lowerTypes.find(candidate => simpleType?.endsWith(candidate));
+      const type = getCardTypeCategory(entry, lowerTypes);
 
       if (filter === 'unsorted') return !type;
       return type === filter;

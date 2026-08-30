@@ -29,6 +29,7 @@ import {
   getLocalPlayerClientId,
   isEventCatchUpComplete,
   setPeekFilterText,
+  setPeekTypeFilter,
   sendEvent,
   zonesById,
 } from './globals';
@@ -386,6 +387,7 @@ export class PlayArea {
 
     if (zone.zone === 'peek') {
       setPeekFilterText('');
+      setPeekTypeFilter(null);
     }
 
     await Promise.all(
