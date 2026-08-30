@@ -28,6 +28,7 @@ import { applyCustomArtToEntry } from './customCardArt';
 import { devLog } from './devLog';
 import { deck as deckParser } from './deckParser';
 import { getCardCollectorNumber } from './deckListFormat';
+import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
 import { cardsById, cardSystem, getProjectionVec, setHoverSignal, zonesById } from './globals';
 import { cleanupMesh, getGlobalRotation, shuffleItems } from './utils';
 import { createRoot } from 'solid-js';
@@ -503,6 +504,36 @@ export function loadCardList(cardList: string): CardEntry[] {
 }
 
 export { formatDeckListLine, getCardCollectorNumber } from './deckListFormat';
+export { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
+
+function normalizeSetCode(set?: string) {
+  return set?.trim().toLowerCase() || undefined;
+}
+
+function normalizeCollectorNumber(collectorNumber?: string | number) {
+  if (collectorNumber == null) return undefined;
+  const normalized = String(collectorNumber).trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (/^\d+$/.test(normalized)) {
+    return String(Number.parseInt(normalized, 10));
+  }
+  return normalized;
+}
+
+function normalizeCardName(name?: string) {
+  return name?.trim().toLowerCase() || '';
+}
+
+function cardNamesMatch(cardName: string | undefined, requestedName: string) {
+  const left = normalizeCardName(cardName);
+  const right = normalizeCardName(requestedName);
+  if (!left || !right) return false;
+  if (left === right) return true;
+
+  const leftFront = left.split('//')[0]?.trim() ?? left;
+  const rightFront = right.split('//')[0]?.trim() ?? right;
+  return leftFront === rightFront || leftFront === right || left === rightFront;
+}
 
 function matchesSetSearchResult(
   card: { name?: string; set?: string; collector_number?: string },
@@ -510,13 +541,14 @@ function matchesSetSearchResult(
   set: string,
   collectorNumber?: string,
 ): boolean {
-  if (card.name !== name) return false;
+  if (!cardNamesMatch(card.name, name)) return false;
 
   if (collectorNumber) {
     if (card.collector_number) {
       return (
-        card.collector_number.toLowerCase() === collectorNumber.toLowerCase() &&
-        (!card.set || card.set.toLowerCase() === set.toLowerCase())
+        normalizeCollectorNumber(card.collector_number) ===
+          normalizeCollectorNumber(collectorNumber) &&
+        (!card.set || normalizeSetCode(card.set) === normalizeSetCode(set))
       );
     }
     // Search already included cn: — minimal search payloads may omit set/collector_number.
@@ -554,19 +586,46 @@ export async function fetchCardInfo(
   let result: DetailedCardEntry | undefined;
 
   try {
-    const payload = await fetchCardDetailPayload(entry);
+    const trace: string[] = [];
+    const payload = await fetchCardDetailPayload(entry, trace);
     if (!payload) {
-      throw new Error('Card not found');
+      const reason = trace.at(-1) ?? 'Card not found';
+      devLog.warn('[deck import] Card not found:', entry.name, trace);
+      result = {
+        ...entry,
+        found: false,
+        importLookupReason: reason,
+        importLookupTrace: [...trace],
+        detail: { name: entry.name } as CardEntryDetail,
+      };
+    } else {
+      const requestedSet = entry.set;
+      const requestedCollector = entry.collector_number;
+      const populated = populateCardInfo(payload, entry);
+
+      result = {
+        ...entry,
+        ...populated,
+        // Keep decklist printing on the entry; resolved printing lives in detail.
+        set: requestedSet,
+        collector_number: requestedCollector,
+      };
+
+      if (hasRequestedPrinting(entry) && !printingMatchesRequest(payload, entry)) {
+        result.printingMismatch = true;
+      }
+
+      if (trace.some(step => step.startsWith('Fuzzy search matched'))) {
+        result.importLookupTrace = trace;
+      }
     }
-    result = {
-      ...entry,
-      ...populateCardInfo(payload, entry),
-    };
   } catch (e) {
-    devLog.error(e);
+    const message = e instanceof Error ? e.message : 'Card lookup failed';
+    devLog.warn('[deck import] Lookup failed:', entry.name, message);
     result = {
       ...entry,
       found: false,
+      importLookupReason: message,
       detail: { name: entry.name } as CardEntryDetail,
     };
   }
@@ -601,17 +660,25 @@ async function fetchCardDetailBySetCollector(
   return payload;
 }
 
-async function fetchCardDetailPayload(entry: CardEntry): Promise<CardEntryDetail | null> {
+async function fetchCardDetailPayload(
+  entry: CardEntry,
+  trace: string[] = [],
+): Promise<CardEntryDetail | null> {
   const { name, set, collector_number } = entry;
 
   if (set && collector_number) {
+    trace.push(`Lookup ${set.toUpperCase()} #${collector_number}`);
     if (cardSystem.collectorLookup) {
       const byCollector = await fetchCardDetailBySetCollector(set, collector_number);
       if (byCollector) return byCollector;
+      trace.push('Set/collector lookup returned no card');
     }
 
     const exact = await fetchCardDetailViaSetSearch(name, set, collector_number);
     if (exact) return exact;
+    trace.push('No exact match in set search with collector number');
+  } else if (set) {
+    trace.push(`Lookup printing in ${set.toUpperCase()}`);
   }
 
   const url = new URL(cardSystem.cardDetailEndpoint);
@@ -619,42 +686,97 @@ async function fetchCardDetailPayload(entry: CardEntry): Promise<CardEntryDetail
   if (entry.id) url.searchParams.set('id', entry.id);
   if (set) url.searchParams.set('set', set);
 
-  let res = await fetch(url.toString(), { cache: 'force-cache' });
+  const res = await fetch(url.toString(), { cache: 'force-cache' });
   if (res.ok) {
     const payload = await res.json();
     if (payload?.object === 'error' || !(payload?.id || payload?.name)) {
-      return resolveSetOrDefault(entry);
-    }
+      trace.push(`Named lookup returned error for "${name}"`);
+      const fallback = await resolveSetOrDefault(entry, trace);
+      if (fallback) return fallback;
+    } else {
+      const payloadSet = payload.set as string | undefined;
+      const payloadCollector = payload.collector_number as string | undefined;
+      const setMatches = !set || payloadSet?.toLowerCase() === set.toLowerCase();
+      const collectorMatches =
+        !collector_number ||
+        payloadCollector?.toLowerCase() === collector_number.toLowerCase();
 
-    const payloadSet = payload.set as string | undefined;
-    const payloadCollector = payload.collector_number as string | undefined;
-    const setMatches = !set || payloadSet?.toLowerCase() === set.toLowerCase();
-    const collectorMatches =
-      !collector_number ||
-      payloadCollector?.toLowerCase() === collector_number.toLowerCase();
+      if (setMatches && collectorMatches) {
+        return payload;
+      }
 
-    if (setMatches && collectorMatches) {
-      return payload;
+      trace.push(
+        `Named lookup returned ${payloadSet?.toUpperCase() ?? '?'} #${payloadCollector ?? '?'} instead of requested printing`,
+      );
     }
+  } else {
+    trace.push(`Named lookup failed (${res.status}) for "${name}"`);
   }
 
-  return resolveSetOrDefault(entry);
+  const fallback = await resolveSetOrDefault(entry, trace);
+  if (fallback) return fallback;
+
+  trace.push(`Fuzzy search for "${name}"`);
+  const fuzzy = await fetchCardDetailViaFuzzySearch(name);
+  if (fuzzy) {
+    trace.push(`Fuzzy search matched "${fuzzy.name}"`);
+    return fuzzy;
+  }
+
+  trace.push(`No search results for "${name}"`);
+  return null;
 }
 
-async function resolveSetOrDefault(entry: CardEntry): Promise<CardEntryDetail | null> {
+async function resolveSetOrDefault(entry: CardEntry, trace: string[] = []): Promise<CardEntryDetail | null> {
   const { name, set } = entry;
 
   if (set) {
     const fromSearch = await fetchCardDetailViaSetSearch(name, set);
     if (fromSearch) return fromSearch;
+    trace.push(`No match in set search for ${set.toUpperCase()}`);
   }
 
   const url = new URL(cardSystem.cardDetailEndpoint);
   url.searchParams.set('exact', name);
   const res = await fetch(url.toString(), { cache: 'force-cache' });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    trace.push(`Default named lookup failed (${res.status}) for "${name}"`);
+    return null;
+  }
 
   const payload = await res.json();
+  if (payload?.object === 'error' || !(payload?.id || payload?.name)) {
+    trace.push(`Default named lookup returned no card for "${name}"`);
+    return null;
+  }
+  return payload;
+}
+
+async function fetchCardDetailViaFuzzySearch(name: string): Promise<CardEntryDetail | null> {
+  const searchUrl = new URL(cardSystem.cardSearchEndpoint);
+  searchUrl.searchParams.set('q', name);
+  searchUrl.searchParams.set('page', '1');
+
+  const searchRes = await fetch(searchUrl.toString(), { cache: 'force-cache' });
+  if (!searchRes.ok) return null;
+
+  const body = await searchRes.json();
+  const results = (body.data ?? []) as Array<{ id?: string; name?: string }>;
+  if (!results.length) return null;
+
+  const match =
+    results.find(card => cardNamesMatch(card.name, name)) ??
+    results.find(card => normalizeCardName(card.name).includes(normalizeCardName(name))) ??
+    results[0];
+
+  if (!match?.id) return null;
+
+  const detailUrl = new URL(cardSystem.cardDetailEndpoint);
+  detailUrl.searchParams.set('id', match.id);
+  const detailRes = await fetch(detailUrl.toString(), { cache: 'force-cache' });
+  if (!detailRes.ok) return null;
+
+  const payload = await detailRes.json();
   if (payload?.object === 'error' || !(payload?.id || payload?.name)) return null;
   return payload;
 }

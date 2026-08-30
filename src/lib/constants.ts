@@ -76,6 +76,10 @@ export interface CardEntry {
 
 export interface DetailedCardEntry extends CardEntry {
   detail: CardEntryDetail;
+  found?: boolean;
+  printingMismatch?: boolean;
+  importLookupReason?: string;
+  importLookupTrace?: string[];
 }
 
 export interface Card {

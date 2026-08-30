@@ -11,7 +11,7 @@ test('card', () => {
       "categories": [
         "Tokens",
       ],
-      "collector_number": undefined,
+      "collector_number": "119",
       "name": "Alela, Artful Provocateur",
       "qty": 1,
       "set": "brc",
@@ -53,7 +53,7 @@ test('deck', () => {
         "categories": [
           "Tokens",
         ],
-        "collector_number": undefined,
+        "collector_number": "119",
         "name": "Alela, Artful Provocateur",
         "qty": 1,
         "set": "brc",
@@ -62,7 +62,7 @@ test('deck', () => {
         "categories": [
           "Pump",
         ],
-        "collector_number": undefined,
+        "collector_number": "622",
         "name": "All That Glitters",
         "qty": 1,
         "set": "cmm",
@@ -71,7 +71,7 @@ test('deck', () => {
         "categories": [
           "Evasion",
         ],
-        "collector_number": undefined,
+        "collector_number": "60",
         "name": "Angelic Destiny",
         "qty": 1,
         "set": "woc",
@@ -80,7 +80,7 @@ test('deck', () => {
         "categories": [
           "Removal",
         ],
-        "collector_number": undefined,
+        "collector_number": "473",
         "name": "Anguished Unmaking",
         "qty": 1,
         "set": "pip",
@@ -89,7 +89,7 @@ test('deck', () => {
         "categories": [
           "Land",
         ],
-        "collector_number": undefined,
+        "collector_number": "390",
         "name": "Arcane Sanctum",
         "qty": 1,
         "set": "moc",
@@ -98,7 +98,7 @@ test('deck', () => {
         "categories": [
           "Lifegain",
         ],
-        "collector_number": undefined,
+        "collector_number": "5",
         "name": "Archangel of Thune",
         "qty": 1,
         "set": "m14",
@@ -107,7 +107,7 @@ test('deck', () => {
         "categories": [
           "Ramp",
         ],
-        "collector_number": undefined,
+        "collector_number": "10",
         "name": "Ardenn, Intrepid Archaeologist",
         "qty": 1,
         "set": "cmr",
@@ -125,7 +125,7 @@ test('deck', () => {
         "categories": [
           "Protection",
         ],
-        "collector_number": undefined,
+        "collector_number": "6",
         "name": "Avacyn, Angel of Hope",
         "qty": 1,
         "set": "avr",
@@ -134,7 +134,7 @@ test('deck', () => {
         "categories": [
           "Land",
         ],
-        "collector_number": undefined,
+        "collector_number": "294",
         "name": "Bojuka Bog",
         "qty": 1,
         "set": "blc",
@@ -158,7 +158,7 @@ test('deck', () => {
           "Maybeboard{noDeck}{noPrice}",
           "Lifegain",
         ],
-        "collector_number": undefined,
+        "collector_number": "157",
         "name": "Underworld Coinsmith",
         "qty": 1,
         "set": "jou",
@@ -167,7 +167,7 @@ test('deck', () => {
         "categories": [
           "Lifegain",
         ],
-        "collector_number": undefined,
+        "collector_number": "92",
         "name": "Vampiric Link",
         "qty": 1,
         "set": "plc",
@@ -176,7 +176,7 @@ test('deck', () => {
         "categories": [
           "Removal",
         ],
-        "collector_number": undefined,
+        "collector_number": "110",
         "name": "Vow of Duty",
         "qty": 1,
         "set": "c21",
@@ -185,7 +185,7 @@ test('deck', () => {
         "categories": [
           "Removal",
         ],
-        "collector_number": undefined,
+        "collector_number": "93",
         "name": "Winds of Rath",
         "qty": 1,
         "set": "mkc",
@@ -194,7 +194,7 @@ test('deck', () => {
         "categories": [
           "Commander{top}",
         ],
-        "collector_number": undefined,
+        "collector_number": "206",
         "name": "Zur the Enchanter",
         "qty": 1,
         "set": "dmr",
@@ -220,28 +220,28 @@ test('mtgo format', () => {
           "collector_number": undefined,
           "name": "Altar of the Pantheon",
           "qty": 1,
-          "set": "THB",
+          "set": "thb",
         },
         {
           "categories": [],
           "collector_number": undefined,
           "name": "Arcane Signet",
           "qty": 1,
-          "set": "M3C",
+          "set": "m3c",
         },
         {
           "categories": [],
           "collector_number": undefined,
           "name": "Archangel Avacyn",
           "qty": 1,
-          "set": "SOI",
+          "set": "soi",
         },
         {
           "categories": [],
           "collector_number": undefined,
           "name": "Arlinn Kord",
           "qty": 1,
-          "set": "SOI",
+          "set": "soi",
         },
       ],
     }
@@ -265,7 +265,7 @@ test('mtga format', () => {
           "collector_number": undefined,
           "name": "Barkchannel Pathway",
           "qty": 1,
-          "set": "KHM",
+          "set": "khm",
         },
         {
           "categories": [
@@ -274,7 +274,7 @@ test('mtga format', () => {
           "collector_number": undefined,
           "name": "Beast Whisperer",
           "qty": 1,
-          "set": "DMU",
+          "set": "dmu",
         },
       ],
     }
@@ -294,7 +294,7 @@ test('mtga extended', () => {
         "collector_number": undefined,
         "name": "Beast Whisperer",
         "qty": 1,
-        "set": "DMU",
+        "set": "dmu",
       },
     }
   `);
@@ -317,24 +317,24 @@ test('mtg.wtf', () => {
       "result": [
         {
           "categories": [],
-          "collector_number": undefined,
+          "collector_number": "380",
           "name": "Byrke, Long Ear of the Law",
           "qty": 1,
-          "set": "BLB",
+          "set": "blb",
         },
         {
           "categories": [],
-          "collector_number": undefined,
+          "collector_number": "387",
           "name": "Serra Redeemer",
           "qty": 1,
-          "set": "BLB",
+          "set": "blb",
         },
         {
           "categories": [],
-          "collector_number": undefined,
+          "collector_number": "392",
           "name": "Colossification",
           "qty": 1,
-          "set": "BLB",
+          "set": "blb",
         },
       ],
     }
@@ -366,4 +366,80 @@ test('card with set and collector number', () => {
     categories: [],
     collector_number: '433',
   });
+});
+
+test('card with bracket set and bare collector number', () => {
+  expect(card.run('1 Diregraf Captain [scd] 224').result).toEqual({
+    qty: 1,
+    name: 'Diregraf Captain',
+    set: 'scd',
+    categories: [],
+    collector_number: '224',
+  });
+});
+
+test('card with paren set and collector number', () => {
+  expect(card.run('1 Diregraf Captain (scd) 224').result).toEqual({
+    qty: 1,
+    name: 'Diregraf Captain',
+    set: 'scd',
+    categories: null,
+    collector_number: '224',
+  });
+
+  expect(card.run('1 Diregraf Captain (SCD) 224').result).toMatchObject({
+    set: 'scd',
+    collector_number: '224',
+  });
+
+  expect(card.run('1 Diregraf Captain (scd) #224').result).toMatchObject({
+    set: 'scd',
+    collector_number: '224',
+  });
+});
+
+test('arena format deck with paren set and bare collector number', () => {
+  const result = deck.run(`1 Swiftfoot Boots (FDN) 258
+1 The Scarab God (DRC) 120
+1 Tormod, the Desecrator (CMR) 155
+1 Undead Augur (DRC) 100
+1 Undead Warchief (SCG) 78`).result;
+
+  expect(result).toEqual([
+    {
+      qty: 1,
+      name: 'Swiftfoot Boots',
+      set: 'fdn',
+      categories: null,
+      collector_number: '258',
+    },
+    {
+      qty: 1,
+      name: 'The Scarab God',
+      set: 'drc',
+      categories: null,
+      collector_number: '120',
+    },
+    {
+      qty: 1,
+      name: 'Tormod, the Desecrator',
+      set: 'cmr',
+      categories: null,
+      collector_number: '155',
+    },
+    {
+      qty: 1,
+      name: 'Undead Augur',
+      set: 'drc',
+      categories: null,
+      collector_number: '100',
+    },
+    {
+      qty: 1,
+      name: 'Undead Warchief',
+      set: 'scg',
+      categories: null,
+      collector_number: '78',
+    },
+  ]);
 });
