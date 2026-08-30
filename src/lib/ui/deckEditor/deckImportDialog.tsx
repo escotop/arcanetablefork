@@ -1,6 +1,6 @@
 import { debounce } from 'lodash-es';
 
-import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 
 import { Portal } from 'solid-js/web';
 
@@ -28,9 +28,8 @@ import { TextField, TextFieldTextArea } from '~/components/ui/text-field';
 
 import { CardSystem, Deck, DetailedCardEntry } from '~/lib/constants';
 
-import { fetchCardInfo, loadCardList } from '~/lib/deck';
-
-import { getCardKey } from '~/lib/deckStore';
+import { loadCardList } from '~/lib/deck';
+import { fetchCardInfoForImport } from '~/lib/deckImportLookup';
 
 import useCardGrouping from './cardGroupings';
 
@@ -86,7 +85,17 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
 
 
 
-  const cardGrouping = useCardGrouping(cardSystem.types ?? [], () => Object.values(deck.cards));
+  const foundCards = () => Object.values(deck?.cards || {}).filter(card => card.found !== false);
+
+  const importStats = createMemo(() => {
+    const entries = Object.values(deck?.cards || {});
+    const found = entries.filter(card => card.found !== false);
+    const foundQty = found.reduce((sum, card) => sum + (card.qty ?? 1), 0);
+    const totalQty = entries.reduce((sum, card) => sum + (card.qty ?? 1), 0);
+    return { foundQty, totalQty };
+  });
+
+  const cardGrouping = useCardGrouping(cardSystem.types ?? [], foundCards);
 
 
 
@@ -158,70 +167,37 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
 
   let parseGeneration = 0;
 
-
-
   async function parseDeckList(cardListText: string) {
-
     const generation = ++parseGeneration;
+    const trimmed = cardListText.trim();
 
-
-
-    if (!cardListText.trim()) {
-
+    if (!trimmed) {
       setLoading(false);
-
       setProgress({ current: 0, total: 0, name: '' });
-
       updateDeck('cards', reconcile({}));
-
       return;
-
     }
 
-
-
     const newCardEntries = loadCardList(cardListText);
-
     cache.clear();
-
     setLoading(true);
-
     setProgress({ current: 0, total: newCardEntries.length, name: '' });
 
-
-
-    const cards: Record<string, DetailedCardEntry> = {};
-
-
-
-    for (let index = 0; index < newCardEntries.length; index++) {
+    try {
+      const cards = await fetchCardInfoForImport(newCardEntries, cache, (current, total, name) => {
+        if (generation !== parseGeneration) return;
+        setProgress({ current, total, name });
+      });
 
       if (generation !== parseGeneration) return;
 
-
-
-      const entry = newCardEntries[index];
-
-      setProgress({ current: index + 1, total: newCardEntries.length, name: entry.name });
-
-      const card = await fetchCardInfo(entry, cache);
-
-      cards[getCardKey(card)] = card;
-
+      updateDeck('cards', reconcile(cards));
+    } finally {
+      if (generation === parseGeneration) {
+        setLoading(false);
+        setProgress({ current: 0, total: 0, name: '' });
+      }
     }
-
-
-
-    if (generation !== parseGeneration) return;
-
-
-
-    updateDeck('cards', reconcile(cards));
-
-    setLoading(false);
-
-    setProgress({ current: 0, total: 0, name: '' });
-
   }
 
 
@@ -391,7 +367,7 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
 
 
                 <label>
-                  {cardGrouping().totalCount} Cards Found
+                  {importStats().foundQty} of {importStats().totalQty} cards found
                   <Show when={printingMismatchList().length > 0}>
                     {' '}
                     · {printingMismatchList().length} exact printing

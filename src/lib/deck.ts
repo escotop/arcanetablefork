@@ -33,6 +33,62 @@ import { cardsById, cardSystem, getProjectionVec, setHoverSignal, zonesById } fr
 import { cleanupMesh, getGlobalRotation, shuffleItems } from './utils';
 import { createRoot } from 'solid-js';
 
+function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchScryfallCached(url: string): Promise<Response> {
+  let response: Response | undefined;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    response = await fetch(url, { cache: 'force-cache' });
+    if (response.status !== 429 && response.status !== 503) return response;
+
+    if (response.status === 503) {
+      try {
+        const body = await response.clone().json();
+        if (body?.code && body.code !== 'rate_limited' && body.code !== 'upstream_error') {
+          return response;
+        }
+      } catch {
+        // Retry unknown 503 responses as well.
+      }
+    }
+
+    await delay(300 * (attempt + 1));
+  }
+  return response!;
+}
+
+function isValidCardDetail(payload: unknown): payload is CardEntryDetail {
+  if (!payload || typeof payload !== 'object') return false;
+  const card = payload as CardEntryDetail;
+  if ((card as { object?: string }).object === 'error') return false;
+  return Boolean(card.id || card.name);
+}
+
+function detailFromSearchResult(match: CardEntryDetail): CardEntryDetail | null {
+  if (!match?.id || !match?.name) return null;
+  if (match.image_uris || match.card_faces?.length || match.type || match.type_line) {
+    return match;
+  }
+  return null;
+}
+
+async function fetchCardDetailById(id: string): Promise<CardEntryDetail | null> {
+  const detailUrl = new URL(cardSystem.cardDetailEndpoint);
+  detailUrl.searchParams.set('id', id);
+  const detailRes = await fetchScryfallCached(detailUrl.toString());
+  if (!detailRes.ok) return null;
+
+  const payload = await detailRes.json();
+  if (!isValidCardDetail(payload)) return null;
+  return payload;
+}
+
+function buildExactNameSearchQuery(name: string) {
+  return `!"${name.replace(/"/g, '\\"')}"`;
+}
+
 export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
   public mesh: Group;
   public isTopPublic = false;
@@ -652,7 +708,7 @@ async function fetchCardDetailBySetCollector(
   url.searchParams.set('set', set);
   url.searchParams.set('collector_number', collectorNumber);
 
-  const res = await fetch(url.toString(), { cache: 'force-cache' });
+  const res = await fetchScryfallCached(url.toString());
   if (!res.ok) return null;
 
   const payload = await res.json();
@@ -686,13 +742,15 @@ async function fetchCardDetailPayload(
   if (entry.id) url.searchParams.set('id', entry.id);
   if (set) url.searchParams.set('set', set);
 
-  const res = await fetch(url.toString(), { cache: 'force-cache' });
+  const res = await fetchScryfallCached(url.toString());
   if (res.ok) {
     const payload = await res.json();
     if (payload?.object === 'error' || !(payload?.id || payload?.name)) {
       trace.push(`Named lookup returned error for "${name}"`);
-      const fallback = await resolveSetOrDefault(entry, trace);
-      if (fallback) return fallback;
+      if (set) {
+        const fallback = await resolveSetOrDefault(entry, trace);
+        if (fallback) return fallback;
+      }
     } else {
       const payloadSet = payload.set as string | undefined;
       const payloadCollector = payload.collector_number as string | undefined;
@@ -708,13 +766,19 @@ async function fetchCardDetailPayload(
       trace.push(
         `Named lookup returned ${payloadSet?.toUpperCase() ?? '?'} #${payloadCollector ?? '?'} instead of requested printing`,
       );
+      if (set) {
+        const fallback = await resolveSetOrDefault(entry, trace);
+        if (fallback) return fallback;
+      }
     }
   } else {
     trace.push(`Named lookup failed (${res.status}) for "${name}"`);
   }
 
-  const fallback = await resolveSetOrDefault(entry, trace);
-  if (fallback) return fallback;
+  if (set) {
+    const fallback = await resolveSetOrDefault(entry, trace);
+    if (fallback) return fallback;
+  }
 
   trace.push(`Fuzzy search for "${name}"`);
   const fuzzy = await fetchCardDetailViaFuzzySearch(name);
@@ -728,36 +792,22 @@ async function fetchCardDetailPayload(
 }
 
 async function resolveSetOrDefault(entry: CardEntry, trace: string[] = []): Promise<CardEntryDetail | null> {
-  const { name, set } = entry;
+  const { name, set, collector_number } = entry;
+  if (!set) return null;
 
-  if (set) {
-    const fromSearch = await fetchCardDetailViaSetSearch(name, set);
-    if (fromSearch) return fromSearch;
-    trace.push(`No match in set search for ${set.toUpperCase()}`);
-  }
+  const fromSearch = await fetchCardDetailViaSetSearch(name, set, collector_number);
+  if (fromSearch) return fromSearch;
 
-  const url = new URL(cardSystem.cardDetailEndpoint);
-  url.searchParams.set('exact', name);
-  const res = await fetch(url.toString(), { cache: 'force-cache' });
-  if (!res.ok) {
-    trace.push(`Default named lookup failed (${res.status}) for "${name}"`);
-    return null;
-  }
-
-  const payload = await res.json();
-  if (payload?.object === 'error' || !(payload?.id || payload?.name)) {
-    trace.push(`Default named lookup returned no card for "${name}"`);
-    return null;
-  }
-  return payload;
+  trace.push(`No match in set search for ${set.toUpperCase()}`);
+  return null;
 }
 
 async function fetchCardDetailViaFuzzySearch(name: string): Promise<CardEntryDetail | null> {
   const searchUrl = new URL(cardSystem.cardSearchEndpoint);
-  searchUrl.searchParams.set('q', name);
+  searchUrl.searchParams.set('q', buildExactNameSearchQuery(name));
   searchUrl.searchParams.set('page', '1');
 
-  const searchRes = await fetch(searchUrl.toString(), { cache: 'force-cache' });
+  const searchRes = await fetchScryfallCached(searchUrl.toString());
   if (!searchRes.ok) return null;
 
   const body = await searchRes.json();
@@ -771,14 +821,10 @@ async function fetchCardDetailViaFuzzySearch(name: string): Promise<CardEntryDet
 
   if (!match?.id) return null;
 
-  const detailUrl = new URL(cardSystem.cardDetailEndpoint);
-  detailUrl.searchParams.set('id', match.id);
-  const detailRes = await fetch(detailUrl.toString(), { cache: 'force-cache' });
-  if (!detailRes.ok) return null;
+  const fromSearch = detailFromSearchResult(match as CardEntryDetail);
+  if (fromSearch) return fromSearch;
 
-  const payload = await detailRes.json();
-  if (payload?.object === 'error' || !(payload?.id || payload?.name)) return null;
-  return payload;
+  return fetchCardDetailById(match.id);
 }
 
 async function fetchCardDetailViaSetSearch(
@@ -794,7 +840,7 @@ async function fetchCardDetailViaSetSearch(
   searchUrl.searchParams.set('q', query);
   searchUrl.searchParams.set('page', '1');
 
-  const searchRes = await fetch(searchUrl.toString(), { cache: 'force-cache' });
+  const searchRes = await fetchScryfallCached(searchUrl.toString());
   if (!searchRes.ok) return null;
 
   const body = await searchRes.json();
@@ -804,14 +850,10 @@ async function fetchCardDetailViaSetSearch(
   );
   if (!match?.id) return null;
 
-  const detailUrl = new URL(cardSystem.cardDetailEndpoint);
-  detailUrl.searchParams.set('id', match.id);
-  const detailRes = await fetch(detailUrl.toString(), { cache: 'force-cache' });
-  if (!detailRes.ok) return null;
+  const fromSearch = detailFromSearchResult(match as CardEntryDetail);
+  if (fromSearch) return fromSearch;
 
-  const payload = await detailRes.json();
-  if (payload?.object === 'error' || !(payload?.id || payload?.name)) return null;
-  return payload;
+  return fetchCardDetailById(match.id);
 }
 
 export interface CardPrintingOption {
@@ -865,7 +907,7 @@ async function fetchPrintingMeta(
   const url = new URL(cardSystem.cardDetailEndpoint);
   url.searchParams.set('id', id);
 
-  const res = await fetch(url.toString(), { cache: 'force-cache' });
+  const res = await fetchScryfallCached(url.toString());
   if (!res.ok) return {};
 
   const detail = await res.json();
@@ -925,7 +967,7 @@ async function loadCardPrintings(
   );
   url.searchParams.set('page', String(page));
 
-  const res = await fetch(url.toString(), { cache: 'force-cache' });
+  const res = await fetchScryfallCached(url.toString());
   if (!res.ok) {
     return { data: [], page: 1, total_pages: 0, total_cards: 0 };
   }
