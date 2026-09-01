@@ -2,6 +2,9 @@
   "buildCommand": "bun run build",
   "outputDirectory": ".output/public",
   "framework": null,
+  "env": {
+    "VITE_SITE_URL": "https://arcanetable.app"
+  },
   "rewrites": [
     { "source": "/image-proxy", "destination": "/api/image-proxy" },
     { "source": "/(.*)", "destination": "/index.html" }

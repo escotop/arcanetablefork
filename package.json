@@ -6,7 +6,7 @@
   "scripts": {
     "start": "vite",
     "dev": "vite",
-    "build": "vite build --mode production",
+    "build": "vite build --mode production && node scripts/write-spa-index.mjs",
     "serve": "vite preview",
     "test": "vitest"
   },
