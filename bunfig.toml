@@ -1,0 +1,7 @@
+[install]
+# Skip lifecycle scripts for packages that don't need native builds in this app.
+optional = true
+
+[install.cache]
+# Keep install behavior predictable across machines.
+disable = false

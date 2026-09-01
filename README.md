@@ -21,9 +21,9 @@ Check it out at https://arcanetable.app/
 
 - **Browser**: A modern browser (Chrome, Firefox, or Edge recommended).
 - **Node.js**: Version 16+.
-- **pnpm**: Installed globally for package management:
+- **Bun**: Installed globally for package management:
   ```bash
-  npm install -g pnpm
+  powershell -c "irm bun.sh/install.ps1 | iex"
   ```
 - **Git**: Installed for version control.
 
@@ -36,11 +36,11 @@ Check it out at https://arcanetable.app/
    ```
 2. Install dependencies:
    ```bash
-   pnpm install
+   bun install
    ```
 3. Start the development server:
    ```bash
-   pnpm dev
+   bun dev
    ```
 
 Visit `http://localhost:3000` to start playtesting!
@@ -49,7 +49,7 @@ Visit `http://localhost:3000` to start playtesting!
 
 1. Build the app:
    ```bash
-   pnpm build
+   bun run build
    ```
 2. Serve the app (e.g., using Vercel, Netlify, or a Node.js server, or the supplied dockerfile).
 
@@ -120,9 +120,9 @@ Check it out at https://arcanetable.app/
 
 - **Browser**: A modern browser (Chrome, Firefox, or Edge recommended).
 - **Node.js**: Version 16+.
-- **pnpm**: Installed globally for package management:
+- **Bun**: Installed globally for package management:
   ```bash
-  npm install -g pnpm
+  powershell -c "irm bun.sh/install.ps1 | iex"
   ```
 ````
 
@@ -137,11 +137,11 @@ Check it out at https://arcanetable.app/
    ```
 2. Install dependencies:
    ```bash
-   pnpm install
+   bun install
    ```
 3. Start the development server:
    ```bash
-   pnpm dev
+   bun dev
    ```
 
 Visit `http://localhost:3000` to start playtesting!
@@ -150,7 +150,7 @@ Visit `http://localhost:3000` to start playtesting!
 
 1. Build the app:
    ```bash
-   pnpm build
+   bun run build
    ```
 2. Serve the app (e.g., using Vercel, Netlify, or a Node.js server, or the supplied dockerfile).
 
@@ -299,10 +299,10 @@ Check it out at https://arcanetable.app/
 ### Prerequisites
 - **Browser**: A modern browser (Chrome, Firefox, or Edge recommended).
 - **Node.js**: Version 16+.
-- **pnpm**: Installed globally for package management:
+- **Bun**: Installed globally for package management:
   ```bash
-  npm install -g pnpm
-````
+  powershell -c "irm bun.sh/install.ps1 | iex"
+  ```
 
 - **Git**: Installed for version control.
 
@@ -315,11 +315,11 @@ Check it out at https://arcanetable.app/
    ```
 2. Install dependencies:
    ```bash
-   pnpm install
+   bun install
    ```
 3. Start the development server:
    ```bash
-   pnpm dev
+   bun dev
    ```
 
 Visit `http://localhost:3000` to start playtesting!
@@ -328,7 +328,7 @@ Visit `http://localhost:3000` to start playtesting!
 
 1. Build the app:
    ```bash
-   pnpm build
+   bun run build
    ```
 2. Serve the app (e.g., using Vercel, Netlify, or a Node.js server, or the supplied dockerfile).
 

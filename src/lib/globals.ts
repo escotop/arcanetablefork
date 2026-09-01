@@ -53,6 +53,7 @@ import { clearPlayerSessionRegistry, clearJoinBinding, unregisterPlayerSession }
 import { clearWaterdrops } from './waterdropEffect';
 import { clearPingSync } from './pingSync';
 import { resetCameraView, captureLocalCameraView } from './cameraView';
+import { setupCameraDebugGui, resetCameraDebugGui } from './cameraDebugGui';
 import { clearSpanishPreview } from './spanishCardPreview';
 import { devLog } from './devLog';
 
@@ -472,6 +473,7 @@ export async function init({ gameId }) {
 
   scene.add(table);
   markLoadProfile('table mesh ready');
+  // setupCameraDebugGui(); // Disabled
 }
 
 export function applyPlayerTransform(group: THREE.Group, index: number) {
@@ -603,6 +605,7 @@ export function cleanup() {
   clearPingSync();
   resetCameraView();
 
+  resetCameraDebugGui();
   gui?.destroy?.();
   gui = null;
 

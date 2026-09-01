@@ -1,7 +1,7 @@
 docker_container = ghcr.io/odama626/arcanetable/signaling:latest
 
 build:
-	pnpm build
+	bun run build
 	docker build . -t ${docker_container}
 
 push:

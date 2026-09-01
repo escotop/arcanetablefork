@@ -11,6 +11,9 @@
     "test": "vitest"
   },
   "license": "MIT",
+  "trustedDependencies": [
+    "esbuild"
+  ],
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/color-hash": "^2.0.0",

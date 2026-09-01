@@ -21,7 +21,7 @@ arcanetable/
 └── content/changes/        # MDX changelog entries
 ```
 
-**Stack:** SolidJS, SolidStart, Three.js, Yjs, Tailwind CSS, Kobalte (solid-ui), Vitest, pnpm.
+**Stack:** SolidJS, SolidStart, Three.js, Yjs, Tailwind CSS, Kobalte (solid-ui), Vitest, Bun.
 
 ## Layer responsibilities
 
@@ -212,7 +212,7 @@ From `package.json` Prettier config:
 ## Testing
 
 ```bash
-pnpm test
+bun test
 ```
 
 - Pure logic tests (parsers) need no DOM — see `deckParser.test.ts`.
@@ -223,9 +223,9 @@ pnpm test
 ## Build and deployment
 
 ```bash
-pnpm install
-pnpm dev      # http://localhost:3000
-pnpm build
+bun install
+bun dev      # http://localhost:3000
+bun run build
 ```
 
 - Docker images and Kubernetes manifests are in the repo root and per-service folders.

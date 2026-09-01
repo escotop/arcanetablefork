@@ -87,7 +87,8 @@ import { getPlayAreaPlayerName } from './lib/playAreaNameTag';
 import { resolvePlayerColor } from './lib/playerColor';
 import { handlePingAwarenessChanges, publishTablePingFromHit } from './lib/pingSync';
 import { updateWaterdrops } from './lib/waterdropEffect';
-import { setCameraViewMode as applyCameraViewMode, setCameraViewByPlayerIndex as applyCameraViewByPlayerIndex } from './lib/cameraView';
+import { setCameraViewMode as applyCameraViewMode, setCameraViewByPlayerIndex as applyCameraViewByPlayerIndex, getVisualSeatIndex, setAfterCameraViewChange } from './lib/cameraView';
+import { syncCameraDebugGuiFromActiveView } from './lib/cameraDebugGui';
 import { transferCard } from './lib/transferCard';
 import { setCounters } from './lib/ui/counterDialog';
 import { resolveStackAnchor } from './lib/footprintOverlap';
@@ -371,15 +372,8 @@ export function readjustPlayAreas() {
     sorted = [, ...entries];
   }
 
-  let mapIndex = {
-    1: [0],
-    2: [0, 2],
-  };
-
-  let indexMap = mapIndex[sorted.length];
-
   sorted.forEach((playArea, i) => {
-    let index = indexMap?.[i] ?? i;
+    const index = getVisualSeatIndex(i, sorted.length);
     applyPlayerTransform(playArea.mesh, index);
     playArea?.updatePositions();
   });
@@ -472,18 +466,36 @@ export async function loadDeckAndJoin(
   setEventCatchUpComplete(true);
 }
 
+let focusPanelScaleTarget = settings.focusPanelScale;
+let focusPanelScaleDisplayed = settings.focusPanelScale;
+
+function updateFocusPanelScaleSmoothing() {
+  if (!hoverSignal()?.mesh) {
+    focusPanelScaleTarget = settings.focusPanelScale;
+    focusPanelScaleDisplayed = settings.focusPanelScale;
+    return;
+  }
+
+  if (Math.abs(focusPanelScaleDisplayed - focusPanelScaleTarget) < 0.002) {
+    focusPanelScaleDisplayed = focusPanelScaleTarget;
+  } else {
+    focusPanelScaleDisplayed += (focusPanelScaleTarget - focusPanelScaleDisplayed) * 0.22;
+  }
+
+  if (Math.abs(settings.focusPanelScale - focusPanelScaleDisplayed) > 0.002) {
+    setSettings('focusPanelScale', focusPanelScaleDisplayed);
+    updateFocusPanelSize(focusPanelScaleDisplayed);
+  }
+}
+
 function onDocumentScroll(event: WheelEvent) {
   if (hoverSignal()?.mesh) {
     event.preventDefault();
     const step = event.deltaY > 0 ? -0.05 : 0.05;
-    const nextScale = Math.min(
+    focusPanelScaleTarget = Math.min(
       FOCUS_PANEL_MAX_SCALE,
-      Math.max(FOCUS_PANEL_MIN_SCALE, settings.focusPanelScale + step),
+      Math.max(FOCUS_PANEL_MIN_SCALE, focusPanelScaleTarget + step),
     );
-    if (nextScale === settings.focusPanelScale) return;
-
-    setSettings('focusPanelScale', nextScale);
-    updateFocusPanelSize(nextScale);
     return;
   }
 
@@ -1188,6 +1200,7 @@ function render3d(delta: number) {
   renderAnimations(time);
   updateTextureAnimation(delta);
   updateWaterdrops(delta);
+  updateFocusPanelScaleSmoothing();
 
   if (settings.enableCameraTilt && !isSpectating()) {
     animateCameraLook();
@@ -1260,18 +1273,21 @@ function render3d(delta: number) {
 let currentYaw = 0;
 let currentPitch = 0;
 
-export function setCameraViewByPlayerIndex(orderedIndex: number) {
-  applyCameraViewByPlayerIndex(orderedIndex);
+setAfterCameraViewChange(() => {
   currentYaw = 0;
   currentPitch = 0;
-  camera.quaternion.copy(baseCameraQuaternion);
+  if (camera) {
+    camera.quaternion.copy(baseCameraQuaternion);
+  }
+  syncCameraDebugGuiFromActiveView();
+});
+
+export function setCameraViewByPlayerIndex(orderedIndex: number) {
+  applyCameraViewByPlayerIndex(orderedIndex);
 }
 
 export function setCameraViewMode(mode: 'local' | 'opponent') {
   applyCameraViewMode(mode);
-  currentYaw = 0;
-  currentPitch = 0;
-  camera.quaternion.copy(baseCameraQuaternion);
 }
 
 function animateCameraLook() {

@@ -16,6 +16,9 @@
   height: var(--focus-panel-height, 50vh);
   aspect-ratio: var(--focus-panel-aspect, 0.716);
   width: auto;
+  transition:
+    height 0.2s ease-out,
+    aspect-ratio 0.2s ease-out;
 }
 
 .focusCanvasSlot {

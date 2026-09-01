@@ -16,7 +16,7 @@ export VITE_BUILD_DATE   = $(BUILD_DATE)
 export VITE_BUILD_ENV    = production
 
 build:
-	pnpm build
+	bun run build
 	docker build . \
 		--label $(github_repo) \
 		-t $(docker_container):latest \
@@ -37,7 +37,7 @@ deploy: push
 	kubectl rollout restart deployment -n arcanetable
 
 build_all:
-	pnpm build
+	bun run build
 	docker build . \
 		--label $(github_repo) \
 		-t $(docker_container):latest \

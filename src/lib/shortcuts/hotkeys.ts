@@ -16,6 +16,7 @@ import { createPassTurnEvent } from '../createEvents';
 import { Card } from '../constants';
 import { getOrderedPlayAreas } from '../cameraView';
 import { dismissZoomPanel, navigateKeyboardHandHover, setKeyboardHandHover, setCameraViewByPlayerIndex } from '../../main3d';
+import { toggleCameraDebugGui } from '../cameraDebugGui';
 
 export function HotKeys() {
   const cardMesh = () => hoverSignal()?.mesh;
@@ -95,13 +96,25 @@ export function HotKeys() {
       if (target?.closest('input, textarea, [contenteditable="true"]')) return;
 
       const playerIndex = parseInt(match[1], 10) - 1;
-      if (playerIndex >= getOrderedPlayAreas().length) return;
+      const playerCount = getOrderedPlayAreas().length;
+      if (playerIndex === 3) {
+        if (playerCount < 3) return;
+      } else if (playerIndex >= playerCount) {
+        return;
+      }
 
       event.preventDefault();
       setCameraViewByPlayerIndex(playerIndex);
     };
 
     window.addEventListener('keydown', onFunctionKeyDown);
+
+    const onCameraGuiKeyDown = (event: KeyboardEvent) => {
+      // Camera GUI disabled
+      return;
+    };
+
+    window.addEventListener('keydown', onCameraGuiKeyDown);
 
     hotkeys('shift+r', function () {
       const area = playArea();
@@ -263,6 +276,7 @@ export function HotKeys() {
       window.removeEventListener('keydown', onPowerToughnessKeyDown);
       window.removeEventListener('keydown', onSpanishPreviewKeyDown);
       window.removeEventListener('keydown', onFunctionKeyDown);
+      window.removeEventListener('keydown', onCameraGuiKeyDown);
       hotkeys.unbind();
     };
   });

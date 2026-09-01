@@ -69,6 +69,7 @@ export const SHORTCUTS = [
   { shortcuts: [['esc']], action: 'Close zoom panel and clear selection' },
   { shortcuts: [['F1']], action: 'Return to your camera view' },
   { shortcuts: [['F2'], ['F3'], ['F4']], action: "View from another player's perspective" },
+  { shortcuts: [['`']], action: 'Toggle camera debug controls (dev)' },
   { shortcuts: [['+'], ['=']], action: 'Increase +1/+1 on hovered battlefield card' },
   { shortcuts: [['-']], action: 'Decrease +1/+1 on hovered battlefield card' },
   {
