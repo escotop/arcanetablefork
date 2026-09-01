@@ -39,7 +39,7 @@ const html = `<!doctype html>
 ${cssLink}    <title>Arcanetable</title>
   </head>
   <body>
-    <div id="app"><!--ssr-outlet--></div>
+    <div id="app"></div>
     <script type="module" src="/_build/assets/${entryJs}"></script>
   </body>
 </html>
