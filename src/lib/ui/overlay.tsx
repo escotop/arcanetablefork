@@ -111,7 +111,13 @@ export default function Overlay() {
             each={players().filter(
               player => player.id !== provider.awareness.clientID && !player.entry.isSpectating,
             )}>
-            {player => <NetworkPlayer {...player?.entry} />}
+            {player => (
+              <NetworkPlayer
+                {...player?.entry}
+                clientId={player.id}
+                playerSessionId={player.entry?.playerSessionId as string | undefined}
+              />
+            )}
           </For>
         </div>
       </div>

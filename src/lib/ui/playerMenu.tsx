@@ -1,4 +1,4 @@
-import { Component, createSignal, For, Show } from 'solid-js';
+import { Component, createMemo, createSignal, For, Show } from 'solid-js';
 import { Card } from '~/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '~/components/ui/collapsible';
 import {
@@ -16,21 +16,36 @@ import {
   NumberFieldInput,
 } from '~/components/ui/number-field';
 import { TextField, TextFieldInput } from '~/components/ui/text-field';
-import { cardSystem, provider } from '../globals';
+import { cardSystem, getLocalPlayerClientId, provider } from '../globals';
 import { DEFAULT_COMMANDER_LIFE, isMagicCardSystem } from '../constants';
 import { parseLifeInput } from '../utils';
 import { displayPlayerColor } from '../playerColor';
+import { getCameraViewIndexForClientId, getOrderedPlayAreas, setCameraViewByPlayerIndex } from '../cameraView';
 import { counters, setIsCounterDialogOpen } from './counterDialog';
 import ChevronDownIcon from 'lucide-solid/icons/chevron-down';
 import ChevronUpIcon from 'lucide-solid/icons/chevron-up';
 
-const LifeReadout: Component<{ value: number; title: string }> = props => (
-  <div
-    title={props.title}
-    class='flex h-10 min-w-[5rem] shrink-0 items-center justify-center rounded-md border border-input bg-background px-2 text-base font-semibold tabular-nums'>
-    {props.value}
-  </div>
-);
+function switchToCameraView(clientId: number, playerSessionId?: string) {
+  const viewIndex = getCameraViewIndexForClientId(clientId, playerSessionId);
+  if (viewIndex === null) return;
+  if (viewIndex === 3 && getOrderedPlayAreas().length < 3) return;
+  setCameraViewByPlayerIndex(viewIndex);
+}
+
+const stopViewSwitch = (e: MouseEvent) => {
+  e.stopPropagation();
+};
+
+const LifeReadout: Component<{ value: number; title: string }> = props => {
+  const className =
+    'flex h-10 min-w-[5rem] shrink-0 items-center justify-center rounded-md border border-input bg-background px-2 text-base font-semibold tabular-nums';
+
+  return (
+    <div title={props.title} class={className}>
+      {props.value}
+    </div>
+  );
+};
 
 const LifeField: Component<{
   life: number;
@@ -112,12 +127,14 @@ export const LocalPlayer: Component = props => {
   return (
     <Card>
       <div
-        class='rounded-lg shadow-md flex-shrink-0 p-2'
+        class='rounded-lg shadow-md flex-shrink-0 p-2 cursor-pointer transition-colors hover:bg-muted/40'
+        title="View from your perspective"
+        onClick={() => switchToCameraView(getLocalPlayerClientId())}
         style={{ 'pointer-events': 'initial', width: 'max-content', 'max-width': '100%' }}>
         <Collapsible onOpenChange={setOpen} open={open()}>
           <div class='flex items-center gap-2'>
             <span class='shrink-0 pr-1'>You</span>
-            <div class='flex shrink-0 items-center gap-2'>
+            <div class='flex shrink-0 items-center gap-2' onClick={stopViewSwitch}>
               <LifeField
                 life={props?.life ?? 0}
                 onLifeChange={life => {
@@ -142,7 +159,7 @@ export const LocalPlayer: Component = props => {
                 />
               </Show>
             </div>
-            <CollapsibleTrigger class='size-6 shrink-0'>
+            <CollapsibleTrigger class='size-6 shrink-0' onClick={stopViewSwitch}>
               <ChevronDownIcon
                 style={`transform: rotate3d(1,0,0,${
                   open() ? 180 : 0
@@ -151,7 +168,7 @@ export const LocalPlayer: Component = props => {
             </CollapsibleTrigger>
           </div>
           <Show when={!open()}>
-            <div class='flex gap-2 pt-2'>
+            <div class='flex gap-2 pt-2' onClick={stopViewSwitch}>
               <For
                 each={Object.entries(props?.counters ?? {})
                   .filter(entry => entry[1] !== 0)
@@ -176,7 +193,7 @@ export const LocalPlayer: Component = props => {
               </For>
             </div>
           </Show>
-          <CollapsibleContent>
+          <CollapsibleContent onClick={stopViewSwitch}>
             <hr class='my-3' />
             <DropdownMenu>
               <DropdownMenuTrigger class='mb-3'>Add Counters</DropdownMenuTrigger>
@@ -257,14 +274,22 @@ export const LocalPlayer: Component = props => {
   );
 };
 
-export const NetworkPlayer: Component = props => {
+export const NetworkPlayer: Component<{ clientId: number; playerSessionId?: string; name?: string; life?: number; commanderLife?: number; counters?: Record<string, number> }> = props => {
   const [open, setOpen] = createSignal(false);
   const playerColor = () => displayPlayerColor(props);
+  const visibleCounterIds = createMemo(() =>
+    Object.entries(props?.counters ?? {})
+      .filter(entry => entry[1] !== 0)
+      .map(entry => entry[0])
+      .sort((a, b) => a.localeCompare(b)),
+  );
 
   return (
     <Card>
       <div
-        class='rounded-lg shadow-md flex-shrink-0 p-2'
+        class='rounded-lg shadow-md flex-shrink-0 p-2 cursor-pointer transition-colors hover:bg-muted/40'
+        title="View from this player's perspective"
+        onClick={() => switchToCameraView(props.clientId, props.playerSessionId)}
         style={{
           'pointer-events': 'initial',
           width: 'max-content',
@@ -283,7 +308,7 @@ export const NetworkPlayer: Component = props => {
                 />
               </Show>
             </div>
-            <CollapsibleTrigger class='size-6 shrink-0'>
+            <CollapsibleTrigger class='size-6 shrink-0' onClick={stopViewSwitch}>
               <ChevronDownIcon
                 style={`transform: rotate3d(1,0,0,${
                   open() ? 180 : 0
@@ -291,33 +316,23 @@ export const NetworkPlayer: Component = props => {
               />
             </CollapsibleTrigger>
           </div>
-          <Show when={!open()}>
-            <div class='flex gap-2 pt-2'>
-              <For
-                each={Object.entries(props?.counters ?? {})
-                  .filter(entry => entry[1] !== 0)
-                  .map(entry => entry[0])
-                  .sort((a, b) => a.localeCompare(b))}>
+          <Show when={!open() && visibleCounterIds().length > 0}>
+            <div class='flex gap-2 pt-2' onClick={stopViewSwitch}>
+              <For each={visibleCounterIds()}>
                 {counterId => {
                   let counter = counters().find(c => c.id === counterId);
                   return (
-                    <button
+                    <div
                       class='rounded align-middle px-2'
-                      onContextMenu={e => {
-                        e.preventDefault();
-                        changeCounter(counterId, x => x - 1);
-                        return false;
-                      }}
-                      onClick={e => changeCounter(counterId, x => x + 1)}
-                      style={`background-color: ${counter.color}; color: black; min-width: 2rem; height:2rem; line-height: 2rem;`}>
+                      style={`background-color: ${counter.color}; color: black; min-width: 2rem; height:2rem; line-height: 2rem; text-align: center;`}>
                       {props?.counters[counterId]}
-                    </button>
+                    </div>
                   );
                 }}
               </For>
             </div>
           </Show>
-          <CollapsibleContent>
+          <CollapsibleContent onClick={stopViewSwitch}>
             <hr class='my-3' />
             <ul class='space-y-2'>
               <For

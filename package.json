@@ -3,10 +3,11 @@
   "version": "0.0.0",
   "description": "",
   "type": "module",
+  "packageManager": "bun@1.4.0",
   "scripts": {
     "start": "vite",
     "dev": "vite",
-    "build": "vite build --mode production && node scripts/write-spa-index.mjs",
+    "build": "vite build --mode production && bun scripts/write-spa-index.mjs",
     "serve": "vite preview",
     "test": "vitest"
   },

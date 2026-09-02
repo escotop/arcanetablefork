@@ -5,7 +5,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer';
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { cancelAnimation, renderAnimations, serializeAnimation } from './lib/animations';
-import { cloneCard, getCardMeshTetherPoint, setCardData, updateTextureAnimation } from './lib/card';
+import { cloneCard, getCardMeshTetherPoint, setCardData, setCounterLabelHoverTarget, updateTextureAnimation } from './lib/card';
 import { clearSpanishPreview } from './lib/spanishCardPreview';
 import {
   CARD_STACK_OFFSET,
@@ -984,6 +984,7 @@ let keyboardHandHoverMouseLock: string | undefined;
 function applyHoverTarget(mesh: THREE.Object3D) {
   const tether = getCardMeshTetherPoint(mesh);
   hover = { object: mesh, colors: [] };
+  setCounterLabelHoverTarget(mesh.userData?.id ?? null);
   setHoverSignal({ mesh: mesh as THREE.Mesh, tether, mouse });
   focusOn(mesh);
   outlinePass.selectedObjects = [mesh];
@@ -1107,6 +1108,7 @@ function getCardMesh(target: THREE.Object3D | undefined) {
 
 function clearHoverSignal() {
   clearSpanishPreview();
+  setCounterLabelHoverTarget(null);
   setHoverSignal(signal => (signal?.mouse ? { mouse: signal.mouse } : undefined));
   focusCamera.userData.target = undefined;
   cancelAnimation(focusCamera);
@@ -1174,6 +1176,7 @@ function highlightHover(intersects: THREE.Intersection<THREE.Object3D<THREE.Obje
     const tether = getCardMeshTetherPoint(next);
 
     hover = { object: next, colors: [] };
+    setCounterLabelHoverTarget(next.userData?.id ?? null);
     setHoverSignal({ mesh: next, tether, mouse });
 
     hover.object.dispatchEvent({ type: 'mousein', mesh: hover.object });

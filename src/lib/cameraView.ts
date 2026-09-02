@@ -1,6 +1,7 @@
 import { createSignal } from 'solid-js';
 import { Euler, Group, MathUtils, Matrix4, Quaternion, Vector3 } from 'three';
-import { applyPlayerTransform, camera, baseCameraQuaternion, playAreas, table } from './globals';
+import { applyPlayerTransform, camera, baseCameraQuaternion, players, playAreas, table } from './globals';
+import { getRegisteredClientIdForSession } from './playerSession';
 import type { PlayArea } from './playArea';
 
 interface CameraViewState {
@@ -355,6 +356,42 @@ function createMirroredViewState(orderedIndex: number): CameraViewState | null {
   return buildMirroredViewState(reference, localArea, viewedArea);
 }
 
+function normalizeClientId(clientId: unknown): number | null {
+  const id = Number(clientId);
+  return Number.isFinite(id) ? id : null;
+}
+
+function findPlayAreaForClientId(clientId: unknown, playerSessionId?: string): PlayArea | undefined {
+  const normalizedId = normalizeClientId(clientId);
+  if (normalizedId !== null) {
+    const direct = playAreas[normalizedId];
+    if (direct) return direct;
+  }
+
+  const areas = Object.values(playAreas).filter(Boolean) as PlayArea[];
+  if (normalizedId !== null) {
+    const byClientId = areas.find(area => area.clientId === normalizedId);
+    if (byClientId) return byClientId;
+  }
+
+  const sessionId =
+    playerSessionId ??
+    (
+      players() as Array<{ id: number; entry?: { playerSessionId?: string } }>
+    ).find(entry => normalizeClientId(entry.id) === normalizedId)?.entry?.playerSessionId;
+  if (!sessionId) return undefined;
+
+  const bySession = areas.find(area => area.playerSessionId === sessionId);
+  if (bySession) return bySession;
+
+  const registeredId = getRegisteredClientIdForSession(sessionId);
+  if (registeredId !== undefined) {
+    return playAreas[registeredId];
+  }
+
+  return undefined;
+}
+
 function refreshViewPresentation() {
   const ordered = getOrderedPlayAreas();
   const viewIndex = cameraViewPlayerIndex();
@@ -377,6 +414,18 @@ function refreshViewPresentation() {
   });
 
   Object.values(playAreas).forEach(area => area?.refreshNameTagOrientation());
+}
+
+export function getCameraViewIndexForClientId(
+  clientId: number,
+  playerSessionId?: string,
+): number | null {
+  const area = findPlayAreaForClientId(clientId, playerSessionId);
+  if (!area) return null;
+
+  const ordered = getOrderedPlayAreas();
+  const index = ordered.indexOf(area);
+  return index >= 0 ? index : null;
 }
 
 export function setCameraViewByPlayerIndex(orderedIndex: number) {
