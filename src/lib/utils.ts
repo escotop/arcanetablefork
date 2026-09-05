@@ -132,21 +132,19 @@ export function restackItemsLocally(items: Object3D[], intersections: Intersecti
   if (!intersections.length) return;
 
   let targetsById = Object.fromEntries(items.map(target => [target.userData.id, target]));
-  let intersection = intersections.find(
-    i =>
-      !targetsById[i.object.userData.id] &&
-      (i.object.userData.isInteractive || i.object.userData.zone),
-  )!;
+  let intersection = intersections.find(i => {
+    if (targetsById[i.object.userData.id]) return false;
+    return i.object.userData.isInteractive || i.object.userData.zone || i.object.userData.zoneId;
+  });
 
   if (!intersection) return;
   if (!items?.[0]?.parent) return;
 
-
-  const destZone = intersection.object;
-  const localAnchor = destZone.worldToLocal(intersection.point.clone());
-  const resolvedLocal = resolveStackAnchor(localAnchor, destZone, items);
-  const anchor = items[0].parent.worldToLocal(destZone.localToWorld(resolvedLocal));
-  const targetWorldQuat = intersection.object.getWorldQuaternion(new Quaternion());
+  const destZoneObject = intersection.object;
+  const localAnchor = destZoneObject.worldToLocal(intersection.point.clone());
+  const resolvedLocal = resolveStackAnchor(localAnchor, destZoneObject, items);
+  const anchor = items[0].parent.worldToLocal(destZoneObject.localToWorld(resolvedLocal));
+  const targetWorldQuat = destZoneObject.getWorldQuaternion(new Quaternion());
 
   return items.forEach((item, i) => {
     if (!item.parent) return;

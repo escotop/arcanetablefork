@@ -1,14 +1,8 @@
 .root {
   pointer-events: initial;
-  position: fixed;
-  right: 0.75rem;
-  bottom: 0.75rem;
-  z-index: 20;
   display: flex;
   align-items: stretch;
-  max-width: calc(100vw - 1.5rem);
-  transform: scale(1.3);
-  transform-origin: bottom right;
+  max-width: 100%;
 }
 
 .toggleTab {

@@ -42,6 +42,7 @@ export interface CardEntryDetail {
   search: string;
   type_line: string;
   popularity: number;
+  mana_cost?: string;
   set?: string;
   collector_number?: string;
   all_parts?: CardDetailPart[];

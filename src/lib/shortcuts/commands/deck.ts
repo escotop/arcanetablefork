@@ -1,10 +1,22 @@
 import { Card } from '~/lib/constants';
-import { doXTimes } from '~/lib/globals';
+import { createTransferCardEvent } from '~/lib/createEvents';
+import { dispatchGameEvent, doXTimes, flushDispatchEventQueue } from '~/lib/globals';
 import { PlayArea } from '~/lib/playArea';
 import { transferCard } from '~/lib/transferCard';
 
+export const OPENING_HAND_SIZE = 7;
+
 export function drawCards(playArea: PlayArea, count: number = 1) {
-  doXTimes(count, () => playArea.draw());
+  const cards = playArea.deck.cards.slice(0, Math.max(0, count));
+  for (const card of cards) {
+    if (playArea.deck.cards[0]?.id === card.id) {
+      playArea.deck.materializeTopCard();
+    } else {
+      playArea.deck.prepareCardForRemoval(card);
+    }
+    dispatchGameEvent(createTransferCardEvent(card, playArea.deck, playArea.hand));
+  }
+  return flushDispatchEventQueue();
 }
 
 export function peekFromTop(playArea: PlayArea, count = 1) {

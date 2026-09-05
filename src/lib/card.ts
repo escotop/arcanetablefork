@@ -50,6 +50,7 @@ import { cancelAnimation } from './animations';
 import { cleanupFromNode, isValidMaterial } from './utils';
 import { serializeCardUserDataForLog } from './gameLogEvents';
 import { devLog } from './devLog';
+import { removeHandManaOverlay } from './handManaOverlay';
 import { getCardById, getCardNamed } from './scryfall/client';
 
 export interface CardUserData {
@@ -60,6 +61,7 @@ export interface CardUserData {
 
 let alphaMap: Texture;
 const blackMat = new MeshStandardMaterial({ color: 0x000000 });
+const NON_COUNTER_MODIFIER_MESH_KEYS = new Set(['pt', 'token', 'handMana']);
 
 let currentSlide = 0;
 let totalSlides = 6;
@@ -664,6 +666,7 @@ export function getCardMeshTetherPoint(cardMesh: Mesh) {
 }
 
 export function cleanupCard(card: Card) {
+  removeHandManaOverlay(card);
   if (!card.mesh) {
     cardsById.delete(card.id);
     return;
@@ -709,6 +712,10 @@ export function setCardData<Field extends keyof CardUserData>(
   }
 
   if (field === 'location') {
+    if (cardMesh.userData.location === 'hand' && value !== 'hand') {
+      const card = cardsById.get(cardMesh.userData.id);
+      if (card) removeHandManaOverlay(card);
+    }
     cardMesh.userData.previousLocation = cardMesh.userData.location;
   }
 
@@ -937,6 +944,7 @@ function updateCounterLayouts(card: Card, expanded: boolean) {
   ]);
   modifierCounters.delete('pt');
   modifierCounters.delete('token');
+  NON_COUNTER_MODIFIER_MESH_KEYS.forEach(key => modifierCounters.delete(key));
 
   const modifiers = Array.from(modifierCounters)
     .map(counterId => ({
@@ -956,10 +964,11 @@ function updateCounterLayouts(card: Card, expanded: boolean) {
 
 function updateCounter(
   card: Card,
-  counter: { id: string; name: string; color: string },
+  counter: { id: string; name: string; color: string } | undefined,
   value: number | string | boolean,
   index: number,
 ) {
+  if (!counter?.id || !card.mesh) return;
   if (!card.modifiers[counter.id]) {
     let geometry = new BoxGeometry(1, 1, 1);
     let mat = new MeshStandardMaterial({ color: 0xffffff });
@@ -1027,13 +1036,16 @@ export function updateModifiers(card: Card) {
   ]);
   modifierCounters.delete('pt');
   modifierCounters.delete('token');
+  NON_COUNTER_MODIFIER_MESH_KEYS.forEach(key => modifierCounters.delete(key));
 
-  const modifiers = Array.from(modifierCounters).map(counterId => {
-    return {
-      counter: countersById[counterId],
-      value: card.mesh.userData.modifiers?.counters[counterId],
-    };
-  });
+  const modifiers = Array.from(modifierCounters)
+    .map(counterId => {
+      return {
+        counter: countersById[counterId],
+        value: card.mesh.userData.modifiers?.counters[counterId],
+      };
+    })
+    .filter(modifier => modifier.counter);
 
   if (card.mesh.userData.isToken) {
     modifiers.push({ counter: { name: 'token', id: 'token' }, value: card.mesh.userData.isToken });

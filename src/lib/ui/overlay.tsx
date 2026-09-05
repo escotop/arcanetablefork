@@ -208,27 +208,17 @@ export default function Overlay() {
           </div>
         )}
       </Show>
-      <Show when={hoverSignal()?.mesh?.userData?.location !== 'hand'}>
-        <Show when={playArea()?.hand.observable.uiTether}>
-          {tether => (
-            <div
-              class='text-shadow'
-              style={`
-              ${getTetherCssVariables(tether())}
-              top: var(--y);
-              left: var(--x);
-              transform: translate(var(--offset-x), var(--offset-y));
-              position: fixed;
-            `}>
-              Hand ({playArea()!.hand.observable.cardCount})
-            </div>
-          )}
-        </Show>
-      </Show>
 
       <MainMenu playArea={playArea()!} />
       <Show when={!isSpectating()}>
-        <ManaCounters />
+        <div class={styles.bottomRightHud}>
+          <Show when={playArea()}>
+            <div class={`text-shadow ${styles.handCounter}`}>
+              Hand ({playArea()!.hand.observable.cardCount})
+            </div>
+          </Show>
+          <ManaCounters />
+        </div>
       </Show>
       <PeekMenu />
       <RevealMenu />

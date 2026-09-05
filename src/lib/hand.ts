@@ -6,6 +6,7 @@ import { Card, CARD_HEIGHT, CardZone } from './constants';
 import { cardsById, getProjectionVec, isEventCatchUpComplete, setHoverSignal, settings, zonesById } from './globals';
 import { getGlobalRotation } from './utils';
 import { devLog } from './devLog';
+import { removeHandManaOverlay, syncHandManaOverlayRenderOrder, updateHandManaOverlay } from './handManaOverlay';
 import { createStore, SetStoreFunction } from 'solid-js/store';
 import { createRoot } from 'solid-js';
 
@@ -22,6 +23,8 @@ function applyHandRenderOrder(cards: Card[], focusedIndex?: number) {
 
     // Above left neighbors (j < i), below right neighbors (j > i).
     mesh.renderOrder = focusedIndex === i ? i - 0.5 : i;
+    const overlay = cards[i].modifiers?.handMana;
+    if (overlay) syncHandManaOverlayRenderOrder(overlay, i, focusedIndex);
   }
 }
 
@@ -180,12 +183,22 @@ export class Hand implements CardZone {
   enableLocalHand() {
     this.isLocalHand = true;
     this.resetInteractivity();
-    for (const card of this.cards) {
+    for (let i = 0; i < this.cards.length; i++) {
+      const card = this.cards[i];
       card.mesh.removeEventListener('mousein', this.cardMouseIn);
       card.mesh.removeEventListener('mouseout', this.cardMouseOut);
       card.mesh.addEventListener('mousein', this.cardMouseIn);
       card.mesh.addEventListener('mouseout', this.cardMouseOut);
     }
+    this.syncManaOverlays();
+  }
+
+  syncManaOverlays() {
+    if (!this.isLocalHand) return;
+    for (let i = 0; i < this.cards.length; i++) {
+      updateHandManaOverlay(this.cards[i], i, this.focusedIndex);
+    }
+    applyHandRenderOrder(this.cards, this.focusedIndex);
   }
 
   resetInteractivity() {
@@ -225,6 +238,10 @@ export class Hand implements CardZone {
     card.mesh.renderOrder = index;
 
     this.relayoutCards({ animate: true, skipIndex: index });
+
+    if (this.isLocalHand) {
+      updateHandManaOverlay(card, index, this.focusedIndex);
+    }
 
     let initialRotation = getGlobalRotation(card.mesh);
     const animateEntry = !skipAnimation && isEventCatchUpComplete();
@@ -303,6 +320,7 @@ export class Hand implements CardZone {
 
     cardMesh.removeEventListener('mousein', this.cardMouseIn);
     cardMesh.removeEventListener('mouseout', this.cardMouseOut);
+    removeHandManaOverlay(this.cards[cardIndex]);
     setCardData(cardMesh, 'resting', undefined);
     this.mesh.remove(cardMesh);
     this.cards.splice(cardIndex, 1);

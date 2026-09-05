@@ -92,6 +92,7 @@ import { updateWaterdrops } from './lib/waterdropEffect';
 import { setCameraViewMode as applyCameraViewMode, setCameraViewByPlayerIndex as applyCameraViewByPlayerIndex, getVisualSeatIndex, setAfterCameraViewChange } from './lib/cameraView';
 import { syncCameraDebugGuiFromActiveView } from './lib/cameraDebugGui';
 import { transferCard } from './lib/transferCard';
+import { drawCards, OPENING_HAND_SIZE } from './lib/shortcuts/commands/deck';
 import { setCounters } from './lib/ui/counterDialog';
 import { resolveStackAnchor } from './lib/footprintOverlap';
 import { restackItemsLocally } from './lib/utils';
@@ -618,6 +619,11 @@ export async function loadDeckAndJoin(
   sendEvent({ type: 'join', payload: playArea.getLocalState() });
   counters.forEach(counter => sendEvent({ type: 'createCounter', counter }));
 
+  await profileAsync('opening hand', async () => {
+    await drawCards(playArea, OPENING_HAND_SIZE);
+    await processEvents();
+  });
+
   saveGameMeta(currentGameId, {
     name: settings.name,
     life: settings.startingLife,
@@ -891,6 +897,7 @@ function resolveInteractiveTarget(object: THREE.Object3D): THREE.Object3D {
 
 function onDocumentDragStart(event: PointerEvent) {
   event.preventDefault();
+  updateMouse(event);
   event.dataTransfer.dropEffect = 'move';
   if (isGameplayBlocked()) return;
   raycaster.setFromCamera(mouse, camera);
@@ -961,6 +968,33 @@ function resolveDropZone(object: THREE.Object3D) {
   return undefined;
 }
 
+/** Raycast zone containers only so dragged cards do not block drops onto the battlefield. */
+function findDropIntersection(dragged: THREE.Object3D[]) {
+  const zoneBoxes: THREE.Object3D[] = [];
+  for (const area of Object.values(playAreas)) {
+    zoneBoxes.push(area.battlefieldZone.mesh);
+  }
+
+  const zoneHits = raycaster.intersectObjects(zoneBoxes, false);
+  for (const hit of zoneHits) {
+    if (resolveDropZone(hit.object)) return hit;
+  }
+
+  const targetsById = Object.fromEntries(dragged.map(target => [target.userData.id, target]));
+  const sceneHits = raycaster.intersectObject(scene);
+  for (const hit of sceneHits) {
+    if (targetsById[hit.object.userData.id]) continue;
+    if (resolveDropZone(hit.object)) return hit;
+    if (
+      hit.object.userData.isInteractive ||
+      hit.object.userData.zone ||
+      hit.object.userData.location === 'deck'
+    ) {
+      return hit;
+    }
+  }
+}
+
 function getBattlefieldDropPosition(
   toZone: { mesh: THREE.Object3D },
   intersection: THREE.Intersection,
@@ -977,6 +1011,7 @@ function getBattlefieldDropPosition(
 
 async function onDocumentDrop(event) {
   event.preventDefault();
+  updateMouse(event);
   if (isGameplayBlocked()) return;
   if (selection.isDown || selection.helper.enabled) {
     selection.completeRectangleSelection(event);
@@ -989,16 +1024,7 @@ async function onDocumentDrop(event) {
   try {
     raycaster.setFromCamera(mouse, camera);
 
-    let intersections = raycaster.intersectObject(scene);
-
-    let targetsById = Object.fromEntries(dragged.map(target => [target.userData.id, target]));
-    let intersection = intersections.find(
-      i =>
-        !targetsById[i.object.userData.id] &&
-        (i.object.userData.isInteractive ||
-          i.object.userData.zone ||
-          i.object.userData.location === 'deck'),
-    );
+    let intersection = findDropIntersection(dragged);
     if (!intersection) return;
 
     let shouldClearSelection = false;
@@ -1006,7 +1032,7 @@ async function onDocumentDrop(event) {
     if (!toZone) return;
     const toZoneId = toZone.id;
 
-    restackItemsLocally(dragged, intersections);
+    restackItemsLocally(dragged, [intersection]);
 
     const sameZoneTargets: THREE.Object3D[] = [];
 
@@ -1096,6 +1122,9 @@ function onDocumentMouseMove(event) {
     (event.clientX / window.innerWidth) * 2 - 1,
     -(event.clientY / window.innerHeight) * 2 + 1,
   );
+  if (dragTargets?.length) {
+    updateMouse(event);
+  }
 }
 
 function updateMouse(event) {
@@ -1114,8 +1143,8 @@ function onRendererMouseMove(event) {
     raycaster.setFromCamera(mouse, camera);
 
     let intersections = raycaster.intersectObject(scene);
-
-    restackItemsLocally(dragTargets, intersections);
+    const dropIntersection = findDropIntersection(dragTargets);
+    restackItemsLocally(dragTargets, dropIntersection ? [dropIntersection] : intersections);
 
     if (hoverSignal()) {
       setHoverSignal(signal => {
@@ -1466,6 +1495,7 @@ function render3d(delta: number) {
 
     const focusLayerObjects: THREE.Object3D[] = [];
     mesh.traverse(obj => {
+      if (obj.userData?.excludeFromFocusPanel) return;
       obj.layers.enable(FOCUS_PANEL_LAYER);
       focusLayerObjects.push(obj);
     });
