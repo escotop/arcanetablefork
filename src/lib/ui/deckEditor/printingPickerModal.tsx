@@ -25,6 +25,7 @@ import XIcon from 'lucide-solid/icons/x';
 
 interface Props {
   entry: DetailedCardEntry;
+  pinnedPrintings?: CardPrintingOption[];
   onSelect(printing: CardPrintingOption): void;
   onSelectCustomArt(option: CustomCardArtOption): void;
   onClose(): void;
@@ -73,6 +74,13 @@ const PrintingPickerModal: Component<Props> = props => {
   );
 
   const customArtOptions = createMemo(() => [...savedCustomOptions(), ...galleryCards()]);
+
+  const visiblePrintings = createMemo(() => {
+    const fetched = printings();
+    const pinned = props.pinnedPrintings ?? [];
+    const ids = new Set(fetched.map(printing => printing.id));
+    return [...pinned.filter(printing => printing.id && !ids.has(printing.id)), ...fetched];
+  });
 
   async function loadPage(nextPage: number, append = false) {
     if (loading()) return;
@@ -225,7 +233,7 @@ const PrintingPickerModal: Component<Props> = props => {
             <div
               class='grid gap-4'
               style={{ 'grid-template-columns': `repeat(${colsPerRow()}, minmax(0, 1fr))` }}>
-              <For each={printings()}>
+              <For each={visiblePrintings()}>
                 {printing => {
                   const isSelected = () => printing.id === selectedId();
                   return (
@@ -269,7 +277,7 @@ const PrintingPickerModal: Component<Props> = props => {
               </For>
             </div>
 
-            <Show when={!loading() && printings().length === 0}>
+            <Show when={!loading() && visiblePrintings().length === 0}>
               <div class='py-12 text-center text-sm text-muted-foreground'>No printings found</div>
             </Show>
 

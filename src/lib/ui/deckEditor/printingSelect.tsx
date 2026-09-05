@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from 'solid-js';
+import { createMemo, createSignal, For, Show } from 'solid-js';
 import { Button } from '~/components/ui/button';
 import {
   DropdownMenu,
@@ -13,6 +13,7 @@ import ChevronDownIcon from 'lucide-solid/icons/chevron-down';
 
 interface Props {
   entry: DetailedCardEntry;
+  pinnedPrintings?: CardPrintingOption[];
   onSelect(printing: CardPrintingOption): void;
 }
 
@@ -24,6 +25,13 @@ export default function PrintingSelect(props: Props) {
 
   const currentSet = () =>
     (props.entry.set || (props.entry.detail as { set?: string })?.set || '?').toLowerCase();
+
+  const visiblePrintings = createMemo(() => {
+    const fetched = printings();
+    const pinned = props.pinnedPrintings ?? [];
+    const ids = new Set(fetched.map(printing => printing.id));
+    return [...pinned.filter(printing => printing.id && !ids.has(printing.id)), ...fetched];
+  });
 
   async function loadPage(nextPage: number, append = false) {
     if (loading()) return;
@@ -67,7 +75,7 @@ export default function PrintingSelect(props: Props) {
               Cargando…
             </div>
           }>
-          <For each={printings()}>
+          <For each={visiblePrintings()}>
             {printing => (
               <DropdownMenuItem
                 class='flex items-center gap-2 p-1.5'
@@ -100,7 +108,7 @@ export default function PrintingSelect(props: Props) {
               {loading() ? 'Cargando…' : 'Cargar más impresiones…'}
             </DropdownMenuItem>
           </Show>
-          <Show when={!loading() && printings().length === 0}>
+          <Show when={!loading() && visiblePrintings().length === 0}>
             <div class='p-3 text-center text-xs text-muted-foreground'>Sin impresiones</div>
           </Show>
         </Show>

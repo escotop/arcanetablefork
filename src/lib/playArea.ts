@@ -1,4 +1,3 @@
-import uniqBy from 'lodash-es/uniqBy';
 import { nanoid } from 'nanoid';
 import { CatmullRomCurve3, Euler, Group, Mesh, MeshStandardMaterial, Object3D, Quaternion, Vector3 } from 'three';
 import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
@@ -39,9 +38,9 @@ import { Hand } from './hand';
 import { transferCard } from './transferCard';
 import { getCardKey, hydrateDeck } from './deckStore';
 import { cardFromDeckEntry, preloadStackTextures } from './cardLoading';
-import { Deck as DeckData } from './constants';
+import { Deck as DeckData, DetailedCardEntry } from './constants';
 import { profileAsync } from './loadProfile';
-import { getCardById } from './scryfall/client';
+import { collectTokenPartIds, mergeTokenPrintings, resolveTokensByIds } from './deckTokens';
 import {
   createDismissZoneEvent,
   createFlipEvent,
@@ -101,6 +100,7 @@ export class PlayArea {
   public revealZone: CardGrid;
   public tokenSearchZone;
   public availableTokens?: CardReference[];
+  public tokenPrintings?: Record<string, DetailedCardEntry>;
   private inProgressActions = new Set<string>();
   private peekSessionId = 0;
   public index: number;
@@ -494,30 +494,45 @@ export class PlayArea {
     }
 
     if (!this.availableTokens?.length) {
-      const tokenPartIds = new Set<string>();
-      for (const card of this.cards) {
-        for (const part of card.detail.all_parts ?? []) {
-          if (part.component === 'token' && part.id) {
-            tokenPartIds.add(part.id);
-          }
-        }
+      const tokenDetails = await resolveTokensByIds(collectTokenPartIds(this.cards));
+      const merged = mergeTokenPrintings(tokenDetails, this.tokenPrintings);
+      this.availableTokens = merged.map(entry => ({ ...entry.detail, clientId: this.clientId }));
+
+      let availableCards = merged.map((entry, i) => {
+        let card = cloneCard(
+          { detail: entry.detail, customArtUrl: entry.customArtUrl },
+          payload?.ids?.[i] ?? nanoid(),
+        );
+        setCardData(card.mesh, 'isPublic', true);
+        setCardData(card.mesh, 'isInteractive', true);
+        setCardData(card.mesh, 'location', 'tokenSearch');
+        setCardData(card.mesh, 'clientId', this.clientId);
+        setCardData(card.mesh, 'isToken', true);
+        return card;
+      });
+
+      this.emitEvent({
+        type: 'toggleTokenMenu',
+        payload: {
+          availableTokens: this.availableTokens,
+          ids: availableCards.map(card => card.id),
+        },
+      });
+
+      for (let i = 0; i < availableCards.length; i++) {
+        setTimeout(() => {
+          this.tokenSearchZone.addCard(availableCards[i]);
+        }, i * 50);
       }
-
-      const tokens = await Promise.all(
-        [...tokenPartIds].map(async id => {
-          const detail = await getCardById(id);
-          return detail ? { ...detail, clientId: this.clientId } : null;
-        }),
-      );
-
-      this.availableTokens = uniqBy(
-        tokens.filter((token): token is NonNullable<typeof token> => token !== null),
-        'oracle_id',
-      ).sort((a, b) => a.name.localeCompare(b.name));
+      return;
     }
 
     let availableCards = this.availableTokens.map((detail, i) => {
-      let card = cloneCard({ detail }, payload?.ids?.[i] ?? nanoid());
+      const mergedEntry = mergeTokenPrintings([detail], this.tokenPrintings)[0];
+      let card = cloneCard(
+        { detail: mergedEntry.detail, customArtUrl: mergedEntry.customArtUrl },
+        payload?.ids?.[i] ?? nanoid(),
+      );
       setCardData(card.mesh, 'isPublic', true);
       setCardData(card.mesh, 'isInteractive', true);
       setCardData(card.mesh, 'location', 'tokenSearch');
@@ -840,6 +855,7 @@ export class PlayArea {
       return area;
     });
 
+    playArea.tokenPrintings = hydratedDeck.tokens ?? {};
     playArea.deck.shuffle();
     playArea.loadTextures();
     return playArea;

@@ -818,6 +818,21 @@ export interface CardPrintingOption {
   card_faces?: Array<Pick<CardEntryDetail, 'image_uris' | 'name'>>;
 }
 
+export function entryToPrintingOption(entry: DetailedCardEntry): CardPrintingOption {
+  const detail = entry.detail;
+  return {
+    id: entry.id ?? detail?.id ?? '',
+    name: entry.name,
+    set: entry.set ?? detail?.set,
+    set_name: (detail as { set_name?: string })?.set_name,
+    collector_number: entry.collector_number ?? detail?.collector_number,
+    lang: (detail as { lang?: string })?.lang,
+    released_at: (detail as { released_at?: string })?.released_at,
+    image_uris: detail?.image_uris,
+    card_faces: detail?.card_faces,
+  };
+}
+
 export interface CardPrintingsResponse {
   data: CardPrintingOption[];
   page: number;

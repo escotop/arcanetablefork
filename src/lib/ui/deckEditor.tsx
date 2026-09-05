@@ -3,6 +3,7 @@ import {
   Component,
   createEffect,
   createMemo,
+  createResource,
   createSignal,
   For,
   JSX,
@@ -33,6 +34,7 @@ import { getCardImage } from '../card';
 import { DetailedCardEntry, Deck, FORMATS, CardSystem } from '../constants';
 import {
   CardPrintingOption,
+  entryToPrintingOption,
   fetchCardInfo,
   formatDeckListLine,
   getPrintingPreviewUrl,
@@ -90,6 +92,7 @@ import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import DeckImportDialog from './deckEditor/deckImportDialog';
 import PrintDeckModal from './deckEditor/printDeckModal';
 import useCardGrouping, { getCardTypeCategory } from './deckEditor/cardGroupings';
+import { collectTokenPartIds, getDefaultTokenEntry, getTokenKey, mergeTokenPrintings, resolveTokensByIds } from '../deckTokens';
 import OverflowMenuIcon from 'lucide-solid/icons/ellipsis';
 import DeleteIcon from 'lucide-solid/icons/trash-2';
 
@@ -116,6 +119,7 @@ export const DeckEditor: Component<Props> = props => {
   const [cardSystemStore, { setCardSystem }] = useCardSystemContext();
   const [isDirty, setIsDirty] = createSignal(false);
   const [printingPickerKey, setPrintingPickerKey] = createSignal<string>();
+  const [tokenPrintingPickerKey, setTokenPrintingPickerKey] = createSignal<string>();
   const [importDialogOpen, setImportDialogOpen] = createSignal(false);
   const [printDialogOpen, setPrintDialogOpen] = createSignal(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
@@ -127,7 +131,7 @@ export const DeckEditor: Component<Props> = props => {
   const [deck, setDeck] = createStore<Deck>(
     props.deck?.id
       ? structuredClone(unwrap(props.deck))
-      : { cards: {}, inPlay: {}, system: MTG_CARD_SYSTEM.id },
+      : { cards: {}, inPlay: {}, tokens: {}, system: MTG_CARD_SYSTEM.id },
   );
 
   const getDeckList = createMemo(() => {
@@ -272,6 +276,65 @@ export const DeckEditor: Component<Props> = props => {
 
     updateDeck('cards', storageKey, nextEntry);
     updateInPlayMirror(previous, nextEntry);
+  }
+
+  function changeTokenCustomArt(tokenKey: string, option: CustomCardArtOption) {
+    const previous =
+      deckTokenEntryList().find(entry => getTokenKey(entry.detail) === tokenKey) ??
+      deck.tokens?.[tokenKey];
+    if (!previous) return;
+
+    const nextEntry = applyCustomArtToEntry({
+      ...previous,
+      customArtUrl: normalizeTextureUrl(option.imageUrl) ?? option.imageUrl,
+      detail: previous.detail,
+    });
+
+    updateDeck('tokens', tokenKey, { ...nextEntry, qty: 1 });
+  }
+
+  async function changeTokenPrinting(tokenKey: string, printing: CardPrintingOption) {
+    const previous =
+      deckTokenEntryList().find(entry => getTokenKey(entry.detail) === tokenKey) ??
+      deck.tokens?.[tokenKey];
+    if (!previous) return;
+
+    let updated = await fetchCardInfo({
+      name: previous.name,
+      id: printing.id,
+      set: printing.set,
+      collector_number: printing.collector_number,
+      qty: 1,
+      categories: previous.categories ?? [],
+    }).catch(() => undefined);
+
+    if (!updated?.id) {
+      updated = withPrintingImages(
+        {
+          ...previous,
+          id: printing.id,
+          set: printing.set ?? previous.set,
+        },
+        printing,
+      );
+    } else {
+      updated = withPrintingImages(updated, printing);
+    }
+
+    if (!updated?.id) return;
+
+    updateDeck('tokens', tokenKey, {
+      ...updated,
+      qty: 1,
+      categories: previous.categories ?? updated.categories ?? [],
+    });
+  }
+
+  function openTokenPrintingPicker(tokenKey: string) {
+    const entry = deckTokenEntryList().find(item => getTokenKey(item.detail) === tokenKey);
+    if (!supportsCardPrintings() || !entry) return;
+    if (entry.name) prefetchCardPrintings(entry.name);
+    setTokenPrintingPickerKey(tokenKey);
   }
 
   async function changeCardPrinting(storageKey: string, printing: CardPrintingOption) {
@@ -493,11 +556,30 @@ export const DeckEditor: Component<Props> = props => {
   }
   const cardGrouping = useCardGrouping(cardSystem.types ?? [], getDeckList);
 
+  const deckTokenPartIds = createMemo(() => {
+    trackDeep(deck.cards);
+    return collectTokenPartIds(getDeckList().filter(entry => entry?.qty));
+  });
+
+  const [deckTokens] = createResource(deckTokenPartIds, resolveTokensByIds);
+
+  const deckTokenEntryList = createMemo(() => {
+    trackDeep(deck.tokens);
+    const resolved = deckTokens();
+    if (!resolved) return [];
+    return mergeTokenPrintings(resolved, deck.tokens);
+  });
+
+  function getTokenPinnedPrintings(tokenKey: string): CardPrintingOption[] | undefined {
+    const defaultEntry = getDefaultTokenEntry(tokenKey, deckTokens());
+    return defaultEntry ? [entryToPrintingOption(defaultEntry)] : undefined;
+  }
+
   const filteredDeckCardKeys = createMemo(() => {
     trackDeep(deck.cards);
     const filter = typeFilter();
     const keys = deckCardKeys();
-    if (!filter) return keys;
+    if (!filter || filter === 'tokens') return keys;
 
     const lowerTypes = (cardSystem.types ?? []).map(type => type.toLowerCase());
 
@@ -557,6 +639,19 @@ export const DeckEditor: Component<Props> = props => {
                   }>
                   <span>Unsorted</span>
                   <span>{cardGrouping().unsorted.count}</span>
+                </button>
+              </Show>
+              <Show when={deckTokenPartIds().length > 0}>
+                <button
+                  type='button'
+                  class={cn(
+                    'flex gap-1 border-l-2 px-2 py-1 transition-colors hover:bg-muted',
+                    typeFilter() === 'tokens' && 'bg-muted font-semibold',
+                  )}
+                  onClick={() =>
+                    setTypeFilter(current => (current === 'tokens' ? null : 'tokens'))
+                  }>
+                  <span>Tokens</span>
                 </button>
               </Show>
             </div>
@@ -809,47 +904,93 @@ export const DeckEditor: Component<Props> = props => {
               <Show
                 when={searchResults()}
                 fallback={
-                  <For
-                    each={filteredDeckCardKeys()}
-                    keyed
+                  <Show
+                    when={typeFilter() === 'tokens'}
                     fallback={
-                      typeFilter() ? (
-                        <div class='p-8 text-center text-muted-foreground'>
-                          <p>
-                            No{' '}
-                            {typeFilter() === 'unsorted'
-                              ? 'unsorted'
-                              : capitalize(typeFilter()!)}{' '}
-                            cards in this deck.
-                          </p>
-                          <Button
-                            class='mt-3'
-                            type='button'
-                            variant='secondary'
-                            onClick={() => setTypeFilter(null)}>
-                            Show all cards
-                          </Button>
-                        </div>
-                      ) : (
-                        <EmptyGridContainer
-                          hasSearchResults={searchParams.totalPages > 0}
-                          isSearching={isSearching()}
-                          importCardList={openImportDialog}
-                        />
-                      )
+                      <For
+                        each={filteredDeckCardKeys()}
+                        keyed
+                        fallback={
+                          typeFilter() ? (
+                            <div class='p-8 text-center text-muted-foreground'>
+                              <p>
+                                No{' '}
+                                {typeFilter() === 'unsorted'
+                                  ? 'unsorted'
+                                  : capitalize(typeFilter()!)}{' '}
+                                cards in this deck.
+                              </p>
+                              <Button
+                                class='mt-3'
+                                type='button'
+                                variant='secondary'
+                                onClick={() => setTypeFilter(null)}>
+                                Show all cards
+                              </Button>
+                            </div>
+                          ) : (
+                            <EmptyGridContainer
+                              hasSearchResults={searchParams.totalPages > 0}
+                              isSearching={isSearching()}
+                              importCardList={openImportDialog}
+                            />
+                          )
+                        }>
+                        {(storageKey, index) => (
+                          <DeckGridCard
+                            storageKey={storageKey}
+                            index={index()}
+                            card={() => deck.cards[storageKey]}
+                            updateDeck={updateDeck}
+                            onChangePrinting={changeCardPrinting}
+                            onPreview={src => setSearchParams({ dialog: 'card-preview', src })}
+                            onOpenPrintings={() => openPrintingPicker(storageKey)}
+                          />
+                        )}
+                      </For>
                     }>
-                    {(storageKey, index) => (
-                      <DeckGridCard
-                        storageKey={storageKey}
-                        index={index()}
-                        card={() => deck.cards[storageKey]}
-                        updateDeck={updateDeck}
-                        onChangePrinting={changeCardPrinting}
-                        onPreview={src => setSearchParams({ dialog: 'card-preview', src })}
-                        onOpenPrintings={() => openPrintingPicker(storageKey)}
-                      />
-                    )}
-                  </For>
+                    <Show
+                      when={!deckTokens.loading}
+                      fallback={
+                        <div class='col-span-full flex flex-col items-center gap-3 p-8 text-muted-foreground'>
+                          <LoaderIcon class='size-6 animate-spin' />
+                          <p>Loading tokens...</p>
+                        </div>
+                      }>
+                      <For
+                        each={deckTokenEntryList()}
+                        keyed={entry => getTokenKey(entry.detail)}
+                        fallback={
+                          <div class='p-8 text-center text-muted-foreground'>
+                            <p>No tokens created by cards in this deck.</p>
+                            <Button
+                              class='mt-3'
+                              type='button'
+                              variant='secondary'
+                              onClick={() => setTypeFilter(null)}>
+                              Show all cards
+                            </Button>
+                          </div>
+                        }>
+                        {(entry, index) => {
+                          const tokenKey = () => getTokenKey(entry.detail);
+                          return (
+                            <DeckGridCard
+                              variant='token'
+                              storageKey={tokenKey()}
+                              index={index()}
+                              card={() => deckTokenEntryList()[index()]}
+                              pinnedPrintings={getTokenPinnedPrintings(tokenKey())}
+                              updateDeck={updateDeck}
+                              onChangePrinting={changeTokenPrinting}
+                              onPreview={src => setSearchParams({ dialog: 'card-preview', src })}
+                              onOpenPrintings={() => openTokenPrintingPicker(tokenKey())}
+                            />
+                          );
+                        }}
+                      </For>
+                    </Show>
+                  </Show>
                 }>
                 <For
                   each={searchResults()}
@@ -1020,6 +1161,29 @@ export const DeckEditor: Component<Props> = props => {
             onSelectCustomArt={option => {
               changeCardCustomArt(printingPickerKey()!, option);
               setPrintingPickerKey(undefined);
+            }}
+          />
+        </Show>
+        <Show
+          when={
+            tokenPrintingPickerKey() &&
+            deckTokenEntryList().find(item => getTokenKey(item.detail) === tokenPrintingPickerKey())
+          }>
+          <PrintingPickerModal
+            entry={
+              deckTokenEntryList().find(
+                item => getTokenKey(item.detail) === tokenPrintingPickerKey(),
+              )!
+            }
+            pinnedPrintings={getTokenPinnedPrintings(tokenPrintingPickerKey()!)}
+            onClose={() => setTokenPrintingPickerKey(undefined)}
+            onSelect={printing => {
+              void changeTokenPrinting(tokenPrintingPickerKey()!, printing);
+              setTokenPrintingPickerKey(undefined);
+            }}
+            onSelectCustomArt={option => {
+              changeTokenCustomArt(tokenPrintingPickerKey()!, option);
+              setTokenPrintingPickerKey(undefined);
             }}
           />
         </Show>

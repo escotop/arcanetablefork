@@ -902,6 +902,7 @@ function getCounterLabel(
     case 'number':
       return `${value.toLocaleString()} ${name}`;
     case 'boolean':
+      if (value && name.toLowerCase() === 'token') return 'Token';
       return value ? `is ${name}` : ``;
     default:
       return `${value} ${name}`;

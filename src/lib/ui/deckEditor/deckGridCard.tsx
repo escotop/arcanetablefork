@@ -20,9 +20,12 @@ interface Props {
   onChangePrinting(storageKey: string, printing: CardPrintingOption): void;
   onPreview(src: string): void;
   onOpenPrintings?(): void;
+  variant?: 'default' | 'token';
+  pinnedPrintings?: CardPrintingOption[];
 }
 
 const DeckGridCard: Component<Props> = props => {
+  const isToken = () => props.variant === 'token';
   let rootRef: HTMLDivElement | undefined;
 
   onMount(() => {
@@ -65,6 +68,7 @@ const DeckGridCard: Component<Props> = props => {
           onClick={e => e.stopPropagation()}>
           <PrintingSelect
             entry={props.card()!}
+            pinnedPrintings={props.pinnedPrintings}
             onSelect={printing => props.onChangePrinting(props.storageKey, printing)}
           />
         </div>
@@ -125,7 +129,7 @@ const DeckGridCard: Component<Props> = props => {
               }>
               <div class='pl-2'>{props.card()?.name}</div>
             </Show>
-            <Show when={props.card()?.qty > 0}>
+            <Show when={props.card()?.qty > 0 && !isToken()}>
               <Button
                 size='icon'
                 variant='ghost'
@@ -138,21 +142,23 @@ const DeckGridCard: Component<Props> = props => {
                 <SubIcon class='text-white' style='filter: drop-shadow(2px 4px 6px black);' />
               </Button>
             </Show>
-            <Show when={props.card()?.qty > 0}>{props.card()?.qty}</Show>
-            <Button
-              size='icon'
-              variant='ghost'
-              type='button'
-              onClick={() => {
-                const card = props.card();
-                if (!card) return;
-                if (props.card()?.qty > 0) {
-                  return props.updateDeck('cards', props.storageKey, 'qty', (qty = 1) => qty + 1);
-                }
-                props.updateDeck('cards', props.storageKey, { ...card, qty: 1 });
-              }}>
-              <AddIcon class='text-white' style='filter: drop-shadow(2px 4px 6px black);' />
-            </Button>
+            <Show when={props.card()?.qty > 0 && !isToken()}>{props.card()?.qty}</Show>
+            <Show when={!isToken()}>
+              <Button
+                size='icon'
+                variant='ghost'
+                type='button'
+                onClick={() => {
+                  const card = props.card();
+                  if (!card) return;
+                  if (props.card()?.qty > 0) {
+                    return props.updateDeck('cards', props.storageKey, 'qty', (qty = 1) => qty + 1);
+                  }
+                  props.updateDeck('cards', props.storageKey, { ...card, qty: 1 });
+                }}>
+                <AddIcon class='text-white' style='filter: drop-shadow(2px 4px 6px black);' />
+              </Button>
+            </Show>
           </div>
         </div>
       </div>

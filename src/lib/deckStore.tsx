@@ -97,6 +97,7 @@ export function getDeckStore(): DeckStore {
 const DEFAULT_DECK = {
   cards: {},
   inPlay: {},
+  tokens: {},
 };
 
 export function getCardKey(entry: CardEntry) {
@@ -158,6 +159,19 @@ async function hydrateCardEntries(
   }
 }
 
+async function hydrateTokenEntries(
+  tokenEntries: Record<string, DetailedCardEntry>,
+  cache: Map<string, DetailedCardEntry>,
+  target: Record<string, DetailedCardEntry>,
+) {
+  await Promise.all(
+    Object.entries(tokenEntries).map(async ([tokenKey, card]) => {
+      if ((card.qty ?? 1) < 1) return;
+      target[tokenKey] = await hydrateCardEntry(card, cache).catch(() => card);
+    }),
+  );
+}
+
 export async function hydrateDeck(originalDeck: Deck) {
   let cache = new Map();
 
@@ -180,13 +194,16 @@ export async function hydrateDeck(originalDeck: Deck) {
 
   let deckCards = Object.values(deck.cards);
   let inPlayCards = Object.values(deck.inPlay ?? {});
+  const tokenEntries = deck.tokens ?? {};
   deck.cards = {};
   deck.inPlay = {};
+  deck.tokens = {};
 
   await hydrateCardEntries(deckCards, cache, deck.cards);
 
   const syncedInPlay = syncInPlayEntries(inPlayCards, deck.cards);
   await hydrateCardEntries(syncedInPlay, cache, deck.inPlay);
+  await hydrateTokenEntries(tokenEntries, cache, deck.tokens);
 
   deck = Object.assign({}, structuredClone(DEFAULT_DECK), deck);
 
@@ -194,7 +211,7 @@ export async function hydrateDeck(originalDeck: Deck) {
 }
 
 export function serializeDeck(deck: Deck) {
-  const serializedDeck = { ...deck, cards: {}, inPlay: {} };
+  const serializedDeck = { ...deck, cards: {}, inPlay: {}, tokens: {} };
 
   for (const [name, card] of Object.entries(deck.cards)) {
     if (card.qty < 1) continue;
@@ -204,6 +221,11 @@ export function serializeDeck(deck: Deck) {
   for (const [name, card] of Object.entries(deck.inPlay ?? {})) {
     if (card.qty < 1) continue;
     serializedDeck.inPlay[name] = { ...card, detail: undefined };
+  }
+
+  for (const [name, card] of Object.entries(deck.tokens ?? {})) {
+    if (card.qty < 1) continue;
+    serializedDeck.tokens[name] = { ...card, detail: undefined };
   }
 
   Object.assign(serializedDeck, getDeckCoverMetadata(deck));
