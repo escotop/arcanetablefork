@@ -5,7 +5,7 @@ import set from 'lodash-es/set';
 import { twMerge } from 'tailwind-merge';
 import { Box3, Euler, Intersection, Matrix4, Mesh, Object3D, Quaternion, Vector3 } from 'three';
 import { CARD_STACK_OFFSET, CARD_THICKNESS, CARD_WIDTH } from './constants';
-import { cardsById, camera } from './globals';
+import { cardsById, camera, zonesById } from './globals';
 import { createAnimationEvent } from './createEvents';
 import { animateObject } from './animations';
 import { resolveStackAnchor } from './footprintOverlap';
@@ -128,19 +128,40 @@ export function shuffleItems<T>(items: T[], order?: number[]) {
   return newOrder;
 }
 
+export function resolveDropTargetObject(object: Object3D): Object3D | undefined {
+  let current: Object3D | null = object;
+  while (current) {
+    const ud = current.userData;
+    if (ud?.zoneId && zonesById.has(ud.zoneId)) {
+      return current;
+    }
+    if (
+      ud?.location === 'deck' ||
+      ud?.location === 'graveyard' ||
+      ud?.location === 'exile' ||
+      ud?.location === 'hand'
+    ) {
+      return current;
+    }
+    current = current.parent;
+  }
+  return undefined;
+}
+
 export function restackItemsLocally(items: Object3D[], intersections: Intersection[]) {
   if (!intersections.length) return;
 
   let targetsById = Object.fromEntries(items.map(target => [target.userData.id, target]));
   let intersection = intersections.find(i => {
     if (targetsById[i.object.userData.id]) return false;
-    return i.object.userData.isInteractive || i.object.userData.zone || i.object.userData.zoneId;
+    return resolveDropTargetObject(i.object) !== undefined;
   });
 
   if (!intersection) return;
   if (!items?.[0]?.parent) return;
 
-  const destZoneObject = intersection.object;
+  const destZoneObject = resolveDropTargetObject(intersection.object);
+  if (!destZoneObject) return;
   const localAnchor = destZoneObject.worldToLocal(intersection.point.clone());
   const resolvedLocal = resolveStackAnchor(localAnchor, destZoneObject, items);
   const anchor = items[0].parent.worldToLocal(destZoneObject.localToWorld(resolvedLocal));

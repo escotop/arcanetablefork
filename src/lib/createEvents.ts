@@ -5,6 +5,7 @@ import { serializeCardUserDataForLog } from './gameLogEvents';
 import { Intersection, Object3D } from 'three';
 import { AnimationOpts, serializeAnimation } from './animations';
 import { resolveStackAnchor } from './footprintOverlap';
+import { resolveDropTargetObject } from './utils';
 
 interface DefaultAddOptions {
   destroy?: boolean;
@@ -85,15 +86,17 @@ export function createAnimationEvent(target: Object3D, animation: AnimationOpts)
 }
 
 export function createRestackEvent(intersection: Intersection, items: Object3D[]) {
-  const zone = zonesById.get(intersection.object.userData.zoneId || intersection.object.id)!;
+  const destObject = resolveDropTargetObject(intersection.object) ?? intersection.object;
+  const zoneId = destObject.userData.zoneId ?? destObject.userData.id;
+  const zone = zonesById.get(zoneId)!;
   expect(!!zone, `zone not found`);
-  const anchor = zone.mesh.worldToLocal(intersection.point.clone());
-  anchor.copy(resolveStackAnchor(anchor, zone.mesh, items));
+  const anchor = destObject.worldToLocal(intersection.point.clone());
+  anchor.copy(resolveStackAnchor(anchor, destObject, items));
 
   return {
     type: 'restack',
     payload: {
-      zoneId: intersection.object.userData.zoneId,
+      zoneId: zone.id,
       anchor: anchor.toArray(),
       items: items.map(item => ({
         id: item.userData.id,

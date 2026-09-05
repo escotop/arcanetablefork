@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import { createStore, SetStoreFunction } from 'solid-js/store';
-import { CatmullRomCurve3, Euler, Group, Mesh, Vector3 } from 'three';
+import { CatmullRomCurve3, BoxGeometry, Euler, Group, Mesh, MeshBasicMaterial, Vector3 } from 'three';
 import { animateObject, queueAnimationGroup } from './animations';
 import {
   cleanupCard,
@@ -103,6 +103,16 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
     this.stackMesh.userData.zoneId = id;
     this.mesh.add(this.stackMesh);
     this.mesh.add(this.topProxyMesh);
+
+    const hitBox = new Mesh(
+      new BoxGeometry(CARD_WIDTH * 1.15, CARD_HEIGHT * 1.15, CARD_THICKNESS * 8),
+      new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+    );
+    hitBox.userData.zoneId = id;
+    hitBox.userData.location = 'deck';
+    hitBox.userData.isOrnament = true;
+    hitBox.position.z = CARD_THICKNESS * 3;
+    this.mesh.add(hitBox);
 
     createRoot(destroy => {
       this.destroyReactivity = destroy;

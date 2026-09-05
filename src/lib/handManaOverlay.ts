@@ -14,15 +14,17 @@ import {
   expandManaCostForDisplay,
   getCardManaCost,
   MANA_ICON_BY_BUCKET,
+  PHYREXIAN_COLORLESS_ICON,
+  PHYREXIAN_ICON_BY_BUCKET,
   type ManaDisplayItem,
 } from './manaCost';
 
-const LABEL_SCALE = 24;
+const LABEL_SCALE = 20;
 const PIP_SIZE = 36;
 const PIP_GAP = 3;
 const PIP_BORDER = 2;
 /** How far above the card top edge the pip row sits (world units). */
-const PIP_OVERHANG = 0.55;
+const PIP_OVERHANG = 0.66;
 
 const manaTextureCache = new Map<string, { texture: Texture; width: number; height: number }>();
 const textCanvas = document.createElement('canvas');
@@ -66,13 +68,21 @@ let manaIconsLoadPromise: Promise<void> | undefined;
 function preloadManaIcons() {
   if (manaIconsLoadPromise) return manaIconsLoadPromise;
 
+  const iconSources: [string, string][] = [
+    ...Object.entries(MANA_ICON_BY_BUCKET),
+    ...Object.entries(PHYREXIAN_ICON_BY_BUCKET).map(
+      ([bucket, src]) => [`phyrexian-${bucket}`, src] as [string, string],
+    ),
+    ['phyrexian-C', PHYREXIAN_COLORLESS_ICON],
+  ];
+
   manaIconsLoadPromise = Promise.all(
-    Object.entries(MANA_ICON_BY_BUCKET).map(
-      ([bucket, src]) =>
+    iconSources.map(
+      ([key, src]) =>
         new Promise<void>(resolve => {
           const img = new Image();
           img.onload = () => {
-            loadedManaIcons.set(bucket, processIconTransparency(img));
+            loadedManaIcons.set(key, processIconTransparency(img));
             resolve();
           };
           img.onerror = () => resolve();
@@ -135,13 +145,20 @@ function drawVariablePip(
   drawFilledPip(ctx, x, y, '#cac5c0', letter);
 }
 
-function drawSymbolPip(
+function manaIconKey(item: Extract<ManaDisplayItem, { kind: 'symbol' | 'phyrexian' }>) {
+  if (item.kind === 'phyrexian') {
+    return item.bucket === 'C' ? 'phyrexian-C' : `phyrexian-${item.bucket}`;
+  }
+  return item.bucket;
+}
+
+function drawIconPip(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  item: Extract<ManaDisplayItem, { kind: 'symbol' }>,
+  item: Extract<ManaDisplayItem, { kind: 'symbol' | 'phyrexian' }>,
 ) {
-  const img = loadedManaIcons.get(item.bucket);
+  const img = loadedManaIcons.get(manaIconKey(item));
   const size = PIP_SIZE - 2;
   const left = x - size / 2;
   const top = y - size / 2;
@@ -185,7 +202,7 @@ function createManaCostLabel(manaCost: string) {
     } else if (item.kind === 'variable') {
       drawVariablePip(ctx, x, y, item.letter);
     } else {
-      drawSymbolPip(ctx, x, y, item);
+      drawIconPip(ctx, x, y, item);
     }
   });
 

@@ -2,6 +2,7 @@ import { ensureCardMesh, loadCardTextures, setCardData, updateModifiers } from '
 import { Card, CardZone } from './constants';
 import { cardsById, getLocalPlayerClientId, sendEvent } from './globals';
 import { Deck } from './deck';
+import { Hand } from './hand';
 import { serializeCardUserDataForLog } from './gameLogEvents';
 import { onStackCardAdded } from './cardLoading';
 import type { CardStack } from './cardStack';
@@ -10,6 +11,7 @@ import { devLog } from './devLog';
 
 interface DefaultAddOptions {
   destroy?: boolean;
+  insertIndex?: number;
 }
 
 interface ExtendedOptions<AddOptions extends DefaultAddOptions = {}> {
@@ -54,6 +56,33 @@ export async function transferCard<AddOptions extends {}>(
   }
 
   if (!card.mesh) return;
+
+  if (fromZone === toZone && toZone?.zone === 'hand') {
+    (toZone as Hand).reorderCard(
+      card,
+      (addOptions as DefaultAddOptions).insertIndex ?? fromZone.cards.indexOf(card),
+    );
+
+    if (!preventTransmit) {
+      sendEvent({
+        type: 'transferCard',
+        payload: {
+          userData: serializeCardUserDataForLog(card.mesh.userData),
+          fromZoneId: fromZone?.id,
+          toZoneId: toZone?.id,
+          extendedOptions: {
+            addOptions: {
+              ...addOptions,
+              skipAnimation: false,
+            },
+            userData,
+            preventTransmit: true,
+          },
+        },
+      });
+    }
+    return;
+  }
 
   if (addOptions?.skipAnimation) {
     setCardData(card.mesh, 'skipAnimation', true);

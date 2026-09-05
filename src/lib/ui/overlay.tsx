@@ -213,7 +213,7 @@ export default function Overlay() {
       <Show when={!isSpectating()}>
         <div class={styles.bottomRightHud}>
           <Show when={playArea()}>
-            <div class={`text-shadow ${styles.handCounter}`}>
+            <div class={styles.handCounter}>
               Hand ({playArea()!.hand.observable.cardCount})
             </div>
           </Show>

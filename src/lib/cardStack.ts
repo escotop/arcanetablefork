@@ -9,6 +9,7 @@ import {
   LineBasicMaterial,
   LineSegments,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Vector3,
 } from 'three';
@@ -59,6 +60,15 @@ export class CardStack implements CardZone {
     this.mesh.userData.zoneId = id;
     this.mesh.userData.id = id;
 
+    const hitBox = new Mesh(
+      new BoxGeometry(CARD_WIDTH * 1.15, CARD_HEIGHT * 1.15, CARD_THICKNESS * 4),
+      new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+    );
+    hitBox.userData.zoneId = id;
+    hitBox.userData.location = zone;
+    hitBox.userData.isOrnament = true;
+    this.mesh.add(hitBox);
+
     createRoot(destroy => {
       this.destroyReactivity = destroy;
 
@@ -97,8 +107,9 @@ export class CardStack implements CardZone {
 
   updateCardPositions() {
     let cummulativeZ = 0;
-    this.mesh.children.forEach((card, i) => {
-      card.position.setZ(cummulativeZ);
+    this.mesh.children.forEach(child => {
+      if (child.userData.isOrnament) return;
+      child.position.setZ(cummulativeZ);
       cummulativeZ += CARD_THICKNESS;
     });
   }
@@ -131,7 +142,7 @@ export class CardStack implements CardZone {
       duration: 0.2,
       path: new CatmullRomCurve3([
         initialPosition,
-        new Vector3(0, 0, CARD_THICKNESS * this.mesh.children.length),
+        new Vector3(0, 0, CARD_THICKNESS * this.cards.length),
       ]),
       from: {
         rotation: initialRotation,

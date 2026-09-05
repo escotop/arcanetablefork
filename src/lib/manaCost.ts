@@ -12,7 +12,8 @@ export interface ManaPip {
 export type ManaDisplayItem =
   | { kind: 'generic'; value: number }
   | { kind: 'variable'; letter: 'X' | 'Y' | 'Z' }
-  | { kind: 'symbol'; bucket: Exclude<ManaBucket, 'C'> };
+  | { kind: 'symbol'; bucket: Exclude<ManaBucket, 'C'> }
+  | { kind: 'phyrexian'; bucket: Exclude<ManaBucket, 'C'> | 'C' };
 
 export const MANA_ICON_BY_BUCKET: Record<Exclude<ManaBucket, 'C'>, string> = {
   W: '/plains.png',
@@ -21,6 +22,24 @@ export const MANA_ICON_BY_BUCKET: Record<Exclude<ManaBucket, 'C'>, string> = {
   R: '/mountain.png',
   G: '/forest.png',
 };
+
+export const PHYREXIAN_ICON_BY_BUCKET: Record<Exclude<ManaBucket, 'C'>, string> = {
+  W: '/phixyellow.png',
+  U: '/phixblue.png',
+  B: '/phixgrey.png',
+  R: '/phixred.png',
+  G: '/phixgreen.png',
+};
+
+export const PHYREXIAN_COLORLESS_ICON = '/phixgrey.png';
+
+const COLORED_MANA = new Set<string>(['W', 'U', 'B', 'R', 'G']);
+
+function phyrexianBucket(raw: string): Exclude<ManaBucket, 'C'> | 'C' | undefined {
+  if (raw === 'P/P') return 'C';
+  const match = raw.match(/^([WUBRG])\/P$/);
+  return match ? (match[1] as Exclude<ManaBucket, 'C'>) : undefined;
+}
 
 const MANA_COLORS: Record<ManaBucket, { color: string; textColor: string }> = {
   W: { color: '#f8f6d8', textColor: '#1a1a1a' },
@@ -75,11 +94,21 @@ export function parseManaCost(manaCost: string): ManaPip[] {
       continue;
     }
 
+    const phyrexian = phyrexianBucket(raw);
+    if (phyrexian) {
+      if (phyrexian === 'C') {
+        counts.C += 1;
+      } else {
+        counts[phyrexian] += 1;
+      }
+      continue;
+    }
+
     if (raw.includes('/')) {
-      for (const part of raw.split('/').map(p => p.replace(/P$/, ''))) {
+      for (const part of raw.split('/')) {
         if (/^\d+$/.test(part)) {
           counts.C += Number(part);
-        } else if (part in MANA_COLORS && part !== 'C') {
+        } else if (COLORED_MANA.has(part)) {
           counts[part as ManaBucket] += 1;
         }
       }
@@ -133,11 +162,17 @@ export function expandManaCostForDisplay(manaCost: string): ManaDisplayItem[] {
 
     if (NON_MANA_SYMBOLS.has(raw)) continue;
 
+    const phyrexian = phyrexianBucket(raw);
+    if (phyrexian) {
+      items.push({ kind: 'phyrexian', bucket: phyrexian });
+      continue;
+    }
+
     if (raw.includes('/')) {
-      for (const part of raw.split('/').map(p => p.replace(/P$/, ''))) {
+      for (const part of raw.split('/')) {
         if (/^\d+$/.test(part)) {
           items.push({ kind: 'generic', value: Number(part) });
-        } else if (part in MANA_COLORS && part !== 'C') {
+        } else if (COLORED_MANA.has(part)) {
           items.push({ kind: 'symbol', bucket: part as Exclude<ManaBucket, 'C'> });
         }
       }

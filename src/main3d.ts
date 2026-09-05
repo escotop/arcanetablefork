@@ -123,6 +123,9 @@ let mouse: THREE.Vector2;
 let cameraMouse: THREE.Vector2;
 let outlinePass: OutlinePass;
 let dragTargets: THREE.Object3D[];
+let dragStartMouse = new THREE.Vector2();
+/** NDC Y delta above drag start before a hand-origin drag targets leaving the hand. */
+const HAND_DRAG_OUT_NDC_DELTA = 0.06;
 let hand: Hand;
 let time = 0;
 let playArea: PlayArea;
@@ -884,12 +887,32 @@ function onDocumentClick(event: PointerEvent) {
   target.dispatchEvent({ type: 'click', event });
 }
 
+function resolveStackTopCardMesh(zoneId: string | undefined) {
+  if (!zoneId) return undefined;
+  const zone = zonesById.get(zoneId);
+  if (!zone || !('cards' in zone) || !zone.cards.length) return undefined;
+  return zone.cards[zone.cards.length - 1].mesh;
+}
+
 function resolveInteractiveTarget(object: THREE.Object3D): THREE.Object3D {
   let current: THREE.Object3D | null = object;
   while (current) {
     const ud = current.userData;
-    if (ud?.isInteractive && ud?.id) return current;
+    if (ud?.isOrnament) {
+      current = current.parent;
+      continue;
+    }
+    if (ud?.isInteractive && ud?.id && cardsById.has(ud.id)) return current;
     if (ud?.zone === 'deck') return current;
+    if (
+      ud?.location === 'graveyard' ||
+      ud?.location === 'exile' ||
+      ud?.zone === 'graveyard' ||
+      ud?.zone === 'exile'
+    ) {
+      const topCard = resolveStackTopCardMesh(ud.zoneId ?? ud.id);
+      if (topCard) return topCard;
+    }
     current = current.parent;
   }
   return object;
@@ -898,6 +921,7 @@ function resolveInteractiveTarget(object: THREE.Object3D): THREE.Object3D {
 function onDocumentDragStart(event: PointerEvent) {
   event.preventDefault();
   updateMouse(event);
+  dragStartMouse.copy(mouse);
   event.dataTransfer.dropEffect = 'move';
   if (isGameplayBlocked()) return;
   raycaster.setFromCamera(mouse, camera);
@@ -910,6 +934,7 @@ function onDocumentDragStart(event: PointerEvent) {
   let targets = [target];
 
   if (target.userData.zone === 'deck' || target.userData.location === 'deck') return;
+  if (!cardsById.has(target.userData.id)) return;
 
   if (!target.userData.isInteractive) {
     setHoverSignal();
@@ -958,7 +983,7 @@ function resolveDropZone(object: THREE.Object3D) {
   let current: THREE.Object3D | null = object;
   while (current) {
     const ud = current.userData;
-    const zoneId = ud?.zoneId ?? (ud?.zone === 'deck' ? ud?.id : undefined);
+    const zoneId = ud?.zoneId ?? (ud?.zone === 'deck' || ud?.zone === 'hand' ? ud?.id : undefined);
     if (zoneId) {
       const zone = zonesById.get(zoneId);
       if (zone) return zone;
@@ -968,22 +993,110 @@ function resolveDropZone(object: THREE.Object3D) {
   return undefined;
 }
 
-/** Raycast zone containers only so dragged cards do not block drops onto the battlefield. */
-function findDropIntersection(dragged: THREE.Object3D[]) {
-  const zoneBoxes: THREE.Object3D[] = [];
-  for (const area of Object.values(playAreas)) {
-    zoneBoxes.push(area.battlefieldZone.mesh);
-  }
+function getHandDropInsertIndex(hand: Hand, intersection: THREE.Intersection | undefined, dragged: THREE.Object3D[]) {
+  return hand.getDropInsertIndex(
+    mouse,
+    intersection,
+    dragged.map(target => target.userData.id),
+  );
+}
 
-  const zoneHits = raycaster.intersectObjects(zoneBoxes, false);
-  for (const hit of zoneHits) {
-    if (resolveDropZone(hit.object)) return hit;
+function isHandZoneHit(intersection: THREE.Intersection) {
+  const zone = resolveDropZone(intersection.object);
+  return zone?.zone === 'hand' || intersection.object.userData.location === 'hand';
+}
+
+function isPriorityStackZoneHit(intersection: THREE.Intersection) {
+  const zone = resolveDropZone(intersection.object);
+  if (zone && ['deck', 'graveyard', 'exile', 'battlefield'].includes(zone.zone)) return true;
+
+  const location = intersection.object.userData.location;
+  return location === 'deck' || location === 'graveyard' || location === 'exile';
+}
+
+
+function isDraggingOutOfHand(dragged: THREE.Object3D[]) {
+  if (!dragged.every(target => target.userData.location === 'hand')) return false;
+  return mouse.y > dragStartMouse.y + HAND_DRAG_OUT_NDC_DELTA;
+}
+
+function shouldUseHandDropTargeting(dragged: THREE.Object3D[]) {
+  const hand = getLocalPlayArea()?.hand;
+  if (!hand?.isLocalHand || !hand.isMouseInDropZone(mouse)) return false;
+  return !isDraggingOutOfHand(dragged);
+}
+
+function getDragRestackIntersections(dragged: THREE.Object3D[]) {
+  const hand = getLocalPlayArea()?.hand;
+  if (shouldUseHandDropTargeting(dragged)) {
+    const handIntersection = hand!.findDragIntersection(raycaster, mouse);
+    if (handIntersection) return [handIntersection];
   }
 
   const targetsById = Object.fromEntries(dragged.map(target => [target.userData.id, target]));
+  const filtered = raycaster.intersectObject(scene).filter(hit => {
+    if (targetsById[hit.object.userData.id]) return false;
+    if (isHandZoneHit(hit)) return false;
+    return true;
+  });
+  if (filtered.length) return filtered;
+
+  if (isDraggingOutOfHand(dragged)) {
+    const zoneBoxes: THREE.Object3D[] = [];
+    for (const area of Object.values(playAreas)) {
+      zoneBoxes.push(area.battlefieldZone.mesh);
+    }
+    return raycaster.intersectObjects(zoneBoxes, false);
+  }
+
+  return filtered;
+}
+
+function resolveDragDropIntersection(dragged: THREE.Object3D[]) {
+  const hand = getLocalPlayArea()?.hand;
+  if (shouldUseHandDropTargeting(dragged)) {
+    return hand!.findDragIntersection(raycaster, mouse);
+  }
+
+  return findDropIntersection(dragged, { excludeHand: true });
+}
+
+function updateHandDragPreview(dragged: THREE.Object3D[]) {
+  const hand = getLocalPlayArea()?.hand;
+  if (!hand?.isLocalHand || !shouldUseHandDropTargeting(dragged)) {
+    hand?.clearDragPreview();
+    return;
+  }
+
+  const handIntersection = hand.findDragIntersection(raycaster, mouse);
+  if (!handIntersection) {
+    hand.clearDragPreview();
+    return;
+  }
+
+  hand.setDragPreview(
+    getHandDropInsertIndex(hand, handIntersection, dragged),
+    dragged.map(target => target.userData.id),
+  );
+}
+
+/** Raycast zone containers only so dragged cards do not block drops onto the battlefield. */
+function findDropIntersection(
+  dragged: THREE.Object3D[],
+  { excludeHand = false }: { excludeHand?: boolean } = {},
+) {
+  const targetsById = Object.fromEntries(dragged.map(target => [target.userData.id, target]));
   const sceneHits = raycaster.intersectObject(scene);
+
   for (const hit of sceneHits) {
     if (targetsById[hit.object.userData.id]) continue;
+    if (excludeHand && isHandZoneHit(hit)) continue;
+    if (isPriorityStackZoneHit(hit)) return hit;
+  }
+
+  for (const hit of sceneHits) {
+    if (targetsById[hit.object.userData.id]) continue;
+    if (excludeHand && isHandZoneHit(hit)) continue;
     if (resolveDropZone(hit.object)) return hit;
     if (
       hit.object.userData.isInteractive ||
@@ -992,6 +1105,16 @@ function findDropIntersection(dragged: THREE.Object3D[]) {
     ) {
       return hit;
     }
+  }
+
+  const zoneBoxes: THREE.Object3D[] = [];
+  for (const area of Object.values(playAreas)) {
+    zoneBoxes.push(area.battlefieldZone.mesh);
+  }
+
+  const zoneHits = raycaster.intersectObjects(zoneBoxes, false);
+  for (const hit of zoneHits) {
+    if (resolveDropZone(hit.object)) return hit;
   }
 }
 
@@ -1024,7 +1147,7 @@ async function onDocumentDrop(event) {
   try {
     raycaster.setFromCamera(mouse, camera);
 
-    let intersection = findDropIntersection(dragged);
+    let intersection = resolveDragDropIntersection(dragged);
     if (!intersection) return;
 
     let shouldClearSelection = false;
@@ -1032,9 +1155,13 @@ async function onDocumentDrop(event) {
     if (!toZone) return;
     const toZoneId = toZone.id;
 
-    restackItemsLocally(dragged, [intersection]);
+    restackItemsLocally(dragged, getDragRestackIntersections(dragged));
 
     const sameZoneTargets: THREE.Object3D[] = [];
+    let nextHandInsertIndex =
+      toZone.zone === 'hand'
+        ? getHandDropInsertIndex(toZone as Hand, intersection, dragged)
+        : undefined;
 
     for (const target of dragged) {
       setCardData(target, 'isDragging', false);
@@ -1044,13 +1171,34 @@ async function onDocumentDrop(event) {
       expect(!!fromZone, `fromZone not found `, { fromZone });
 
       if (fromZoneId && fromZoneId === toZoneId) {
+        if (toZone.zone === 'hand') {
+          const hand = toZone as Hand;
+          const card = cardsById.get(target.userData.id)!;
+          const insertIndex = nextHandInsertIndex ?? hand.cards.indexOf(card);
+          dispatchGameEvent(
+            createTransferCardEvent(card, hand, hand, {
+              addOptions: {
+                insertIndex,
+                skipLocalAnimation: true,
+              },
+            }),
+          );
+          if (nextHandInsertIndex !== undefined) nextHandInsertIndex++;
+          shouldClearSelection = true;
+          continue;
+        }
+
         setCardData(target, `zone.${toZone.id}.position`, target.position.toArray());
         setCardData(target, `zone.${toZone.id}.rotation`, target.rotation.toArray());
         sameZoneTargets.push(target);
         continue;
       }
 
-      let card = cardsById.get(target.userData.id)!;
+      let card = cardsById.get(target.userData.id);
+      if (!card) {
+        const cardMesh = getCardMesh(target);
+        if (cardMesh) card = cardsById.get(cardMesh.userData.id);
+      }
       let position =
         toZone.zone === 'battlefield'
           ? getBattlefieldDropPosition(toZone, intersection, dragged, target)
@@ -1060,13 +1208,16 @@ async function onDocumentDrop(event) {
       dispatchGameEvent(
         createTransferCardEvent(card, fromZone, toZone, {
           addOptions: {
-            skipLocalAnimation: true,
+            ...(toZone.zone !== 'hand' ? { skipLocalAnimation: true } : {}),
             ...(toZone.zone === 'deck'
               ? { location: 'top' as const }
-              : { positionArray: position.toArray() }),
+              : toZone.zone === 'hand'
+                ? { insertIndex: nextHandInsertIndex ?? toZone.cards.length }
+                : { positionArray: position.toArray() }),
           },
         }),
       );
+      if (toZone.zone === 'hand' && nextHandInsertIndex !== undefined) nextHandInsertIndex++;
       shouldClearSelection = true;
     }
 
@@ -1094,6 +1245,7 @@ async function onDocumentDrop(event) {
       });
     }
   } finally {
+    getLocalPlayArea()?.hand.clearDragPreview();
     for (const target of dragged) {
       setCardData(target, 'isDragging', false);
     }
@@ -1142,9 +1294,8 @@ function onRendererMouseMove(event) {
   if (dragTargets?.length) {
     raycaster.setFromCamera(mouse, camera);
 
-    let intersections = raycaster.intersectObject(scene);
-    const dropIntersection = findDropIntersection(dragTargets);
-    restackItemsLocally(dragTargets, dropIntersection ? [dropIntersection] : intersections);
+    restackItemsLocally(dragTargets, getDragRestackIntersections(dragTargets));
+    updateHandDragPreview(dragTargets);
 
     if (hoverSignal()) {
       setHoverSignal(signal => {

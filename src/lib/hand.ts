@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { CatmullRomCurve3, Euler, Group, Object3D, Vector3 } from 'three';
+import { CatmullRomCurve3, Euler, Group, Intersection, Mesh, Object3D, Plane, Raycaster, Vector3 } from 'three';
 import { animateObject, cancelAnimation } from './animations';
 import { cleanupCard, getSerializableCard, setCardData } from './card';
 import { Card, CARD_HEIGHT, CardZone } from './constants';
@@ -15,6 +15,14 @@ const HAND_ARC_RADIUS = 140;
 const HAND_ARC_MAX_SPREAD_DEG = 42;
 const HAND_ARC_LIFT = 0.12;
 const HAND_FAN_ROTATION = 0.35;
+
+/** Screen-space drop zone: bottom 15% of the viewport (NDC, y=-1 is bottom). */
+const HAND_DROP_ZONE_NDC = {
+  minX: -0.98,
+  maxX: 0.98,
+  minY: -1,
+  maxY: -0.8,
+} as const;
 
 function applyHandRenderOrder(cards: Card[], focusedIndex?: number) {
   for (let i = 0; i < cards.length; i++) {
@@ -51,6 +59,28 @@ function getHandCardLayout(index: number, count: number) {
   };
 }
 
+function mapCardIndexToLayoutIndex(
+  cards: Card[],
+  cardIndex: number,
+  excludeIds: Set<string>,
+  previewInsertIndex?: number,
+) {
+  let layoutIndex = 0;
+  for (let i = 0; i < cards.length; i++) {
+    if (excludeIds.has(cards[i].id)) continue;
+    if (previewInsertIndex !== undefined && layoutIndex === previewInsertIndex) {
+      layoutIndex++;
+    }
+    if (i === cardIndex) return layoutIndex;
+    layoutIndex++;
+  }
+  return cardIndex;
+}
+
+function clampInsertIndex(index: number, length: number) {
+  return Math.max(0, Math.min(index, length));
+}
+
 export class Hand implements CardZone {
   public mesh: Group;
   public cards: Card[] = [];
@@ -68,6 +98,7 @@ export class Hand implements CardZone {
     this.mesh = new Group();
     this.mesh.userData.isInteractive = true;
     this.mesh.userData.zone = 'hand';
+    this.mesh.userData.zoneId = id;
     this.mesh.setRotationFromEuler(HAND_ROTATION.clone());
     this.mesh.position.set(0, -105, 10);
     this.mesh.userData.id = id;
@@ -82,6 +113,159 @@ export class Hand implements CardZone {
     zonesById.set(this.id, this);
 
     this.cardMap = new Map<string, Card>();
+  }
+
+  isMouseInDropZone(mouseNdc: { x: number; y: number }) {
+    return (
+      mouseNdc.x >= HAND_DROP_ZONE_NDC.minX &&
+      mouseNdc.x <= HAND_DROP_ZONE_NDC.maxX &&
+      mouseNdc.y >= HAND_DROP_ZONE_NDC.minY &&
+      mouseNdc.y <= HAND_DROP_ZONE_NDC.maxY
+    );
+  }
+
+  findDragIntersection(raycaster: Raycaster, mouseNdc: { x: number; y: number }) {
+    if (!this.isMouseInDropZone(mouseNdc)) return undefined;
+
+    const planeHit = this.intersectHandPlane(raycaster);
+    if (planeHit) return planeHit;
+
+    return {
+      distance: 0,
+      point: this.estimateDropPointFromMouse(mouseNdc),
+      object: this.mesh,
+    } as Intersection;
+  }
+
+  getDropInsertIndex(
+    mouseNdc: { x: number; y: number },
+    intersection: Intersection | undefined,
+    excludeIds: Iterable<string> = [],
+  ) {
+    if (intersection) {
+      const localPoint = this.mesh.worldToLocal(intersection.point.clone());
+      return this.getInsertIndexFromLocalPoint(localPoint, excludeIds);
+    }
+    return this.getInsertIndexFromMouseNdc(mouseNdc, excludeIds);
+  }
+
+  private getInsertIndexFromMouseNdc(mouseNdc: { x: number; y: number }, excludeIds: Iterable<string> = []) {
+    const excluded = new Set(excludeIds);
+    const staticCount = this.cards.filter(card => !excluded.has(card.id)).length;
+    const layoutCount = staticCount + 1;
+    if (layoutCount <= 1) return 0;
+
+    const leftX = getHandCardLayout(0, layoutCount).position.x;
+    const rightX = getHandCardLayout(layoutCount - 1, layoutCount).position.x;
+    const t =
+      (mouseNdc.x - HAND_DROP_ZONE_NDC.minX) / (HAND_DROP_ZONE_NDC.maxX - HAND_DROP_ZONE_NDC.minX);
+    const localX = leftX + Math.max(0, Math.min(1, t)) * (rightX - leftX);
+    return this.getInsertIndexFromLocalPoint(new Vector3(localX, 0, 0), excludeIds);
+  }
+
+  private estimateDropPointFromMouse(mouseNdc: { x: number; y: number }) {
+    const layoutCount = Math.max(this.cards.length + 1, 2);
+    const leftX = getHandCardLayout(0, layoutCount).position.x;
+    const rightX = getHandCardLayout(layoutCount - 1, layoutCount).position.x;
+    const t =
+      (mouseNdc.x - HAND_DROP_ZONE_NDC.minX) / (HAND_DROP_ZONE_NDC.maxX - HAND_DROP_ZONE_NDC.minX);
+    const localX = leftX + Math.max(0, Math.min(1, t)) * (rightX - leftX);
+    return this.mesh.localToWorld(new Vector3(localX, 0, 0));
+  }
+
+  private intersectHandPlane(raycaster: Raycaster): Intersection | undefined {
+    this.mesh.updateWorldMatrix(true, false);
+    const normal = new Vector3(0, 0, 1).transformDirection(this.mesh.matrixWorld).normalize();
+    const coplanarPoint = new Vector3().setFromMatrixPosition(this.mesh.matrixWorld);
+    const plane = new Plane().setFromNormalAndCoplanarPoint(normal, coplanarPoint);
+    const point = new Vector3();
+    if (!raycaster.ray.intersectPlane(plane, point)) return undefined;
+
+    return {
+      distance: raycaster.ray.origin.distanceTo(point),
+      point,
+      object: this.mesh,
+    };
+  }
+
+  getInsertIndexFromLocalPoint(localPoint: Vector3, excludeIds: Iterable<string> = []) {
+    const excluded = new Set(excludeIds);
+    const staticCount = this.cards.filter(card => !excluded.has(card.id)).length;
+    const layoutCount = staticCount + 1;
+    if (layoutCount <= 1) return 0;
+
+    let bestIndex = 0;
+    let bestDistance = Infinity;
+    for (let i = 0; i < layoutCount; i++) {
+      const x = getHandCardLayout(i, layoutCount).position.x;
+      const distance = Math.abs(localPoint.x - x);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+    return clampInsertIndex(bestIndex, staticCount);
+  }
+
+  setDragPreview(insertIndex: number, excludeIds: Iterable<string> = []) {
+    const nextExcluded = new Set(excludeIds);
+    if (
+      this.previewInsertIndex === insertIndex &&
+      nextExcluded.size === this.previewExcludeIds.size &&
+      [...nextExcluded].every(id => this.previewExcludeIds.has(id))
+    ) {
+      return;
+    }
+
+    this.previewInsertIndex = insertIndex;
+    this.previewExcludeIds = nextExcluded;
+    this.relayoutCards({ animate: true });
+  }
+
+  clearDragPreview() {
+    if (this.previewInsertIndex === undefined && this.previewExcludeIds.size === 0) return;
+    this.previewInsertIndex = undefined;
+    this.previewExcludeIds.clear();
+    this.relayoutCards({ animate: true });
+  }
+
+  reorderCard(card: Card, insertIndex: number) {
+    const currentIndex = this.cards.indexOf(card);
+    if (currentIndex === -1) return;
+
+    insertIndex = clampInsertIndex(insertIndex, this.cards.length);
+    if (insertIndex === currentIndex) {
+      this.clearDragPreview();
+      this.relayoutCards({ animate: true });
+      return;
+    }
+
+    this.cards.splice(currentIndex, 1);
+    const insertAt = clampInsertIndex(insertIndex, this.cards.length);
+    this.cards.splice(insertAt, 0, card);
+
+    if (this.focusedIndex !== undefined) {
+      if (this.focusedIndex === currentIndex) {
+        this.focusedIndex = insertAt;
+      } else if (currentIndex < this.focusedIndex && insertAt >= this.focusedIndex) {
+        this.focusedIndex--;
+      } else if (currentIndex > this.focusedIndex && insertAt <= this.focusedIndex) {
+        this.focusedIndex++;
+      }
+    }
+    if (this.keyboardFocusedIndex !== undefined) {
+      if (this.keyboardFocusedIndex === currentIndex) {
+        this.keyboardFocusedIndex = insertAt;
+      } else if (currentIndex < this.keyboardFocusedIndex && insertAt >= this.keyboardFocusedIndex) {
+        this.keyboardFocusedIndex--;
+      } else if (currentIndex > this.keyboardFocusedIndex && insertAt <= this.keyboardFocusedIndex) {
+        this.keyboardFocusedIndex++;
+      }
+    }
+
+    this.clearDragPreview();
+    this.relayoutCards({ animate: true });
+    this.syncManaOverlays();
   }
 
   updatePositions() {
@@ -123,12 +307,19 @@ export class Hand implements CardZone {
   private relayoutCards(options: { animate?: boolean; skipIndex?: number } = {}) {
     const { animate = true, skipIndex } = options;
     const count = this.cards.length;
+    const hasPreview = this.previewInsertIndex !== undefined;
+    const staticCount = this.cards.filter(card => !this.previewExcludeIds.has(card.id)).length;
+    const layoutCount = hasPreview ? staticCount + 1 : count;
 
     for (let i = 0; i < count; i++) {
       const cardMesh = this.cards[i]?.mesh;
       if (!cardMesh || cardMesh.userData.location !== 'hand') continue;
+      if (this.previewExcludeIds.has(this.cards[i].id)) continue;
 
-      const layout = getHandCardLayout(i, count);
+      const layoutIndex = hasPreview
+        ? mapCardIndexToLayoutIndex(this.cards, i, this.previewExcludeIds, this.previewInsertIndex)
+        : i;
+      const layout = getHandCardLayout(layoutIndex, layoutCount);
       cardMesh.userData.resting = layout;
 
       if (i === skipIndex || i === this.focusedIndex) continue;
@@ -156,6 +347,8 @@ export class Hand implements CardZone {
 
   private focusedIndex?: number;
   private keyboardFocusedIndex?: number;
+  private previewInsertIndex?: number;
+  private previewExcludeIds = new Set<string>();
 
   focusCardAtIndex(index: number, { keyboard = false } = {}) {
     if (index < 0 || index >= this.cards.length) return;
@@ -208,7 +401,10 @@ export class Hand implements CardZone {
     }
   }
 
-  addCard(card: Card, { skipAnimation = false, destroy = false } = {}) {
+  addCard(
+    card: Card,
+    { skipAnimation = false, destroy = false, insertIndex }: { skipAnimation?: boolean; destroy?: boolean; insertIndex?: number } = {},
+  ) {
     let initialPosition = new Vector3();
     card.mesh.getWorldPosition(initialPosition);
     this.mesh.worldToLocal(initialPosition);
@@ -218,12 +414,22 @@ export class Hand implements CardZone {
     setCardData(card.mesh, 'location', 'hand');
 
     this.mesh.add(card.mesh);
-    this.cards.push(card);
+    const index =
+      insertIndex === undefined
+        ? this.cards.length
+        : clampInsertIndex(insertIndex, this.cards.length);
+    this.cards.splice(index, 0, card);
     this.cardMap.set(card.id, card);
     this.setObservable('cardCount', this.cards.length);
 
-    let index = this.cards.length - 1;
+    if (this.focusedIndex !== undefined && index <= this.focusedIndex) {
+      this.focusedIndex++;
+      if (this.keyboardFocusedIndex !== undefined) {
+        this.keyboardFocusedIndex++;
+      }
+    }
 
+    this.clearDragPreview();
     this.adjustHandPosition();
 
     if (this.isLocalHand) {
@@ -232,7 +438,6 @@ export class Hand implements CardZone {
     }
 
     const layout = getHandCardLayout(index, this.cards.length);
-    const restingPosition = layout.position;
 
     setCardData(card.mesh, 'resting', layout);
     card.mesh.renderOrder = index;
@@ -243,7 +448,6 @@ export class Hand implements CardZone {
       updateHandManaOverlay(card, index, this.focusedIndex);
     }
 
-    let initialRotation = getGlobalRotation(card.mesh);
     const animateEntry = !skipAnimation && isEventCatchUpComplete();
 
     if (!animateEntry) {
@@ -256,17 +460,27 @@ export class Hand implements CardZone {
       }
     } else {
       this.isInteractive = false;
+      card.mesh.position.copy(initialPosition);
+      card.mesh.rotation.copy(layout.rotation);
+
+      const entryLift = 6;
+      const midPoint = initialPosition.clone().lerp(layout.position, 0.5);
+      midPoint.y += entryLift;
+
+      applyHandRenderOrder(this.cards, index);
+      if (card.modifiers?.handMana) {
+        syncHandManaOverlayRenderOrder(card.modifiers.handMana, index, index);
+      }
+
       animateObject(card.mesh, {
         completeOnCancel: true,
-        path: new CatmullRomCurve3([initialPosition, layout.position]),
-        to: {
-          rotation: layout.rotation,
-        },
-        from: {
-          rotation: initialRotation,
-        },
+        path: new CatmullRomCurve3([initialPosition, midPoint, layout.position]),
         duration: 0.25,
         onComplete: () => {
+          applyHandRenderOrder(this.cards, this.focusedIndex);
+          if (this.isLocalHand && card.modifiers?.handMana) {
+            syncHandManaOverlayRenderOrder(card.modifiers.handMana, index, this.focusedIndex);
+          }
           if (destroy) {
             this.removeCard(card.mesh);
             cleanupCard(card);

@@ -112,12 +112,12 @@
   font-variant-numeric: tabular-nums;
   padding: 0.35rem 0.55rem;
   border-radius: 0.5rem;
-  background: hsla(var(--background) / 0.82);
+  background: hsl(var(--background));
   border: 1px solid hsl(var(--border));
   box-shadow: 0 4px 16px hsla(0 0% 0% / 0.2);
-  backdrop-filter: blur(8px);
   color: hsl(var(--foreground));
   white-space: nowrap;
+  -webkit-font-smoothing: antialiased;
 }
 
 .log {
