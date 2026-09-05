@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { card, deck } from './deckParser';
+import { card, deck, parseImportedCardList } from './deckParser';
 
 test('card', () => {
   let run = card.run('1x Alela, Artful Provocateur (brc) 119 [Tokens]');
@@ -442,4 +442,19 @@ test('arena format deck with paren set and bare collector number', () => {
       collector_number: '78',
     },
   ]);
+});
+
+test('parseImportedCardList ignores Deck and marks Commander for start in play', () => {
+  const result = parseImportedCardList(`Deck
+4 Lightning Bolt
+Commander
+1x Alela, Artful Provocateur (brc) 119
+1 Sol Ring (cmr) 472`);
+
+  expect(result.cards).toHaveLength(3);
+  expect(result.cards[0].name).toBe('Lightning Bolt');
+  expect(result.cards[0].qty).toBe(4);
+  expect(result.cards[1].name).toBe('Alela, Artful Provocateur');
+  expect(result.cards[2].name).toBe('Sol Ring');
+  expect(result.inPlayIndices).toEqual([1]);
 });

@@ -4,6 +4,7 @@ import { Button } from '~/components/ui/button';
 import AddIcon from 'lucide-solid/icons/plus';
 import SubIcon from 'lucide-solid/icons/minus';
 import SearchIcon from 'lucide-solid/icons/search';
+import ImagesIcon from 'lucide-solid/icons/images';
 import random from 'lodash-es/random';
 import { getCardImage } from '~/lib/card';
 import { DetailedCardEntry, Deck } from '~/lib/constants';
@@ -87,19 +88,40 @@ const DeckGridCard: Component<Props> = props => {
           `}>
           <div
             class='dark gap-2 font-bold text-white flex items-center rounded'
-            style='background: hsla(var(--background) / .4);'>
+            style='background: hsla(var(--background) / .4);'
+            onPointerDown={e => e.stopPropagation()}>
             <Show
               when={!props.card()?.detail?.name || !getCardImage(props.card())}
               fallback={
-                <Button
-                  variant='ghost'
-                  size='icon'
-                  onClick={() => {
-                    const src = getCardImage(props.card());
-                    if (src) props.onPreview(src);
-                  }}>
-                  <SearchIcon />
-                </Button>
+                <>
+                  <Show when={props.card()?.qty > 0 && supportsCardPrintings()}>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon'
+                      title='Choose printing'
+                      onClick={e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        props.onOpenPrintings?.();
+                      }}>
+                      <ImagesIcon />
+                    </Button>
+                  </Show>
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='icon'
+                    title='Preview card'
+                    onClick={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const src = getCardImage(props.card());
+                      if (src) props.onPreview(src);
+                    }}>
+                    <SearchIcon />
+                  </Button>
+                </>
               }>
               <div class='pl-2'>{props.card()?.name}</div>
             </Show>

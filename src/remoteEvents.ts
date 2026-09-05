@@ -8,6 +8,7 @@ import {
   setCardData,
   ensureCardMesh,
   loadCardTextures,
+  updateModifiers,
 } from './lib/card';
 import { Card } from './lib/constants';
 import * as Sentry from '@sentry/solidstart';
@@ -438,7 +439,8 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
   if (
     event.type === 'dismissZone' ||
     event.type === 'transferEntireZone' ||
-    event.type === 'peekCards'
+    event.type === 'peekCards' ||
+    event.type === 'deleteClone'
   ) {
     await EVENTS[event.type](event, playArea);
     return;
@@ -489,7 +491,14 @@ function removeRemotePlayArea(clientId: number) {
 function applyJoinEvent(event: Event) {
   const clientID = normalizeClientId(event.clientID);
   if (clientID === undefined) return false;
-  if (playAreas[clientID]) return false;
+  const existing = playAreas[clientID];
+  if (existing) {
+    if (existing.mesh.parent !== table) {
+      table.add(existing.mesh);
+      readjustPlayAreas();
+    }
+    return false;
+  }
 
   const playerSessionId = event.payload?.playerSessionId as string | undefined;
   if (playerSessionId) {
@@ -736,6 +745,10 @@ const EVENTS = {
   },
   createCard(event: Event, playArea: PlayArea) {
     let card = cloneCard({ detail: event.payload.userData.card.detail }, event.payload.userData.id);
+    if (event.payload.userData.isToken) {
+      setCardData(card.mesh, 'isToken', true);
+      updateModifiers(card);
+    }
 
     let zone = zonesById.get(event.payload.zoneId);
     let options = {};
@@ -762,6 +775,9 @@ const EVENTS = {
   },
   clone(event: Event, playArea: PlayArea) {
     playArea?.clone(event.payload.id, event.payload.newId);
+  },
+  deleteClone(event: Event, playArea: PlayArea) {
+    playArea?.executeDeleteClone(event.payload.id);
   },
   reveal(event: Event, remotePlayArea: PlayArea, card: Card) {
     expect(!!card, 'card not found');

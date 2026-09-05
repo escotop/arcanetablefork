@@ -8,6 +8,7 @@ import {
   createDeckStackMesh,
   dematerializeCard,
   ensureCardMesh,
+  getCardImage,
   getSearchLine,
   getSerializableCard,
   loadCardTextures,
@@ -22,42 +23,23 @@ import {
   CardEntry,
   CardEntryDetail,
   CardZone,
+  Deck as StoredDeck,
   DetailedCardEntry,
 } from './constants';
-import { applyCustomArtToEntry } from './customCardArt';
+import { applyCustomArtToEntry, normalizeTextureUrl } from './customCardArt';
 import { devLog } from './devLog';
-import { deck as deckParser } from './deckParser';
+import { parseImportedCardList } from './deckParser';
 import { getCardCollectorNumber } from './deckListFormat';
 import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
 import { cardsById, cardSystem, getProjectionVec, setHoverSignal, zonesById } from './globals';
 import { cleanupMesh, getGlobalRotation, shuffleItems } from './utils';
 import { createRoot } from 'solid-js';
-
-function delay(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function fetchScryfallCached(url: string): Promise<Response> {
-  let response: Response | undefined;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    response = await fetch(url, { cache: 'force-cache' });
-    if (response.status !== 429 && response.status !== 503) return response;
-
-    if (response.status === 503) {
-      try {
-        const body = await response.clone().json();
-        if (body?.code && body.code !== 'rate_limited' && body.code !== 'upstream_error') {
-          return response;
-        }
-      } catch {
-        // Retry unknown 503 responses as well.
-      }
-    }
-
-    await delay(300 * (attempt + 1));
-  }
-  return response!;
-}
+import {
+  getCardById,
+  getCardBySetCollector,
+  getCardNamed,
+  searchCards,
+} from './scryfall/client';
 
 function isValidCardDetail(payload: unknown): payload is CardEntryDetail {
   if (!payload || typeof payload !== 'object') return false;
@@ -75,14 +57,7 @@ function detailFromSearchResult(match: CardEntryDetail): CardEntryDetail | null 
 }
 
 async function fetchCardDetailById(id: string): Promise<CardEntryDetail | null> {
-  const detailUrl = new URL(cardSystem.cardDetailEndpoint);
-  detailUrl.searchParams.set('id', id);
-  const detailRes = await fetchScryfallCached(detailUrl.toString());
-  if (!detailRes.ok) return null;
-
-  const payload = await detailRes.json();
-  if (!isValidCardDetail(payload)) return null;
-  return payload;
+  return getCardById(id);
 }
 
 function buildExactNameSearchQuery(name: string) {
@@ -292,7 +267,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
     setCardData(card.mesh!, 'location', 'deck');
     setCardData(card.mesh!, 'zoneId', this.id);
 
-    if (this.cards[0]?.mesh?.userData.isPublic) {
+    if (this.cards[0]?.mesh?.userData.isPublic || this.isTopPublic) {
       await this.flipTop();
     }
     setCardData(card.mesh!, 'isPublic', false);
@@ -477,9 +452,12 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
   }
 
   flipTop(toggle = false) {
-    return new Promise(resolve => {
+    return new Promise<void>(resolve => {
       let card = this.cards[0];
-      if (!card) return;
+      if (!card) {
+        resolve();
+        return;
+      }
       this.materializeTopCard();
       void loadCardTextures(card).then(() => {
         let isVisible = !card.mesh!.userData.isPublic;
@@ -556,8 +534,10 @@ export function expandCardEntries(cardEntries: DetailedCardEntry[]) {
 }
 
 export function loadCardList(cardList: string): CardEntry[] {
-  return deckParser.run(cardList).result.filter(card => card.name.length);
+  return parseImportedCardList(cardList).cards;
 }
+
+export { parseImportedCardList } from './deckParser';
 
 export { formatDeckListLine, getCardCollectorNumber } from './deckListFormat';
 export { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
@@ -704,16 +684,7 @@ async function fetchCardDetailBySetCollector(
   set: string,
   collectorNumber: string,
 ): Promise<CardEntryDetail | null> {
-  const url = new URL(cardSystem.cardDetailEndpoint);
-  url.searchParams.set('set', set);
-  url.searchParams.set('collector_number', collectorNumber);
-
-  const res = await fetchScryfallCached(url.toString());
-  if (!res.ok) return null;
-
-  const payload = await res.json();
-  if (payload?.object === 'error' || !(payload?.id || payload?.name)) return null;
-  return payload;
+  return getCardBySetCollector(set, collectorNumber);
 }
 
 async function fetchCardDetailPayload(
@@ -737,42 +708,24 @@ async function fetchCardDetailPayload(
     trace.push(`Lookup printing in ${set.toUpperCase()}`);
   }
 
-  const url = new URL(cardSystem.cardDetailEndpoint);
-  url.searchParams.set('exact', name);
-  if (entry.id) url.searchParams.set('id', entry.id);
-  if (set) url.searchParams.set('set', set);
-
-  const res = await fetchScryfallCached(url.toString());
-  if (res.ok) {
-    const payload = await res.json();
-    if (payload?.object === 'error' || !(payload?.id || payload?.name)) {
-      trace.push(`Named lookup returned error for "${name}"`);
-      if (set) {
-        const fallback = await resolveSetOrDefault(entry, trace);
-        if (fallback) return fallback;
-      }
-    } else {
-      const payloadSet = payload.set as string | undefined;
-      const payloadCollector = payload.collector_number as string | undefined;
-      const setMatches = !set || payloadSet?.toLowerCase() === set.toLowerCase();
-      const collectorMatches =
-        !collector_number ||
-        payloadCollector?.toLowerCase() === collector_number.toLowerCase();
-
-      if (setMatches && collectorMatches) {
-        return payload;
-      }
-
-      trace.push(
-        `Named lookup returned ${payloadSet?.toUpperCase() ?? '?'} #${payloadCollector ?? '?'} instead of requested printing`,
-      );
-      if (set) {
-        const fallback = await resolveSetOrDefault(entry, trace);
-        if (fallback) return fallback;
-      }
-    }
+  const payload = await getCardNamed(name, { set, id: entry.id });
+  if (!payload) {
+    trace.push(`Named lookup failed for "${name}"`);
   } else {
-    trace.push(`Named lookup failed (${res.status}) for "${name}"`);
+    const payloadSet = payload.set as string | undefined;
+    const payloadCollector = payload.collector_number as string | undefined;
+    const setMatches = !set || payloadSet?.toLowerCase() === set.toLowerCase();
+    const collectorMatches =
+      !collector_number ||
+      payloadCollector?.toLowerCase() === collector_number.toLowerCase();
+
+    if (setMatches && collectorMatches) {
+      return payload;
+    }
+
+    trace.push(
+      `Named lookup returned ${payloadSet?.toUpperCase() ?? '?'} #${payloadCollector ?? '?'} instead of requested printing`,
+    );
   }
 
   if (set) {
@@ -803,15 +756,8 @@ async function resolveSetOrDefault(entry: CardEntry, trace: string[] = []): Prom
 }
 
 async function fetchCardDetailViaFuzzySearch(name: string): Promise<CardEntryDetail | null> {
-  const searchUrl = new URL(cardSystem.cardSearchEndpoint);
-  searchUrl.searchParams.set('q', buildExactNameSearchQuery(name));
-  searchUrl.searchParams.set('page', '1');
-
-  const searchRes = await fetchScryfallCached(searchUrl.toString());
-  if (!searchRes.ok) return null;
-
-  const body = await searchRes.json();
-  const results = (body.data ?? []) as Array<{ id?: string; name?: string }>;
+  const body = await searchCards(buildExactNameSearchQuery(name), { page: 1 });
+  const results = body.data ?? [];
   if (!results.length) return null;
 
   const match =
@@ -832,21 +778,14 @@ async function fetchCardDetailViaSetSearch(
   set: string,
   collectorNumber?: string,
 ): Promise<CardEntryDetail | null> {
-  const searchUrl = new URL(cardSystem.cardSearchEndpoint);
   let query = `!"${name.replace(/"/g, '\\"')}" set:${set}`;
   if (collectorNumber) {
     query += ` cn:${collectorNumber}`;
   }
-  searchUrl.searchParams.set('q', query);
-  searchUrl.searchParams.set('page', '1');
 
-  const searchRes = await fetchScryfallCached(searchUrl.toString());
-  if (!searchRes.ok) return null;
-
-  const body = await searchRes.json();
-  const match = (body.data ?? []).find(
-    (card: { name?: string; set?: string; id?: string; collector_number?: string }) =>
-      matchesSetSearchResult(card, name, set, collectorNumber),
+  const body = await searchCards(query, { page: 1 });
+  const match = body.data.find(card =>
+    matchesSetSearchResult(card, name, set, collectorNumber),
   );
   if (!match?.id) return null;
 
@@ -876,7 +815,7 @@ export interface CardPrintingsResponse {
 }
 
 export function supportsCardPrintings() {
-  return cardSystem.id === 'scry-server-mtg';
+  return true;
 }
 
 export function getPrintingPreviewUrl(printing: CardPrintingOption) {
@@ -884,6 +823,39 @@ export function getPrintingPreviewUrl(printing: CardPrintingOption) {
     resolveImageUrl(printing.image_uris) ??
     resolveImageUrl(printing.card_faces?.[0]?.image_uris)
   );
+}
+
+const DEFAULT_DECK_PREVIEW = '/arcane-table-back.webp';
+
+export function getDeckPreviewCard(deck: StoredDeck): DetailedCardEntry | undefined {
+  const inPlayCards = Object.values(deck.inPlay ?? {}).filter(card => (card.qty ?? 0) > 0);
+  if (inPlayCards.length) return inPlayCards[0];
+
+  return Object.values(deck.cards ?? {}).find(card => (card.qty ?? 0) > 0);
+}
+
+function scryfallCardImageUrl(card: DetailedCardEntry) {
+  if (card.id) {
+    return `https://api.scryfall.com/cards/${encodeURIComponent(card.id)}?format=image&version=normal`;
+  }
+  if (card.set && card.collector_number) {
+    return `https://api.scryfall.com/cards/${encodeURIComponent(card.set)}/${encodeURIComponent(card.collector_number)}?format=image&version=normal`;
+  }
+  return undefined;
+}
+
+export function getDeckPreviewImageUrl(deck: StoredDeck) {
+  const card = getDeckPreviewCard(deck);
+  if (!card) return deck.coverImage ?? DEFAULT_DECK_PREVIEW;
+
+  if (card.customArtUrl) {
+    return normalizeTextureUrl(card.customArtUrl) ?? card.customArtUrl;
+  }
+
+  const fromDetail = getCardImage(card);
+  if (fromDetail) return fromDetail;
+
+  return scryfallCardImageUrl(card) ?? deck.coverImage ?? DEFAULT_DECK_PREVIEW;
 }
 
 export function getPrintingLabel(printing: CardPrintingOption) {
@@ -904,22 +876,17 @@ async function fetchPrintingMeta(
   const cached = printingMetaCache.get(id);
   if (cached) return cached;
 
-  const url = new URL(cardSystem.cardDetailEndpoint);
-  url.searchParams.set('id', id);
-
-  const res = await fetchScryfallCached(url.toString());
-  if (!res.ok) return {};
-
-  const detail = await res.json();
-  const meta = {
-    set: detail.set as string | undefined,
-    set_name: detail.set_name as string | undefined,
-    collector_number: detail.collector_number as string | undefined,
-    lang: detail.lang as string | undefined,
-    released_at: detail.released_at as string | undefined,
+  const meta = await getCardById(id);
+  if (!meta) return {};
+  const result = {
+    set: meta.set as string | undefined,
+    set_name: (meta as { set_name?: string }).set_name,
+    collector_number: meta.collector_number as string | undefined,
+    lang: (meta as { lang?: string }).lang,
+    released_at: (meta as { released_at?: string }).released_at,
   };
-  printingMetaCache.set(id, meta);
-  return meta;
+  printingMetaCache.set(id, result);
+  return result;
 }
 
 async function enrichPrintingOptions(
@@ -960,30 +927,22 @@ async function loadCardPrintings(
   page: number,
   query?: string,
 ): Promise<CardPrintingsResponse> {
-  const url = new URL(cardSystem.cardSearchEndpoint);
-  url.searchParams.set(
-    'q',
+  const body = await searchCards(
     query ?? `!"${name.replace(/"/g, '\\"')}" unique:prints`,
+    { page },
   );
-  url.searchParams.set('page', String(page));
 
-  const res = await fetchScryfallCached(url.toString());
-  if (!res.ok) {
-    return { data: [], page: 1, total_pages: 0, total_cards: 0 };
-  }
-
-  const body = await res.json();
   const data = await enrichPrintingOptions(
-    (body.data ?? [])
-      .filter((card: CardPrintingOption) => card.name === name)
-      .map((card: CardPrintingOption) => ({
-        id: card.id,
+    body.data
+      .filter(card => card.name === name)
+      .map(card => ({
+        id: card.id!,
         name: card.name,
         set: card.set,
-        set_name: card.set_name,
+        set_name: (card as { set_name?: string }).set_name,
         collector_number: card.collector_number,
-        lang: card.lang,
-        released_at: card.released_at,
+        lang: (card as { lang?: string }).lang,
+        released_at: (card as { released_at?: string }).released_at,
         image_uris: card.image_uris,
         card_faces: card.card_faces,
       })),

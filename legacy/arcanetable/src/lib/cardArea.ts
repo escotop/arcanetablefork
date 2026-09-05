@@ -1,0 +1,158 @@
+import { nanoid } from 'nanoid';
+import { createRoot } from 'solid-js';
+import { createStore, SetStoreFunction } from 'solid-js/store';
+import {
+  BoxGeometry,
+  EdgesGeometry,
+  LineBasicMaterial,
+  LineSegments,
+  Mesh,
+  MeshStandardMaterial,
+  Raycaster,
+  Vector3,
+} from 'three';
+import { animateObject } from './animations';
+import { applyCardOrientation, getRotationFromCardState, getSerializableCard, setCardData } from './card';
+import {
+  Card,
+  CARD_HEIGHT,
+  CARD_STACK_OFFSET,
+  CARD_THICKNESS,
+  CARD_ZONE_COLOR,
+  CardZone,
+  ZONE_OUTLINE_COLOR,
+} from './constants';
+import { cardsById, zonesById } from './globals';
+import { cleanupMesh, getGlobalRotation } from './utils';
+
+export class CardArea implements CardZone<{ positionArray?: [number, number, number] }> {
+  public mesh: Mesh;
+  public cards: Card[];
+  public observable: CardZone['observable'];
+  private setObservable: SetStoreFunction<CardZone['observable']>;
+  private destroyReactivity(): void;
+
+  constructor(
+    public zone: string,
+    public id: string = nanoid(),
+  ) {
+    let geometry = new BoxGeometry(200, 100, CARD_THICKNESS / 2);
+    let material = new MeshStandardMaterial({ color: CARD_ZONE_COLOR });
+    this.mesh = new Mesh(geometry, material);
+    this.mesh.userData.zone = zone;
+    this.mesh.userData.zoneId = id;
+    this.mesh.userData.id = id;
+    this.cards = [];
+    this.mesh.position.setY(-50);
+    this.mesh.receiveShadow = true;
+    let edges = new EdgesGeometry(geometry);
+    let lineSegments = new LineSegments(
+      edges,
+      new LineBasicMaterial({ color: ZONE_OUTLINE_COLOR }),
+    );
+    lineSegments.userData.isOrnament = true;
+    lineSegments.position.setZ(0.125);
+    this.mesh.add(lineSegments);
+    zonesById.set(id, this);
+
+    createRoot(destroy => {
+      this.destroyReactivity = destroy;
+      [this.observable, this.setObservable] = createStore<CardZone['observable']>({
+        cardCount: this.cards.length,
+      });
+    });
+
+    this.mesh.position.setZ(2.5);
+  }
+
+  addCard(card: Card, { skipAnimation = false, positionArray } = {}) {
+    const initialPosition = card.mesh.getWorldPosition(new Vector3());
+    this.mesh.worldToLocal(initialPosition);
+    let position: Vector3;
+
+    if (positionArray) {
+      position = new Vector3().fromArray(positionArray);
+    } else if (card.mesh.userData?.zone?.[this.id]?.position) {
+      position = new Vector3().fromArray(card.mesh.userData.zone[this.id].position);
+    } else {
+      let rayOrigin = this.mesh.localToWorld(new Vector3(25, 50 - CARD_HEIGHT - 2, 10));
+      let direction = this.mesh.getWorldDirection(new Vector3(0, -1, 0)).multiplyScalar(-1);
+      let raycaster = new Raycaster(rayOrigin, direction);
+
+      let intersections = raycaster.intersectObject(this.mesh);
+      if (intersections[0]?.object?.userData?.card) {
+        position = intersections[0].object.position
+          .clone()
+          .add(new Vector3(CARD_STACK_OFFSET, -CARD_STACK_OFFSET, CARD_THICKNESS));
+      } else {
+        position = this.mesh.worldToLocal(intersections[0].point);
+      }
+    }
+
+    setCardData(card.mesh, 'zoneId', this.id);
+    setCardData(card.mesh, 'location', this.zone);
+    setCardData(card.mesh, 'isPublic', true);
+    setCardData(card.mesh, 'isInteractive', true);
+    setCardData(card.mesh, 'isInGrid', false);
+
+    this.mesh.add(card.mesh);
+    this.cards.push(card);
+    this.setObservable('cardCount', this.cards.length);
+
+    const targetQuaternion = getRotationFromCardState(card.mesh.userData);
+    setCardData(card.mesh, `zone.${this.id}.position`, position.toArray());
+    applyCardOrientation(card.mesh, this.id);
+
+    if (skipAnimation) {
+      card.mesh.position.copy(position);
+      card.mesh.quaternion.copy(targetQuaternion);
+    } else {
+      animateObject(card.mesh, {
+        completeOnCancel: true,
+        duration: 0.2,
+        from: {
+          position: initialPosition,
+        },
+        to: {
+          quarternion: targetQuaternion,
+          position,
+        },
+      });
+    }
+  }
+
+  removeCard(cardMesh: Mesh) {
+    let worldPosition = new Vector3();
+    cardMesh.getWorldPosition(worldPosition);
+
+    let globalRotation = getGlobalRotation(cardMesh);
+
+    setCardData(cardMesh, `zone.${this.id}.position`, cardMesh.position.toArray());
+    setCardData(cardMesh, `zone.${this.id}.rotation`, cardMesh.rotation.toArray());
+
+    cardMesh.position.copy(worldPosition);
+    cardMesh.rotation.copy(globalRotation);
+
+    this.mesh.remove(cardMesh);
+    let index = this.cards.findIndex(c => c.id === cardMesh.userData.id);
+    this.cards.splice(index, 1);
+    this.setObservable('cardCount', this.cards.length);
+  }
+
+  getSerializable() {
+    return {
+      id: this.id,
+      cards: this.mesh.children
+        .filter(child => !child.userData.isOrnament)
+        .map(getSerializableCard),
+    };
+  }
+
+  destroy() {
+    this.cards.map(card => cardsById.delete(card.id));
+    zonesById.delete(this.id);
+    cleanupMesh(this.mesh);
+    this.destroyReactivity();
+    this.cards = [];
+  }
+}

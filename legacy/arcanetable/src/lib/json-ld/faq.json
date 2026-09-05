@@ -1,0 +1,54 @@
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is Arcanetable free?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, Arcanetable is completely free to use. No account required."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I need to download anything?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Arcanetable runs entirely in your browser. No download, no install, no account."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I play with a friend?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Copy the invite link from the deck picker and send it to your friend. They click it and are instantly at the same table — no account needed on either end."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What games does Arcanetable support?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Arcanetable supports Magic: The Gathering, Pokémon TCG, and Yu-Gi-Oh out of the box. It also supports custom card systems, so you can play any homebrew or indie TCG by pointing Arcanetable at your own card server."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I use Arcanetable for proxy testing?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Arcanetable is great for testing proxy decks, cubes, and brews before you sleeve up the real thing."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is Arcanetable an alternative to untap.in or Cockatrice?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Like untap.in and Cockatrice, Arcanetable is a free TCG playtesting sandbox. Unlike them, Arcanetable runs entirely in the browser with no download or account required, and renders cards on a 3D table."
+      }
+    }
+  ]
+}

@@ -6,7 +6,9 @@ import { getPlayAreaPlayerColor, textColorOnBackground } from './playerColor';
 import { animateObject } from './animations';
 import {
   applyCardOrientation,
+  cleanupCard,
   cloneCard,
+  ensureCardMesh,
   getRotationFromCardState,
   initializeCardMesh,
   loadCardTextures,
@@ -38,6 +40,8 @@ import { transferCard } from './transferCard';
 import { getCardKey, hydrateDeck } from './deckStore';
 import { cardFromDeckEntry, preloadStackTextures } from './cardLoading';
 import { Deck as DeckData } from './constants';
+import { profileAsync } from './loadProfile';
+import { getCardById } from './scryfall/client';
 import {
   createDismissZoneEvent,
   createFlipEvent,
@@ -104,6 +108,7 @@ export class PlayArea {
   private nameTagWrapper: HTMLDivElement;
   private nameTagPivot: Object3D;
   private nameTagObject: CSS3DObject;
+  private nameTagSuppressed = false;
 
   constructor(
     public clientId: number,
@@ -233,6 +238,11 @@ export class PlayArea {
 
     if (!camera) return;
 
+    if (this.nameTagSuppressed) {
+      this.nameTagObject.visible = false;
+      return;
+    }
+
     const mesh = this.battlefieldZone.mesh;
     const worldNormal = new Vector3(0, 0, 1).applyQuaternion(
       mesh.getWorldQuaternion(new Quaternion()),
@@ -241,6 +251,21 @@ export class PlayArea {
     mesh.getWorldPosition(meshPosition);
     const toCamera = camera.position.clone().sub(meshPosition).normalize();
     this.nameTagObject.visible = worldNormal.dot(toCamera) > 0;
+  }
+
+  setNameTagSuppressed(suppressed: boolean) {
+    this.nameTagSuppressed = suppressed;
+    if (suppressed) {
+      this.nameTagObject.visible = false;
+      return;
+    }
+
+    if (this.nameTagElement.textContent) {
+      this.updateNameTag(
+        this.nameTagElement.textContent,
+        this.nameTagElement.style.backgroundColor,
+      );
+    }
   }
 
   private nameTagUsesLocalTextOrientation(): boolean {
@@ -365,72 +390,128 @@ export class PlayArea {
     if (this.inProgressActions.has(`dismissFromZone.${zone.id}`)) return;
     if (zone.zone === 'peek') {
       this.peekSessionId += 1;
+      this.inProgressActions.delete(`peekCards.${zone.id}`);
     }
     this.inProgressActions.add(`dismissFromZone.${zone.id}`);
 
-    await this.executeDismissZone(zone);
+    try {
+      await this.executeDismissZone(zone);
+      if (zone.cards.length > 0) {
+        await this.executeDismissZone(zone);
+      }
 
-    if (this.isLocalPlayArea) {
-      sendEvent(createDismissZoneEvent(zone.id));
+      if (this.isLocalPlayArea) {
+        sendEvent(createDismissZoneEvent(zone.id));
+      }
+    } finally {
+      this.inProgressActions.delete(`dismissFromZone.${zone.id}`);
+    }
+  }
+
+  private resolveDismissDestination(card: Card, zone: CardZone): CardZone | undefined {
+    if (!card.mesh) {
+      ensureCardMesh(card, card.clientId ?? this.clientId);
+    }
+    if (!card.mesh) return undefined;
+
+    const previousZoneId = card.mesh.userData.previousZoneId as string | undefined;
+    let toZone = previousZoneId ? zonesById.get(previousZoneId) : undefined;
+
+    if (!toZone && zone.zone === 'peek') {
+      toZone = this.deck;
     }
 
-    this.inProgressActions.delete(`dismissFromZone.${zone.id}`);
+    return toZone;
   }
 
   async executeDismissZone(zone: CardZone) {
-    const transfers = [...zone.cards]
-      .filter(card => card.mesh)
-      .map(card => ({
-        card,
-        toZone: zonesById.get(card.mesh!.userData.previousZoneId),
-      }));
-
     if (zone.zone === 'peek') {
       setPeekFilterText('');
       setPeekTypeFilter(null);
     }
+    if (zone.zone === 'tokenSearch') {
+      setPeekFilterText('');
+    }
 
-    await Promise.all(
-      transfers.map(({ card, toZone }) =>
-        transferCard(card, zone, toZone, {
-          preventTransmit: true,
-          addOptions: { skipAnimation: true },
-        }),
-      ),
+    const cards = [...zone.cards];
+    if (!cards.length) return;
+
+    if (zone.zone === 'tokenSearch') {
+      for (const card of cards) {
+        if (!card.mesh) continue;
+        await zone.removeCard(card.mesh);
+        cleanupCard(card);
+      }
+      this.availableTokens = undefined;
+      return;
+    }
+
+    const destinationIds = new Set(
+      cards
+        .map(card => this.resolveDismissDestination(card, zone)?.id)
+        .filter((id): id is string => Boolean(id)),
     );
+
+    if (destinationIds.size === 1) {
+      const toZone = this.resolveDismissDestination(cards[0], zone);
+      if (toZone) {
+        await this.executeTransferEntireZone(zone, toZone, {
+          skipAnimation: true,
+          ...(toZone.zone === 'deck' ? { location: 'bottom' as const } : {}),
+        });
+        return;
+      }
+    }
+
+    // Transfer sequentially — parallel removeCard calls corrupt the same zone.
+    for (const card of cards) {
+      if (!zone.cards.some(zoneCard => zoneCard.id === card.id)) continue;
+
+      const toZone = this.resolveDismissDestination(card, zone);
+      if (!toZone) continue;
+
+      await transferCard(card, zone, toZone, {
+        preventTransmit: true,
+        addOptions: {
+          skipAnimation: true,
+          ...(toZone.zone === 'deck' ? { location: 'bottom' as const } : {}),
+        },
+      });
+    }
   }
 
   async toggleTokenMenu(payload?: { availableTokens: CardReference[]; ids: string[] }) {
     const isOpen = this.tokenSearchZone.cards.length > 0;
     await this.dismissAllCardGrids();
-    if (isOpen) return;
+    if (isOpen) {
+      this.availableTokens = undefined;
+      return;
+    }
     if (payload?.availableTokens) {
       this.availableTokens = payload.availableTokens;
     }
 
-    if (!this.availableTokens) {
-      let cardsInPlay = this.cards;
-      let allTokens = new Set(
-        cardsInPlay
-          .map(card => card.detail.all_parts ?? [])
-          .flat()
-          .map(part => part.uri),
+    if (!this.availableTokens?.length) {
+      const tokenPartIds = new Set<string>();
+      for (const card of this.cards) {
+        for (const part of card.detail.all_parts ?? []) {
+          if (part.component === 'token' && part.id) {
+            tokenPartIds.add(part.id);
+          }
+        }
+      }
+
+      const tokens = await Promise.all(
+        [...tokenPartIds].map(async id => {
+          const detail = await getCardById(id);
+          return detail ? { ...detail, clientId: this.clientId } : null;
+        }),
       );
 
-      this.availableTokens = await Promise.all(
-        [...allTokens].map(async uri => {
-          const payload = await fetch(uri, { cache: 'force-cache' }).then(r => r.json());
-          return {
-            ...payload,
-            clientId: this.clientId,
-          };
-        }),
-      ).then(cards =>
-        // TODO: oracle_id, set_type only works for 1 card system
-        uniqBy(cards, 'oracle_id')
-          .filter(card => card.set_type === 'token')
-          .sort((a, b) => a.name.localeCompare(b.name)),
-      );
+      this.availableTokens = uniqBy(
+        tokens.filter((token): token is NonNullable<typeof token> => token !== null),
+        'oracle_id',
+      ).sort((a, b) => a.name.localeCompare(b.name));
     }
 
     let availableCards = this.availableTokens.map((detail, i) => {
@@ -652,7 +733,26 @@ export class PlayArea {
     this.emitEvent({ type: 'clone', payload: { id, newId } });
     let card = cardsById.get(id)!;
     let newCard = cloneCard(card, newId);
+    setCardData(newCard.mesh, 'isClone', true);
     card.mesh.parent?.add(newCard.mesh);
+  }
+
+  deleteClone(id: string) {
+    this.emitEvent({ type: 'deleteClone', payload: { id } });
+    this.executeDeleteClone(id);
+  }
+
+  executeDeleteClone(id: string) {
+    const card = cardsById.get(id);
+    if (!card?.mesh || !card.mesh.userData.isClone) return;
+
+    const battlefield = this.battlefieldZone;
+    if (battlefield.cards.some(entry => entry.id === id)) {
+      battlefield.removeCard(card.mesh);
+    } else if (card.mesh.parent) {
+      card.mesh.parent.remove(card.mesh);
+    }
+    cleanupCard(card);
   }
 
   setAsLocalPlayArea() {
@@ -698,29 +798,32 @@ export class PlayArea {
   }
 
   static async FromDeck(clientId: number, deck: DeckData) {
-    const hydratedDeck = await hydrateDeck(deck);
+    const hydratedDeck = await profileAsync('FromDeck.hydrateDeck', () => hydrateDeck(deck));
     let cardsInDeck = expandCardEntries(
       Object.values(hydratedDeck.cards).filter(card => !hydratedDeck.inPlay[getCardKey(card)]),
     );
     let cardsInPlay = expandCardEntries(Object.values(hydratedDeck.inPlay));
 
     let cards = cardsInDeck.concat(cardsInPlay);
-    const playArea = new PlayArea(clientId, cards, cardsInDeck, { isLocalPlayer: true });
+    const playArea = await profileAsync('FromDeck.construct', async () => {
+      const area = new PlayArea(clientId, cards, cardsInDeck, { isLocalPlayer: true });
 
-    if (hydratedDeck?.inPlay) {
-      cardsInPlay.forEach((card, i) => {
-        card.id = card.id || nanoid();
-        let initializedCard = initializeCardMesh(card, clientId);
-        setCardData(initializedCard.mesh, 'isPublic', true);
-        playArea.battlefieldZone.addCard(initializedCard, {
-          skipAnimation: true,
-          positionArray: [100 - (CARD_WIDTH + 2) * (i + 1), 50 - CARD_HEIGHT - 2, 0.125],
+      if (hydratedDeck?.inPlay) {
+        cardsInPlay.forEach((card, i) => {
+          card.id = card.id || nanoid();
+          let initializedCard = initializeCardMesh(card, clientId);
+          setCardData(initializedCard.mesh, 'isPublic', true);
+          area.battlefieldZone.addCard(initializedCard, {
+            skipAnimation: true,
+            positionArray: [100 - (CARD_WIDTH + 2) * (i + 1), 50 - CARD_HEIGHT - 2, 0.125],
+          });
         });
-      });
-    }
+      }
 
-    
-    playArea.updatePositions();
+      area.updatePositions();
+      return area;
+    });
+
     playArea.deck.shuffle();
     playArea.loadTextures();
     return playArea;
@@ -767,4 +870,69 @@ export class PlayArea {
     playArea.loadTextures();
     return playArea;
   }
+
+  static fromWorldSnapshot(
+    clientId: number,
+    state: State,
+    options: { isLocalPlayer?: boolean } = {},
+  ) {
+    const mergedState = {
+      ...state,
+      isLocalPlayer: options.isLocalPlayer ?? false,
+    };
+    const playArea = PlayArea.FromNetworkState({
+      ...mergedState,
+      clientId,
+      clientID: clientId,
+    });
+    restoreSerializedZoneCards(playArea.hand, state.hand, clientId, card =>
+      playArea.hand.addCard(card, { skipAnimation: true }),
+    );
+    restoreSerializedZoneCards(playArea.graveyardZone, state.graveyard, clientId, card =>
+      playArea.graveyardZone.addCard(card, { skipAnimation: true }),
+    );
+    restoreSerializedZoneCards(playArea.exileZone, state.exile, clientId, card =>
+      playArea.exileZone.addCard(card, { skipAnimation: true }),
+    );
+    restoreSerializedZoneCards(playArea.peekZone, state.peekZone, clientId, card =>
+      playArea.peekZone.addCard(card, { skipAnimation: true }),
+    );
+    playArea.updatePositions();
+    playArea.loadTextures();
+    return playArea;
+  }
+}
+
+function restoreSerializedZoneCards(
+  _zone: { cards: Card[] },
+  serialized?: { cards?: Array<Record<string, unknown>> },
+  clientId?: number,
+  addCard?: (card: Card) => void,
+) {
+  if (!serialized?.cards?.length || !addCard || clientId === undefined) return;
+
+  for (const entry of serialized.cards) {
+    const card = cardFromSerializable(entry, clientId);
+    addCard(card);
+  }
+}
+
+function cardFromSerializable(serialized: Record<string, unknown>, clientId: number): Card {
+  const userData = serialized.userData as Record<string, unknown> | undefined;
+  const embedded = userData?.card as Card | undefined;
+  const base: Card = {
+    id: String(serialized.id ?? userData?.id ?? nanoid()),
+    clientId,
+    detail: (embedded?.detail ?? serialized.detail) as Card['detail'],
+    customArtUrl: embedded?.customArtUrl,
+    modifiers: (embedded?.modifiers ?? {}) as Card['modifiers'],
+  };
+  const card = initializeCardMesh(base, clientId);
+  if (userData) {
+    for (const [key, value] of Object.entries(userData)) {
+      if (key === 'card') continue;
+      setCardData(card.mesh!, key, value);
+    }
+  }
+  return card;
 }

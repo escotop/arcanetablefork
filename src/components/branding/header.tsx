@@ -8,8 +8,8 @@ export default function BrandingHeader() {
     <div class='relative flex items-center justify-between py-6'>
       <A href='/'>
       <div class='flex items-center space-x-4'>
-        <img src='/icon.svg' alt='Arcanetable' class='w-12 h-12' />
-        <span class='text-xl font-bold text-white'>Arcanetable</span>
+        <img src='/icon.svg' alt='Untapped Table' class='w-12 h-12' />
+        <span class='text-xl font-bold text-white'>Untapped Table</span>
         </div>
       </A>
       <nav class='space-x-4 flex'>

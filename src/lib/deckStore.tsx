@@ -2,13 +2,14 @@ import { createStore, SetStoreFunction, unwrap } from 'solid-js/store';
 import { nanoid } from 'nanoid';
 import { createContext, onMount, ParentProps, useContext } from 'solid-js';
 import { CardEntry, Deck, DetailedCardEntry, CardSystem } from './constants';
-import { loadCardList, fetchCardInfo } from './deck';
+import { fetchCardInfo, parseImportedCardList } from './deck';
+import { buildImportedInPlay, fetchCardInfoForImport } from './deckImportLookup';
 import { applyCustomArtToEntry } from './customCardArt';
 import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
 import { getCardArtImage } from './card';
-import { DEFAULT_CARD_SYSTEM_URI, setCardSystem as setGlobalCardSystem } from './globals';
-import { useSearchParams } from '@solidjs/router';
+import { setCardSystem as setGlobalCardSystem } from './globals';
 import { CardSystemContext } from './cardSystemContext';
+import { MTG_CARD_SYSTEM, normalizeCardSystemId } from './mtgCardSystem';
 
 const defaultDeckStore = {
   decks: {},
@@ -24,7 +25,7 @@ export const createDeckStore = () => {
   const updateStore: typeof setStore = (...update: any[]) => {
     (setStore as any)(...update);
     let raw = unwrap(store);
-    localStorage.setItem('decks', JSON.stringify(raw));
+    localStorage.setItem('mtgplayer-decks', JSON.stringify(raw));
   };
 
   return [store, updateStore] as const;
@@ -36,7 +37,7 @@ interface DeckStore {
 }
 
 export function getDeckStore(): DeckStore {
-  let storeString = localStorage.getItem('decks');
+  let storeString = localStorage.getItem('mtgplayer-decks') ?? localStorage.getItem('decks');
   if (!storeString) return defaultDeckStore;
   let store = JSON.parse(storeString) as DeckStore;
 
@@ -48,14 +49,48 @@ export function getDeckStore(): DeckStore {
     store.decks = Object.fromEntries(deckEntries);
     store.systems ??= { unsorted: [] };
     store.systems.unsorted.push(...deckEntries.map(entry => entry[0]));
-    localStorage.setItem('decks', JSON.stringify(store));
+    localStorage.setItem('mtgplayer-decks', JSON.stringify(store));
   }
 
+  let migrated = false;
+
   Object.entries(store.decks ?? {}).forEach(([id, deck]) => {
+    let nextDeck = deck;
+
     if (!deck.id) {
-      store.decks[id] = { ...deck, id };
+      nextDeck = { ...nextDeck, id };
+      migrated = true;
+    }
+
+    const normalizedSystem = normalizeCardSystemId(nextDeck.system);
+    if (nextDeck.system !== normalizedSystem) {
+      nextDeck = { ...nextDeck, system: normalizedSystem };
+      migrated = true;
+    }
+
+    if (nextDeck !== deck) {
+      store.decks[id] = nextDeck;
     }
   });
+
+  if (migrated) {
+    localStorage.setItem('mtgplayer-decks', JSON.stringify(store));
+  }
+
+  const legacySystemIds = ['scry-server-mtg', 'unsorted'];
+  for (const legacyId of legacySystemIds) {
+    const legacyDecks = store.systems?.[legacyId];
+    if (!legacyDecks?.length) continue;
+    store.systems[MTG_CARD_SYSTEM.id] = [
+      ...new Set([...(store.systems[MTG_CARD_SYSTEM.id] ?? []), ...legacyDecks]),
+    ];
+    delete store.systems[legacyId];
+    migrated = true;
+  }
+
+  if (migrated) {
+    localStorage.setItem('mtgplayer-decks', JSON.stringify(store));
+  }
 
   return store;
 }
@@ -101,28 +136,45 @@ function syncInPlayEntries(
   });
 }
 
+async function hydrateCardEntries(
+  entries: DetailedCardEntry[],
+  cache: Map<string, DetailedCardEntry>,
+  target: Record<string, DetailedCardEntry>,
+) {
+  const needingHydration = entries.filter(needsCardHydration);
+  const ready = entries.filter(card => !needsCardHydration(card));
+
+  for (const card of ready) {
+    const updated = await applyCustomArtToEntry(card);
+    target[getCardKey(updated)] = updated;
+  }
+
+  if (!needingHydration.length) return;
+
+  const hydrated = await fetchCardInfoForImport(needingHydration, cache);
+  for (const card of needingHydration) {
+    const key = getCardKey(card);
+    const updated = hydrated[key] ?? (await hydrateCardEntry(card, cache).catch(() => card));
+    target[key] = await applyCustomArtToEntry(updated);
+  }
+}
+
 export async function hydrateDeck(originalDeck: Deck) {
   let cache = new Map();
 
   let deck = structuredClone(originalDeck);
 
-  // migrate to deck v2
   if (deck.cardList) {
-    let cardList = loadCardList(deck.cardList);
+    const { cards: cardList, inPlayIndices } = parseImportedCardList(deck.cardList);
     deck.cardList = undefined;
     deck.deck = undefined;
 
-    const cards = await Promise.all(
-      cardList.map(card => fetchCardInfo(card, cache).then(card => [getCardKey(card), card])),
-    );
+    deck.cards = await fetchCardInfoForImport(cardList, cache);
 
-    deck.cards = Object.fromEntries(cards);
-
-    if (deck.inPlay && Array.isArray(deck.inPlay)) {
-      const cards = await Promise.all(
-        deck.inPlay.map(card => fetchCardInfo(card, cache).then(card => [getCardKey(card), card])),
-      );
-      deck.inPlay = Object.fromEntries(cards);
+    if (!Object.keys(deck.inPlay ?? {}).length && inPlayIndices.length) {
+      deck.inPlay = buildImportedInPlay(cardList, inPlayIndices, deck.cards);
+    } else if (deck.inPlay && Array.isArray(deck.inPlay)) {
+      deck.inPlay = await fetchCardInfoForImport(deck.inPlay, cache);
     }
     deck.version = 2;
   }
@@ -132,20 +184,10 @@ export async function hydrateDeck(originalDeck: Deck) {
   deck.cards = {};
   deck.inPlay = {};
 
-  await Promise.all(
-    deckCards.map(async card => {
-      const updatedCard = await hydrateCardEntry(card, cache);
-      deck.cards[getCardKey(updatedCard)] = updatedCard;
-    }),
-  );
+  await hydrateCardEntries(deckCards, cache, deck.cards);
 
   const syncedInPlay = syncInPlayEntries(inPlayCards, deck.cards);
-  await Promise.all(
-    syncedInPlay.map(async card => {
-      const updatedCard = await hydrateCardEntry(card, cache);
-      deck.inPlay[getCardKey(updatedCard)] = updatedCard;
-    }),
-  );
+  await hydrateCardEntries(syncedInPlay, cache, deck.inPlay);
 
   deck = Object.assign({}, structuredClone(DEFAULT_DECK), deck);
 
@@ -176,60 +218,35 @@ export function serializeDeck(deck: Deck) {
   return serializedDeck;
 }
 
-function getCardSystemStore() {
-  let stateString = localStorage.getItem(`card-systems`);
-  if (!stateString) return { systems: {}, system: '' };
-  let state = JSON.parse(stateString);
-  for (const [name, system] of Object.entries(state.systems)) {
-    if (!system) {
-      delete state.systems[name];
-    }
-  }
-  return state;
-}
-
 export function CardSystemProvider(props: ParentProps) {
-  const [store, setStore] = createStore<CardSystemStore>({ systems: {}, system: '' });
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  const init = getCardSystemStore();
-  setStore(init);
+  const [store, setStore] = createStore<CardSystemStore>({
+    systems: { [MTG_CARD_SYSTEM.id]: MTG_CARD_SYSTEM },
+    system: MTG_CARD_SYSTEM.id,
+  });
 
   const updateStore: typeof setStore = (...update: any[]) => {
     (setStore as any)(...update);
     let raw = unwrap(store);
-    localStorage.setItem('card-systems', JSON.stringify(raw));
+    localStorage.setItem('mtgplayer-card-system', JSON.stringify(raw));
   };
 
-  async function initCardSystem(uri = DEFAULT_CARD_SYSTEM_URI) {
-    const response = await fetch(uri);
-    if (!response.ok) throw new Error('Failed to load card system');
-    const system = await response.json();
-    system.uri = uri;
-
-    updateStore('systems', system.id, system);
-    updateStore('system', system.id);
-    setGlobalCardSystem(system);
-    return system;
+  async function initCardSystem() {
+    updateStore('systems', MTG_CARD_SYSTEM.id, MTG_CARD_SYSTEM);
+    updateStore('system', MTG_CARD_SYSTEM.id);
+    setGlobalCardSystem(MTG_CARD_SYSTEM);
+    return MTG_CARD_SYSTEM;
   }
 
-  onMount(async () => {
-    let systemUri = searchParams.system;
-    if (systemUri && typeof systemUri === 'string') {
-      await initCardSystem(systemUri);
-      setSearchParams({ system: undefined }, { replace: true });
-    } else {
-      systemUri = store.systems[store.system]?.uri;
-      await initCardSystem(systemUri);
-    }
+  onMount(() => {
+    void initCardSystem();
   });
 
   async function setCardSystem(systemId: string) {
-    let system = store.systems[systemId];
-    if (!system) {
-      throw new Error(`system ${systemId} not found`);
+    const normalized = normalizeCardSystemId(systemId);
+    if (normalized !== MTG_CARD_SYSTEM.id) {
+      throw new Error(`Unknown card system: ${systemId}`);
     }
-    return await initCardSystem(system.uri);
+    return initCardSystem();
   }
 
   return (
@@ -238,4 +255,9 @@ export function CardSystemProvider(props: ParentProps) {
       {props.children}
     </CardSystemContext.Provider>
   );
+}
+
+interface CardSystemStore {
+  systems: Record<string, CardSystem>;
+  system: string;
 }

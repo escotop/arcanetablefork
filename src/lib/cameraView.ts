@@ -1,6 +1,6 @@
 import { createSignal } from 'solid-js';
 import { Euler, Group, MathUtils, Matrix4, Quaternion, Vector3 } from 'three';
-import { applyPlayerTransform, camera, baseCameraQuaternion, players, playAreas, table } from './globals';
+import { applyPlayerTransform, camera, baseCameraQuaternion, isLocalCardGridSearchOpen, players, playAreas, table } from './globals';
 import { getRegisteredClientIdForSession } from './playerSession';
 import type { PlayArea } from './playArea';
 
@@ -397,9 +397,16 @@ function refreshViewPresentation() {
   const viewIndex = cameraViewPlayerIndex();
   const viewedArea = ordered[viewIndex];
   const localArea = ordered[0];
+  const searchOpen = isLocalCardGridSearchOpen();
 
   ordered.forEach(area => {
     if (!area) return;
+
+    if (searchOpen) {
+      area.hand.mesh.visible = area === localArea;
+      return;
+    }
+
     if (viewIndex === 0) {
       area.hand.mesh.visible = true;
       return;
@@ -414,6 +421,16 @@ function refreshViewPresentation() {
   });
 
   Object.values(playAreas).forEach(area => area?.refreshNameTagOrientation());
+}
+
+export function refreshCardGridSearchPresentation() {
+  const searchOpen = isLocalCardGridSearchOpen();
+
+  Object.values(playAreas).forEach(area => {
+    area?.setNameTagSuppressed(searchOpen);
+  });
+
+  refreshViewPresentation();
 }
 
 export function getCameraViewIndexForClientId(

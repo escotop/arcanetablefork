@@ -15,16 +15,21 @@
   right: 0;
   top: 0;
   position: fixed;
-  backdrop-filter: blur(2px);
-  background-color: #0005;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.searchHeader {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 1rem max(1rem, calc((100% - 80ch) / 2)) 0.75rem;
+  pointer-events: initial;
 }
 
 .search {
   pointer-events: initial;
-  margin: auto;
-  left: 0;
-  right: 0;
+  margin: 0 auto;
   width: 80ch;
-  padding: 1rem 0;
+  max-width: 100%;
   box-sizing: content-box;
 }

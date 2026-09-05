@@ -1,6 +1,6 @@
-import { setCardData, updateModifiers, ensureCardMesh, loadCardTextures } from './card';
+import { ensureCardMesh, loadCardTextures, setCardData, updateModifiers } from './card';
 import { Card, CardZone } from './constants';
-import { cardsById, sendEvent } from './globals';
+import { cardsById, getLocalPlayerClientId, sendEvent } from './globals';
 import { Deck } from './deck';
 import { serializeCardUserDataForLog } from './gameLogEvents';
 import { onStackCardAdded } from './cardLoading';
@@ -88,7 +88,9 @@ export async function transferCard<AddOptions extends {}>(
       if (toZone.zone === 'peek' || toZone.zone === 'reveal') {
         setCardData(card.mesh, 'isPublic', true);
       }
-      const textureLoad = loadCardTextures(card);
+      const textureLoad = loadCardTextures(card).catch(error => {
+        devLog.warn('[transferCard] texture load failed', card.detail?.name ?? card.id, error);
+      });
       if (toZone.zone === 'peek' || toZone.zone === 'tokenSearch') {
         void textureLoad;
       } else {
@@ -102,6 +104,15 @@ export async function transferCard<AddOptions extends {}>(
   }
 
   if (!preventTransmit) {
+    if (!card.mesh) {
+      const ownerId = card.clientId ?? getLocalPlayerClientId();
+      if (ownerId !== undefined) ensureCardMesh(card, ownerId);
+    }
+    if (!card.mesh) {
+      devLog.warn('[transferCard] missing mesh, skipping transmit', card.id);
+      return;
+    }
+
     sendEvent({
       type: 'transferCard',
       payload: {

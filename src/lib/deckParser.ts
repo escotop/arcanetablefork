@@ -1,4 +1,8 @@
 import * as a from 'arcsecond';
+import type { CardEntry } from './constants';
+
+const SECTION_COMMANDER = /^commander$/i;
+const SECTION_DECK = /^deck$/i;
 
 const cardCategory = (open, close) =>
   a
@@ -100,3 +104,42 @@ export const deck = a
       .map(r => r?.[1]),
   )
   .map(r => r.filter(Boolean));
+
+function isCommentLine(trimmed: string) {
+  return trimmed.startsWith('//') || trimmed.startsWith('==');
+}
+
+export interface ParsedImportedCardList {
+  cards: CardEntry[];
+  inPlayIndices: number[];
+}
+
+export function parseImportedCardList(cardList: string): ParsedImportedCardList {
+  const cards: CardEntry[] = [];
+  const inPlayIndices: number[] = [];
+  let markNextInPlay = false;
+
+  for (const rawLine of cardList.split(/\r?\n/)) {
+    const trimmed = rawLine.trim();
+    if (!trimmed || isCommentLine(trimmed)) continue;
+
+    if (SECTION_DECK.test(trimmed)) continue;
+
+    if (SECTION_COMMANDER.test(trimmed)) {
+      markNextInPlay = true;
+      continue;
+    }
+
+    const parsed = card.run(rawLine).result;
+    if (!parsed?.name?.length) continue;
+
+    if (markNextInPlay) {
+      inPlayIndices.push(cards.length);
+      markNextInPlay = false;
+    }
+
+    cards.push(parsed as CardEntry);
+  }
+
+  return { cards, inPlayIndices };
+}

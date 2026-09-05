@@ -31,7 +31,6 @@ import {
   expect,
   flushDispatchEventQueue,
   focusCamera,
-  focusRayCaster,
   focusRenderer,
   gameLog,
   getLocalPlayArea,
@@ -41,6 +40,7 @@ import {
   init,
   initClock,
   isSpectating,
+  isGameplayBlocked,
   playAreas,
   players,
   processedEvents,
@@ -65,6 +65,7 @@ import {
   setPlayers,
   setSettings,
   settings,
+  FOCUS_PANEL_LAYER,
   FOCUS_PANEL_MAX_SCALE,
   FOCUS_PANEL_MIN_SCALE,
   table,
@@ -95,7 +96,14 @@ import { resolveStackAnchor } from './lib/footprintOverlap';
 import { restackItemsLocally } from './lib/utils';
 import { processEvents, syncPlayAreasFromGameLog, waitForGameLogCatchUp, waitForMultiplayerGameState } from './remoteEvents';
 import { setupGameStateImportObserver } from './lib/gameStateSnapshot';
+import {
+  acquireWorldSnapshot,
+  gameNeedsSnapshotSync,
+  hasSnapshotCatchUp,
+  setupSyncBarrierObserver,
+} from './lib/worldSnapshot';
 import { getDeckStore } from './lib/deckStore';
+import { refreshMultiplayerSyncState } from './lib/multiplayerSync';
 import { unwrap } from 'solid-js/store';
 import {
   beginLoadProfile,
@@ -176,10 +184,12 @@ function waitForProviderSync(maxWaitMs = 8000): Promise<{
   });
 }
 
-async function waitForGameLogReplay() {
+async function waitForGameLogReplay(maxWaitMs = 30_000) {
   const replayStart = processedEvents();
   const logLength = gameLog.length;
-  const caughtUp = await profileAsync('gameLog replay', () => waitForGameLogCatchUp());
+  const caughtUp = await profileAsync('gameLog replay', () =>
+    waitForGameLogCatchUp({ maxWaitMs }),
+  );
   syncPlayAreasFromGameLog();
   Object.values(playAreas).forEach(area => area?.reapplyBattlefieldOrientations());
   markLoadProfile('gameLog replay counts', {
@@ -190,25 +200,52 @@ async function waitForGameLogReplay() {
     caughtUp,
   });
   if (!caughtUp) {
-    devLog.warn(
-      '[loadProfile] gameLog replay did not catch up',
-      processedEvents(),
-      '/',
-      gameLog.length,
-    );
+    return;
   }
 }
 
-async function reclaimLocalPlayArea(
-  joinClientId: number,
+async function waitForPlayAreaOnTable(clientId: number, maxWaitMs = 15_000) {
+  const deadline = performance.now() + maxWaitMs;
+
+  while (performance.now() < deadline) {
+    await processEvents();
+    syncPlayAreasFromGameLog();
+
+    const area = playAreas[clientId];
+    if (area) {
+      if (area.mesh.parent !== table) {
+        table.add(area.mesh);
+        readjustPlayAreas();
+      }
+      return area;
+    }
+
+    await waitForGameLogCatchUp({
+      maxWaitMs: Math.max(250, deadline - performance.now()),
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+
+  return playAreas[clientId];
+}
+
+function ensurePlayAreaOnTable(area: PlayArea) {
+  if (area.mesh.parent !== table) {
+    table.add(area.mesh);
+    readjustPlayAreas();
+  }
+}
+
+async function finalizeReconnectedPlayArea(
   gameId: string,
   playerSessionId: string,
   initCardSystem?: (uri: string) => Promise<unknown>,
 ) {
-  await waitForGameLogReplay();
-
-  const area = playAreas[joinClientId];
+  const area = getLocalPlayArea();
   if (!area) return false;
+
+  playArea = area;
+  hand = area.hand;
 
   const meta = loadGameMeta(gameId);
   if (meta?.cardSystemUri && initCardSystem) {
@@ -218,12 +255,59 @@ async function reclaimLocalPlayArea(
     );
   }
 
+  provider.awareness.setLocalStateField('playerSessionId', playerSessionId);
+  if (meta?.name) provider.awareness.setLocalStateField('name', meta.name);
+  if (meta?.life !== undefined) provider.awareness.setLocalStateField('life', meta.life);
+  if (meta?.commanderLife !== undefined) {
+    provider.awareness.setLocalStateField('commanderLife', meta.commanderLife);
+  } else if (isMagicCardSystem(cardSystem)) {
+    provider.awareness.setLocalStateField('commanderLife', DEFAULT_COMMANDER_LIFE);
+  }
+  provider.awareness.setLocalStateField(
+    'color',
+    settings.playerColor ?? resolvePlayerColor({ name: meta?.name }),
+  );
+
+  ensurePlayAreaOnTable(area);
+  readjustPlayAreas();
+  markLoadProfile('reclaim play area ready', { joinClientId: area.clientId, cardCount: area.deck.cards.length });
+  void area.loadTextures();
+  renderer?.compile(scene, camera);
+  markLoadProfile('renderer compile (reconnect)');
+  return true;
+}
+
+async function reclaimLocalPlayArea(
+  joinClientId: number,
+  gameId: string,
+  playerSessionId: string,
+  initCardSystem?: (uri: string) => Promise<unknown>,
+  options?: { maxReplayWaitMs?: number; maxAreaWaitMs?: number },
+) {
+  if (!hasSnapshotCatchUp()) {
+    await waitForGameLogReplay(options?.maxReplayWaitMs ?? 30_000);
+  }
+
+  const area = await profileAsync('wait for play area on table', () =>
+    waitForPlayAreaOnTable(joinClientId, options?.maxAreaWaitMs ?? 15_000),
+  );
+  if (!area) return false;
+
   area.setAsLocalPlayArea();
   area.subscribeEvents(sendEvent);
   playArea = area;
   hand = area.hand;
   setLocalPlayerClientId(joinClientId);
   provider.awareness.setLocalStateField('playerSessionId', playerSessionId);
+
+  const meta = loadGameMeta(gameId);
+  if (meta?.cardSystemUri && initCardSystem) {
+    await profileAsync('card system init', () => initCardSystem(meta.cardSystemUri!));
+    await profileAsync('card back texture', () =>
+      setCardBackTexture(cardSystem.cardBack ?? DEFAULT_CARD_BACK),
+    );
+  }
+
   if (meta?.name) provider.awareness.setLocalStateField('name', meta.name);
   if (meta?.life !== undefined) provider.awareness.setLocalStateField('life', meta.life);
   if (meta?.commanderLife !== undefined) {
@@ -239,6 +323,7 @@ async function reclaimLocalPlayArea(
   registerPlayerSession(playerSessionId, joinClientId);
   persistJoinBinding(gameId, { playerSessionId, clientId: joinClientId });
   setIsIntitialized(true);
+  ensurePlayAreaOnTable(area);
   readjustPlayAreas();
   markLoadProfile('reclaim play area ready', { joinClientId, cardCount: area.deck.cards.length });
   void area.loadTextures();
@@ -258,11 +343,32 @@ export async function tryReconnectToGame(
   const joinClientId = await profileAsync('resolve join client', () =>
     resolveJoinClientId(gameLog, gameId, playerSessionId, processEvents),
   );
-  if (joinClientId === undefined) return false;
+  if (joinClientId === undefined) {
+    markLoadProfile('no existing join — fresh game');
+    return false;
+  }
 
-  return profileAsync('reclaim local play area', () =>
-    reclaimLocalPlayArea(joinClientId, gameId, playerSessionId, initCardSystem),
+  if (gameNeedsSnapshotSync(playerSessionId)) {
+    const snapshotApplied = await profileAsync('acquire world snapshot', () =>
+      acquireWorldSnapshot(gameId, playerSessionId),
+    );
+    if (snapshotApplied) {
+      const ok = await profileAsync('finalize reconnected play area', () =>
+        finalizeReconnectedPlayArea(gameId, playerSessionId, initCardSystem),
+      );
+      markLoadProfile('reconnect path', { path: 'snapshot', ok });
+      return ok;
+    }
+  }
+
+  const reclaimed = await profileAsync('reclaim local play area', () =>
+    reclaimLocalPlayArea(joinClientId, gameId, playerSessionId, initCardSystem, {
+      maxReplayWaitMs: 20_000,
+      maxAreaWaitMs: 20_000,
+    }),
   );
+  markLoadProfile('reconnect path', { path: 'reclaim', reclaimed });
+  return reclaimed;
 }
 
 export async function localInit(gameOptions: GameOptions) {
@@ -289,8 +395,19 @@ export async function localInit(gameOptions: GameOptions) {
     }));
     setPlayers(newPlayers);
     handlePingAwarenessChanges(change);
-    void processEvents().then(() => syncPlayAreasFromGameLog());
+    refreshMultiplayerSyncState();
+    void processEvents().then(() => {
+      syncPlayAreasFromGameLog();
+      refreshMultiplayerSyncState();
+    });
   });
+
+  setPlayers(
+    Array.from(provider.awareness.getStates().entries()).map(([id, entry]) => ({
+      entry,
+      id,
+    })),
+  );
 
   provider.on('sync', isSynced => {
     if (!isSynced) return;
@@ -306,10 +423,12 @@ export async function localInit(gameOptions: GameOptions) {
 
   var ambient = new THREE.AmbientLight(0xffffff);
   ambient.intensity = 2;
+  ambient.layers.enable(FOCUS_PANEL_LAYER);
   scene.add(ambient);
 
   var directionalLight = new THREE.DirectionalLight(0xffffff, 1);
   directionalLight.intensity = 2;
+  directionalLight.layers.enable(FOCUS_PANEL_LAYER);
   directionalLight.position.set(0, 200, 0);
   directionalLight.shadow.mapSize.set(1024 * 2, 1024 * 2);
   directionalLight.shadow.camera.left = -140;
@@ -327,6 +446,8 @@ export async function localInit(gameOptions: GameOptions) {
     void processEvents().then(() => syncPlayAreasFromGameLog());
   });
   setupGameStateImportObserver(() => currentGameId);
+  setupSyncBarrierObserver();
+  refreshMultiplayerSyncState();
 
   container.appendChild(renderer.domElement);
   setupCss3dRenderer(container);
@@ -355,6 +476,10 @@ export async function localInit(gameOptions: GameOptions) {
   if (gameOptions.deck) {
     loadDeckAndJoin(gameOptions);
   }
+  markLoadProfile('localInit complete', {
+    gameLogLength: gameLog.length,
+    hasDeck: !!gameOptions.deck,
+  });
   startAnimating();
 }
 
@@ -383,22 +508,60 @@ export async function loadDeckAndJoin(
   settings: LoadSettings,
   initCardSystem?: (uri: string) => Promise<unknown>,
 ) {
-  await profileAsync('provider sync (join)', () => waitForProviderSync(15000));
-  await profileAsync('multiplayer state (pre-join)', () => waitForMultiplayerGameState(15000));
+  await profileAsync('provider sync (join)', () => waitForProviderSync(5000));
 
   const playerSessionId = getOrCreatePlayerSessionId(currentGameId);
+  const remotePlayersOnline = players().filter(
+    player => player.id !== provider.awareness.clientID && !player.entry?.isSpectating,
+  );
+  markLoadProfile('join context', {
+    remotePlayers: remotePlayersOnline.length,
+    gameLogLength: gameLog.length,
+  });
+
   const existingJoinClientId = await profileAsync('resolve join client (new game)', () =>
     resolveJoinClientId(gameLog, currentGameId, playerSessionId, processEvents),
   );
 
-  if (existingJoinClientId !== undefined) {
-    const reclaimed = await reclaimLocalPlayArea(
-      existingJoinClientId,
-      currentGameId,
-      playerSessionId,
-      initCardSystem,
+  const needsMultiplayerSync =
+    existingJoinClientId !== undefined || remotePlayersOnline.length > 0;
+
+  if (needsMultiplayerSync) {
+    await profileAsync('multiplayer state (pre-join)', () =>
+      waitForMultiplayerGameState(existingJoinClientId !== undefined ? 8000 : 3000),
     );
-    if (reclaimed) return;
+
+    if (gameNeedsSnapshotSync(playerSessionId)) {
+      await profileAsync('acquire world snapshot (join)', () =>
+        acquireWorldSnapshot(currentGameId, playerSessionId),
+      );
+    }
+  } else {
+    markLoadProfile('skipped multiplayer pre-sync — solo/new table');
+  }
+
+  if (existingJoinClientId !== undefined) {
+    if (hasSnapshotCatchUp() && getLocalPlayArea()) {
+      await profileAsync('finalize reconnected play area (join)', () =>
+        finalizeReconnectedPlayArea(currentGameId, playerSessionId, initCardSystem),
+      );
+      markLoadProfile('join complete', { path: 'snapshot-catchup' });
+      return;
+    }
+
+    const reclaimed = await profileAsync('reclaim local play area (join)', () =>
+      reclaimLocalPlayArea(
+        existingJoinClientId,
+        currentGameId,
+        playerSessionId,
+        initCardSystem,
+        { maxReplayWaitMs: 10_000, maxAreaWaitMs: 10_000 },
+      ),
+    );
+    if (reclaimed) {
+      markLoadProfile('join complete', { path: 'reclaim' });
+      return;
+    }
   }
 
   let deck = settings.deck;
@@ -457,13 +620,23 @@ export async function loadDeckAndJoin(
 
   hand = playArea.hand;
 
-  table.add(playArea.mesh);
+  ensurePlayAreaOnTable(playArea);
 
   readjustPlayAreas();
-  renderer.compile(scene, camera);
-  markLoadProfile('renderer compile (new game)');
-  await profileAsync('multiplayer state (post-join)', () => waitForMultiplayerGameState(15000));
   setEventCatchUpComplete(true);
+  refreshMultiplayerSyncState();
+
+  requestAnimationFrame(() => renderer?.compile(scene, camera));
+
+  if (remotePlayersOnline.length > 0) {
+    void waitForMultiplayerGameState(5000).then(() => refreshMultiplayerSyncState());
+  }
+
+  markLoadProfile('join complete', {
+    path: 'new game',
+    deckCards: playArea.deck.cards.length,
+    remotePlayers: remotePlayersOnline.length,
+  });
 }
 
 let focusPanelScaleTarget = settings.focusPanelScale;
@@ -562,6 +735,7 @@ function resolveContextMenuTarget(object: THREE.Object3D): THREE.Object3D {
 
 function onContextMenu(event: PointerEvent) {
   event.preventDefault();
+  if (isGameplayBlocked()) return;
   updateMouse(event);
   raycaster.setFromCamera(mouse, camera);
   let intersects = raycaster.intersectObject(scene);
@@ -596,6 +770,7 @@ function onAuxClick(event: MouseEvent) {
 }
 
 function onDocumentClick(event: PointerEvent) {
+  if (isGameplayBlocked()) return;
   updateMouse(event);
   setContextMenuSignal();
   raycaster.setFromCamera(mouse, camera);
@@ -696,6 +871,7 @@ function resolveInteractiveTarget(object: THREE.Object3D): THREE.Object3D {
 function onDocumentDragStart(event: PointerEvent) {
   event.preventDefault();
   event.dataTransfer.dropEffect = 'move';
+  if (isGameplayBlocked()) return;
   raycaster.setFromCamera(mouse, camera);
   let intersects = raycaster.intersectObject(scene);
   if (isSpectating()) return;
@@ -778,6 +954,7 @@ function getBattlefieldDropPosition(
 
 async function onDocumentDrop(event) {
   event.preventDefault();
+  if (isGameplayBlocked()) return;
   if (selection.isDown || selection.helper.enabled) {
     selection.completeRectangleSelection(event);
   }
@@ -1247,29 +1424,20 @@ function render3d(delta: number) {
   patchCss3dPointerEvents();
 
   if (hoverSignal()?.mesh) {
-    let mesh = hoverSignal().mesh as THREE.Mesh;
+    const mesh = hoverSignal().mesh as THREE.Object3D;
     updateFocusCamera(mesh);
 
-    focusRayCaster.set(
-      focusCamera.position,
-      mesh.localToWorld(new THREE.Vector3()).sub(focusCamera.position).normalize(),
-    );
-    let intersections = focusRayCaster.intersectObject(scene);
-    let targetDistance;
-    let materials = intersections
-      .map(({ object, distance }) => {
-        if (object.uuid === mesh.uuid) {
-          targetDistance = distance;
-          return [];
-        }
-        if (targetDistance && distance > targetDistance) return [];
-        return Array.isArray(object.material) ? object.material : [object.material];
-      })
-      .flat();
+    const focusLayerObjects: THREE.Object3D[] = [];
+    mesh.traverse(obj => {
+      obj.layers.enable(FOCUS_PANEL_LAYER);
+      focusLayerObjects.push(obj);
+    });
 
-    materials.forEach(mat => (mat.wireframe = true));
     focusRenderer.render(scene, focusCamera);
-    materials.forEach(mat => (mat.wireframe = false));
+
+    for (const obj of focusLayerObjects) {
+      obj.layers.disable(FOCUS_PANEL_LAYER);
+    }
   }
 }
 

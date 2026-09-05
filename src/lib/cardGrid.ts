@@ -17,6 +17,7 @@ import {
   zonesById,
 } from './globals';
 import { getCardTypeCategory } from './ui/deckEditor/cardGroupings';
+import { refreshCardGridSearchPresentation } from './cameraView';
 import { cleanupMesh, getGlobalRotation, isVectorEqual } from './utils';
 
 const CARDS_PER_ROW = 5;
@@ -309,6 +310,7 @@ export class CardGrid implements CardZone {
     if (skipAnimation) {
       card.mesh.position.copy(position);
       card.mesh.rotation.copy(rotation);
+      this.syncSearchPresentation();
       return;
     }
 
@@ -331,6 +333,14 @@ export class CardGrid implements CardZone {
       },
       duration: 0.2,
     });
+
+    this.syncSearchPresentation();
+  }
+
+  private syncSearchPresentation() {
+    if (!this.isLocalPlayArea) return;
+    if (!['peek', 'reveal', 'tokenSearch'].includes(this.zone)) return;
+    refreshCardGridSearchPresentation();
   }
 
   removeCard(cardMesh: Object3D) {
@@ -367,6 +377,8 @@ export class CardGrid implements CardZone {
     if (!cardMesh.userData.skipAnimation) {
       this.updateCardPositions();
     }
+
+    this.syncSearchPresentation();
   }
 
   destroy() {

@@ -1,0 +1,31 @@
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Arcanetable",
+    "url": "https://arcanetable.app",
+    "applicationCategory": "GameApplication",
+    "operatingSystem": "Web Browser",
+    "browserRequirements": "Requires JavaScript. Chrome, Firefox, Safari, Edge.",
+    "description": "A 3D TCG playtesting sandbox in your browser. Play Magic: The Gathering, Pokémon, Yu-Gi-Oh, or your own custom card game. No download, no account — share a link and play.",
+    "featureList": [
+      "3D card table rendered in browser",
+      "No download or account required",
+      "Multiplayer via shared link",
+      "Built-in deck editor",
+      "Custom card system support",
+      "Magic: The Gathering",
+      "Pokémon TCG",
+      "Yu-Gi-Oh"
+    ],
+    "screenshot": "https://arcanetable.app/table.webp",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "creator": {
+      "@type": "Organization",
+      "name": "Sparkstone",
+      "url": "https://sparkstonepdx.com"
+    }
+  }

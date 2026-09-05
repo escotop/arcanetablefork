@@ -4,13 +4,14 @@ import { Button } from '~/components/ui/button';
 import { Command, CommandInput } from '~/components/ui/command';
 import { Menubar, MenubarContent, MenubarMenu, MenubarTrigger } from '~/components/ui/menubar';
 import NumberFieldMenuItem from '~/components/ui/number-field-menu-item';
-import { cleanupCard, cloneCard } from '../card';
+import { cleanupCard, cloneCard, setCardData, updateModifiers } from '../card';
 import { Card } from '../constants';
 import {
   cardsById,
   doXTimes,
   getLocalPlayArea,
   hoverSignal,
+  peekFilterText,
   sendEvent,
   setPeekFilterText,
 } from '../globals';
@@ -42,15 +43,24 @@ const TokenSearchMenu: Component = props => {
   const tether = () => hoverSignal()?.tether;
   const [viewField, setViewField] = createSignal(false);
 
+  function dismissTokenSearch() {
+    const area = playArea();
+    if (!area) return;
+    setPeekFilterText('');
+    void area.dismissFromZone(area.tokenSearchZone);
+  }
+
   function addToBattlefield(referenceCard: Card) {
     const area = playArea();
     if (!area) return;
     let card = cloneCard(referenceCard, nanoid());
+    setCardData(card.mesh, 'isToken', true);
 
     let battlefield = area.battlefieldZone;
     let tokenZone = area.tokenSearchZone;
     tokenZone.mesh.localToWorld(card.mesh.position);
     battlefield.addCard(card);
+    updateModifiers(card);
 
     sendEvent({
       type: 'createCard',
@@ -65,19 +75,25 @@ const TokenSearchMenu: Component = props => {
     <>
       <Show when={peekCards()?.length > 0 && playArea()?.tokenSearchZone?.observable}>
         <div class={styles.searchContainer}>
-          <div class={styles.search}>
-            <h2 class='text-white text-xl text-left mb-4'>
-              Tokens | {playArea()!.tokenSearchZone.observable.cardCount}
-            </h2>
-            <Command>
+          <div class={styles.searchHeader}>
+            <div class={styles.search}>
+            <Command
+              onKeyDown={e => {
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  dismissTokenSearch();
+                }
+              }}>
               <CommandInput
                 ref={inputRef}
                 placeholder='Search'
-                onKeyUp={e => {
-                  const area = playArea();
-                  if (!area) return;
-                  if (e.code === 'Escape') {
-                    area.dismissFromZone(area.tokenSearchZone);
+                value={peekFilterText()}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dismissTokenSearch();
                   }
                 }}
                 onValueChange={value => {
@@ -115,15 +131,14 @@ const TokenSearchMenu: Component = props => {
                   <Button
                     variant='ghost'
                     onClick={() => {
-                      const area = playArea();
-                      if (!area) return;
-                      area.dismissFromZone(area.tokenSearchZone);
+                      dismissTokenSearch();
                     }}>
                     Dismiss
                   </Button>
                 </MenubarMenu>
               </Menubar>
             </Command>
+            </div>
           </div>
         </div>
         <Show when={tether() && cardMesh()}>

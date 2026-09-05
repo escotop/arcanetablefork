@@ -31,3 +31,10 @@ Thumbs.db
 .idea
 .vscode/*
 !.vscode/extensions.json
+
+# Local skills / design references (not part of the product)
+no-slop-ui/
+
+# Legacy app build artifacts
+legacy/**/node_modules
+legacy/**/dist

@@ -88,6 +88,19 @@ export default function BattlefieldContextMenu(props: { targetMesh: Mesh; playAr
           </Dynamic>
         </Dynamic>
       </Dynamic>
+      <Show when={meshes().some(mesh => mesh?.userData?.isClone)}>
+        <Dynamic component={ctx.separator} />
+        <Dynamic
+          component={ctx.item}
+          onClick={() => {
+            meshes()
+              .filter(mesh => mesh?.userData?.isClone)
+              .forEach(mesh => props.playArea.deleteClone(mesh.userData.id));
+            selection.clearSelection();
+          }}>
+          Delete clone
+        </Dynamic>
+      </Show>
       <Dynamic component={ctx.menu}>
         <Dynamic component={ctx.trigger}>Clone</Dynamic>
         <Dynamic component={ctx.content}>

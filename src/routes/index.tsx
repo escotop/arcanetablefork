@@ -1,592 +1,189 @@
-import { A, useNavigate } from '@solidjs/router';
+import { useNavigate } from '@solidjs/router';
 import { nanoid } from 'nanoid';
-import { createSignal, For, lazy, onMount, Show, Suspense } from 'solid-js';
-import MetaTags, { JsonLd } from '~/lib/meta-tags';
-import { SHORTCUTS, BATTLEFIELD_SHORTCUTS, OVERLAY_SHORTCUTS } from '~/lib/shortcuts/hotkeys-table';
-import { useClientCardSystemContext } from '~/lib/cardSystemProviderClient';
-import softwareLd from '~/lib/json-ld/software.json';
-import faqLd from '~/lib/json-ld/faq.json';
-import BrandingHeader from '~/components/branding/header';
-import ClientOnly from '~/lib/clientOnly';
+import { Component, createMemo, createSignal, For, onMount, Show } from 'solid-js';
+import { Portal } from 'solid-js/web';
+import { produce, unwrap } from 'solid-js/store';
+import { Button } from '~/components/ui/button';
+import { getDeckPreviewImageUrl } from '~/lib/deck';
+import { useCardSystemContext } from '~/lib/cardSystemContext';
+import { Deck } from '~/lib/constants';
+import { createDeckStore } from '~/lib/deckStore';
+import { DeckEditor } from '~/lib/ui/deckEditor';
+import PencilIcon from 'lucide-solid/icons/pencil';
 
-const ManageDecksButton = lazy(() =>
-  import('~/lib/ui/manageDecksButton').then(module => ({ default: module.ManageDecksButton })),
-);
+function deckCardCount(deck: Deck) {
+  return Object.values(deck.cards).reduce((sum, card) => sum + (card.qty ?? 1), 0);
+}
 
-const DeckManagerDialog = lazy(() =>
-  import('~/lib/ui/deckManager').then(module => ({ default: module.DeckManagerDialog })),
-);
+function listDeckIds(store: { decks: Record<string, Deck>; systems: Record<string, string[]> }) {
+  const ids = new Set<string>();
+  for (const deckIds of Object.values(store.systems)) {
+    for (const id of deckIds ?? []) {
+      if (store.decks[id]) ids.add(id);
+    }
+  }
+  for (const id of Object.keys(store.decks)) {
+    ids.add(id);
+  }
+  return [...ids]
+    .map(id => store.decks[id])
+    .filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 
-export default function Page(props) {
-  const [startUrl, setStartUrl] = createSignal(`/game/${nanoid()}`);
-  const [manageDecksOpen, setManageDecksOpen] = createSignal(false);
-  const cardSystemCtx = useClientCardSystemContext();
+const LandingPage: Component = () => {
+  const navigate = useNavigate();
+  const [gameUrl, setGameUrl] = createSignal(`/game/${nanoid()}`);
+  const [, { initCardSystem }] = useCardSystemContext();
+  const [deckStore, setDeckStore] = createDeckStore();
+  const [editingDeck, setEditingDeck] = createSignal<Deck>();
+
+  const decks = createMemo(() => listDeckIds(deckStore));
 
   onMount(() => {
-    setStartUrl(`/game/${nanoid()}`);
+    setGameUrl(`/game/${nanoid()}`);
+    void initCardSystem();
   });
 
-  return (
-    <div class='bg-gray-900 text-white font-sans'>
-      <MetaTags />
-      <JsonLd id='software' content={softwareLd} />
-      <JsonLd id='faq' content={faqLd} />
-      <JsonLd
-        id='video-object'
-        content={{
-          '@context': 'https://schema.org',
-          '@type': 'VideoObject',
-          name: 'Getting Started with Arcanetable',
-          description:
-            'Watch the getting started guide and be up and running in minutes. Arcanetable is a free 3D TCG playtesting sandbox in your browser — no download, no account required.',
-          thumbnailUrl: 'https://img.youtube.com/vi/W-MgOhw-4vU/maxresdefault.jpg',
-          uploadDate: '2024-11-26T00:00:00+00:00',
-          embedUrl: 'https://www.youtube.com/embed/W-MgOhw-4vU',
-          url: 'https://www.youtube.com/watch?v=W-MgOhw-4vU',
-          publisher: {
-            '@type': 'Organization',
-            name: 'Sparkstone',
-            url: 'https://sparkstonepdx.com',
-          },
-        }}
-      />
-      <div class='mx-auto flex flex-col'>
-        <Hero startUrl={startUrl()} onManageDecks={() => setManageDecksOpen(true)} />
-        <CardSystems startUrl={startUrl()} />
-        <TheTable startUrl={startUrl()} />
-        <Multiplayer />
-        <DeckEditor />
-        <WhyPosters />
-        <FeaturesGrid />
-        <KeyboardShortcuts />
-        <Community />
-        <GettingStartedVideo />
-        <Sparkstone />
-        <Footer />
-      </div>
-      <ClientOnly>
-        <Show when={cardSystemCtx && manageDecksOpen()}>
-          <Suspense>
-            <DeckManagerDialog
-              open={manageDecksOpen()}
-              onOpenChange={setManageDecksOpen}
-              title='Your Decks'
-            />
-          </Suspense>
-        </Show>
-      </ClientOnly>
-    </div>
-  );
-}
-const posterStyle = `
-  background-image: linear-gradient(transparent, transparent 65%, black), var(--image);
-  background-size: cover;
-  background-position: center;
-  aspect-ratio: 2/3;
-`;
+  function saveDeck(updatedDeck: Deck) {
+    const fromSystem = unwrap(editingDeck()?.system) || 'unsorted';
+    const toSystem = updatedDeck.system || 'unsorted';
 
-function Hero(props: { startUrl: string; onManageDecks: () => void }) {
-  return (
-    <header
-      class='relative bg-cover bg-center bg-gray-800 rounded-lg'
-      style="background-image: url('/cluster-1.jpeg'); filter: saturate(2.5);">
-      <div class='absolute inset-0 bg-black opacity-30' />
-      <div class='max-w-7xl mx-auto px-6 lg:px-8 flex flex-col gap-8'>
-        <BrandingHeader />
-      </div>
-      <div class='relative flex flex-col items-center justify-center py-60 text-center'>
-        <h1 class='text-4xl font-bold text-white mb-4'>Playtest your deck.</h1>
-        <p class='text-xl text-gray-300 mb-8 max-w-md'>
-          A 3D card table in your browser. No installs, no accounts. Just share a link and play.
-        </p>
-        <div class='flex gap-4 flex-wrap justify-center'>
-          <A
-            href={props.startUrl}
-            class='bg-indigo-600 text-white px-6 py-3 rounded-xl hover:bg-indigo-700 transition'>
-            Start Now
-          </A>
-          <ClientOnly>
-            <Suspense>
-              <ManageDecksButton onClick={props.onManageDecks} />
-            </Suspense>
-          </ClientOnly>
-        </div>
-      </div>
-    </header>
-  );
-}
+    setDeckStore('systems', fromSystem, (entries = []) => entries.filter(id => id !== updatedDeck.id));
+    setDeckStore('systems', 'unsorted', (entries = []) => entries.filter(id => id !== updatedDeck.id));
+    setDeckStore('systems', toSystem, (entries = []) => [
+      updatedDeck.id,
+      ...entries.filter(id => id !== updatedDeck.id),
+    ]);
+    setDeckStore('decks', { [updatedDeck.id]: updatedDeck });
+  }
 
-function CardSystems(props: { startUrl: string }) {
-  const [_, { initCardSystem } = {}] = useClientCardSystemContext() ?? [];
-  const navigate = useNavigate();
-  const games = [
-    {
-      name: 'Magic: The Gathering',
-      systemUri: `https://scry-server-mtg.arcanetable.app`,
-      image: '/mtg.jpeg',
-      label: 'Play MTG',
-    },
-    {
-      name: 'Pokémon',
-      systemUri: `https://scry-server-pokemon.arcanetable.app`,
-      image: '/poke.jpeg',
-      label: 'Play Pokémon',
-    },
-    {
-      name: 'Yu-Gi-Oh',
-      systemUri: `https://scry-server-yugioh.arcanetable.app`,
-      image: '/yugi-3.jpeg',
-      label: 'Play Yu-Gi-Oh',
-    },
-  ];
+  function deleteDeck(deckId: string) {
+    setDeckStore(
+      produce(state => {
+        delete state.decks[deckId];
+        for (const system of Object.keys(state.systems)) {
+          state.systems[system] = (state.systems[system] ?? []).filter(id => id !== deckId);
+        }
+      }),
+    );
+  }
 
   return (
-    <section class='py-20 bg-gray-950 border-t border-gray-800'>
-      <div class='max-w-7xl mx-auto px-6 lg:px-8 flex flex-col gap-8'>
-        <div class='text-center'>
-          <h2 class='text-3xl font-bold text-white'>Pick your game</h2>
-          <p class='text-gray-400 mt-3 max-w-xl mx-auto'>
-            Arcanetable supports multiple games, pick one below to get started.
+    <div class='min-h-screen bg-background text-foreground'>
+      <main class='mx-auto max-w-5xl px-6 py-8'>
+        <header class='mb-8'>
+          <h1 class='text-xl font-semibold tracking-tight'>Untapped Table</h1>
+          <p class='mt-1 text-sm text-muted-foreground'>
+            Virtual table to play Magic: The Gathering with your friends.
           </p>
+        </header>
+
+        <div class='mb-8'>
+          <Button type='button' onClick={() => navigate(gameUrl())}>
+            New game
+          </Button>
         </div>
-        <div class='grid gap-6 lg:grid-cols-3'>
-          <For each={games}>
-            {game => (
-              <button
-                onClick={() => {
-                  initCardSystem?.(game.systemUri);
-                  navigate(props.startUrl);
-                }}
-                class='group relative rounded-xl overflow-hidden flex flex-col justify-end cursor-pointer'
-                style={`${posterStyle}  --image: url('${game.image}'); min-height: 420px;`}>
-                <div class='absolute inset-0 bg-black opacity-30 group-hover:opacity-20 transition' />
-                <div class='relative py-6 px-3 flex items-end justify-between'>
-                  <h3 class='text-2xl font-bold text-white'>{game.name}</h3>
-                  <span class='bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg group-hover:bg-indigo-500 transition shrink-0 ml-4'>
-                    {game.label}
-                  </span>
-                </div>
-              </button>
-            )}
-          </For>
-          <a
-            target='_blank'
-            href='https://github.com/odama626/arcanetable#-custom-card-systems'
-            class='group relative rounded-xl overflow-hidden flex flex-col justify-end'
-            style={`${posterStyle} aspect-ratio: initial; --image: url('/byob-2.jpeg'); grid-column: 1/-1; min-height: 275px;`}>
-            <div class='absolute inset-0 bg-black opacity-30 group-hover:opacity-20 transition' />
-            <div class='relative py-6 px-3 flex items-end justify-between'>
-              <h3 class='text-2xl font-bold text-white'>Bring your own game</h3>
-              <span class='bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg group-hover:bg-indigo-500 transition shrink-0 ml-4'>
-                Read the docs
-              </span>
+
+        <div class='flex flex-col gap-6'>
+          <section class='rounded-lg border border-border bg-card'>
+            <div class='flex items-center justify-between gap-3 border-b border-border px-6 py-4'>
+              <h2 class='text-base font-medium'>Decks</h2>
+              <Button variant='outline' type='button' size='sm' onClick={() => setEditingDeck({} as Deck)}>
+                New deck
+              </Button>
             </div>
-          </a>
-        </div>
-      </div>
-    </section>
-  );
-}
 
-function TheTable(props: { startUrl: string }) {
-  return (
-    <section class='py-20 bg-gray-900'>
-      <div class='max-w-7xl mx-auto px-6 lg:px-8'>
-        <div class='flex gap-12 max-lg:flex-col-reverse'>
-          <div class='flex flex-col gap-6 justify-center' style='min-width: 50%;'>
-            <h2 class='text-3xl font-bold'>A real table, in your browser</h2>
-            <p class='text-gray-400'>
-              Tap, flip, counter, exile, stack. Everything you'd do at a kitchen table, rendered in
-              3D. Double-sided cards flip correctly. Tokens spawn from the right source. Counters
-              track per-card and stay visible across the table.
-            </p>
-            <p class='text-gray-400'>
-              Zone counts for hand, battlefield, graveyard, exile, and deck are always visible.
-              Search your hand or battlefield mid-game. Select multiple cards at once and move them
-              together.
-            </p>
-            <div>
-              <a
-                href={props.startUrl}
-                class='inline-block bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition'>
-                Try it now
-              </a>
-            </div>
-          </div>
-          <img
-            src='/table.webp'
-            alt='A digital tabletop card game interface shown from an angled top-down perspective. A large dark-purple game board fills the scene against a black background. Two players’ card decks sit on opposite sides of the table with outlined zones nearby. Several cards are placed on the battlefield, and one player’s hand of cards is visible along the bottom edge of the screen. A small floating game interface panel appears in the distance above the table.'
-            style='aspect-ratio: 1;'
-            class='mx-auto rounded-lg object-cover min-w-0'
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Multiplayer() {
-  return (
-    <section class='py-20 bg-gray-950 border-t border-gray-800'>
-      <div class='max-w-7xl mx-auto px-6 lg:px-8'>
-        <div class='flex gap-12 max-lg:flex-col'>
-          <img
-            src='/friend.webp'
-            alt='An angled 3D view of a digital tabletop card game set against a black background. A rectangular dark-purple game board is divided into two player areas with outlined card zones and deck piles at opposite ends. Several cards are placed on the board, while one player’s hand of cards floats along the left edge. A small floating interface panel appears in the upper-right area of the scene'
-            style='aspect-ratio: 1;'
-            class='mx-auto rounded-lg object-cover min-w-0'
-          />
-          <div class='flex flex-col gap-6 justify-center'>
-            <h2 class='text-3xl font-bold'>Grab a friend. Share a link.</h2>
-            <p class='text-gray-400'>
-              Copy an invite link straight from the deck picker and send it. No account needed on
-              either end. You're in the same game the moment they click it.
-            </p>
-            <p class='text-gray-400'>
-              When you're done, concede and move to spectator, or wait for everyone else to finish.
-              The table handles the transition automatically.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function DeckEditor() {
-  return (
-    <section class='py-20 bg-gray-900 border-t border-gray-800'>
-      <div class='max-w-7xl mx-auto px-6 lg:px-8'>
-        <div class='flex gap-12 max-lg:flex-col-reverse'>
-          <div class='flex flex-col gap-6 justify-center' style='min-width: 50%;'>
-            <h2 class='text-3xl font-bold'>Build and edit decks without leaving the app</h2>
-            <p class='text-gray-400'>
-              The deck editor is built in. Search for cards, adjust quantities, paste in a list, or
-              download your list as a text file when you're done. No spreadsheet, no third-party
-              site.
-            </p>
-            <p class='text-gray-400'>
-              Search supports multiple terms separated by commas, and searches across card faces, so
-              split cards and double-faced cards show up when you expect them to.
-            </p>
-          </div>
-          <img
-            src='/deck-builder.webp'
-            alt='A dark-themed deck-building interface for a digital trading card game. A sidebar on the left shows deck settings, including the deck name ‘Propaganda,’ card system selection, starting life total, and categorized deck counts for Structure, Policy, Order, and Plot cards. The main area displays a grid of illustrated cards with titles such as ‘City,’ ‘Park,’ ‘Barracks,’ ‘Farm,’ ‘Condemn,’ ‘Propaganda Office,’ ‘Church,’ ‘World Court,’ and ‘Town Square.’ Each card includes artwork, resource costs, and gameplay text, with plus and minus controls for adjusting quantities in the deck.'
-            style='aspect-ratio: 1;'
-            class='mx-auto rounded-lg object-cover min-w-0'
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function WhyPosters() {
-  const posters = [
-    {
-      image: 'combo.jpeg',
-      title: 'Does the combo actually go off?',
-      body: 'Goldfish it in 3D and find out before you sleeve up.',
-    },
-    {
-      image: 'anyone.jpeg',
-      title: 'Playtest with anyone',
-      body: "Send a link. They click it. You're at the same table.",
-    },
-    {
-      image: 'own-cards.jpeg',
-      title: 'Bring your own cards',
-      body: 'Proxies, custom cubes, a completely different TCG. Point Arcanetable at your card server and go.',
-    },
-  ];
-
-  return (
-    <section class='py-16 bg-gray-950 border-t border-gray-800'>
-      <div class='max-w-7xl mx-auto px-6 lg:px-8 flex flex-col gap-8'>
-        <div class='text-center'>
-          <h2 class='text-3xl font-bold text-white'>Built for the way you actually play</h2>
-          <p class='text-gray-400 mt-3 max-w-xl mx-auto'>
-            No client to download. No account wall. Just a table, your deck, and whoever you want to
-            play against.
-          </p>
-        </div>
-        <div class='grid gap-8 lg:grid-cols-3'>
-          <For each={posters}>
-            {poster => (
-              <div
-                class='relative bg-gray-900 rounded-lg overflow-hidden flex items-end p-6'
-                style={`${posterStyle} --image: url('${poster.image}');`}>
-                <div class='absolute inset-0 bg-black opacity-10'></div>
-                <div class='relative'>
-                  <h3 class='text-2xl font-bold text-white'>{poster.title}</h3>
-                  <p class='text-white mt-2'>{poster.body}</p>
-                </div>
-              </div>
-            )}
-          </For>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function FeaturesGrid() {
-  const features = [
-    {
-      title: 'Deck search',
-      desc: 'Search your deck mid-game. Find the card you need without revealing your hand.',
-      media: '/features/deck-search.webm', //null, // swap for gif: '/gifs/deck-search.gif'
-    },
-    {
-      title: 'Multi-select',
-      desc: 'Drag to select multiple cards at once. Move, tap, or exile a whole board state in one action.',
-      media: '/features/multi-select.webm', // swap for gif: '/gifs/multi-select.gif'
-    },
-    {
-      title: 'Counters',
-      desc: 'Per-card counters always visible while a card is selected. Left-click to add, right-click to remove.',
-      media: '/features/counters.webm',
-    },
-    {
-      title: 'Tokens',
-      desc: 'Spawn tokens from the right source. Cloned cards are tagged as tokens automatically.',
-      media: '/features/tokens.webm',
-    },
-    {
-      title: 'Double-sided cards',
-      desc: 'Transform and flip correctly. Tapping a flipped card works in the right direction.',
-      media: '/features/multi-sided.webm',
-    },
-    {
-      title: 'Command palette',
-      desc: 'Every action is a keystroke away. Open the command palette and search for anything without touching your mouse.',
-      media: '/features/command.webm',
-    },
-  ];
-
-  return (
-    <section class='py-20 bg-gray-900 border-t border-gray-800'>
-      <div class='max-w-7xl mx-auto px-6 lg:px-8 flex flex-col gap-10'>
-        <div class='text-center'>
-          <h2 class='text-3xl font-bold text-white'>Everything you need at the table</h2>
-          <p class='text-gray-400 mt-3 max-w-xl mx-auto'>
-            The details that matter when you're actually playing.
-          </p>
-        </div>
-        <div class='grid gap-6 md:grid-cols-2 lg:grid-cols-3'>
-          <For each={features}>
-            {feature => (
-              <div class='bg-gray-800 rounded-xl overflow-hidden flex flex-col'>
-                {feature.media ? (
-                  <video
-                    autoplay
-                    loop
-                    muted
-                    playsinline
-                    src={feature.media}
-                    class='w-full object-cover'
-                    style='aspect-ratio: 16/9;'
-                  />
-                ) : (
-                  <div
-                    class='bg-gray-700 w-full flex items-center justify-center text-gray-500 text-sm'
-                    style='aspect-ratio: 16/9;'>
-                    gif coming soon
-                  </div>
-                )}
-                <div class='p-5 flex flex-col gap-2'>
-                  <h3 class='text-white font-semibold text-lg'>{feature.title}</h3>
-                  <p class='text-gray-400 text-sm'>{feature.desc}</p>
-                </div>
-              </div>
-            )}
-          </For>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function KeyboardShortcuts() {
-  const groups = [
-    { group: 'General', shortcuts: SHORTCUTS },
-    { group: 'Battlefield', shortcuts: BATTLEFIELD_SHORTCUTS },
-    { group: 'Card search overlay', shortcuts: OVERLAY_SHORTCUTS },
-  ];
-
-  return (
-    <section class='py-20 bg-gray-950 border-t border-gray-800'>
-      <div class='max-w-7xl mx-auto px-6 lg:px-8 flex flex-col gap-10'>
-        <div class='text-center'>
-          <h2 class='text-3xl font-bold text-white'>Keyboard shortcuts</h2>
-          <p class='text-gray-400 mt-3 max-w-xl mx-auto'>
-            Every common action is one key away. Or open the command palette and search for
-            anything.
-          </p>
-        </div>
-        <div class='grid gap-8 md:grid-cols-3'>
-          <For each={groups}>
-            {group => (
-              <div class='flex flex-col gap-4'>
-                <p class='text-gray-500 text-sm uppercase tracking-widest'>{group.group}</p>
-                <div class='flex flex-col gap-2'>
-                  <For each={group.shortcuts}>
-                    {entry => (
-                      <div class='flex items-center justify-between gap-4'>
-                        <span class='text-gray-300 text-sm'>{entry.action}</span>
-                        <div class='flex items-center gap-1 shrink-0'>
-                          <For each={entry.shortcuts}>
-                            {(keys, i) => (
-                              <>
-                                <kbd class='bg-gray-800 border border-gray-700 text-gray-300 text-xs px-2 py-1 rounded font-mono'>
-                                  {keys.join(' ')}
-                                </kbd>
-                                {i() < entry.shortcuts.length - 1 && (
-                                  <span class='text-gray-500 text-xs'>or</span>
-                                )}
-                              </>
-                            )}
-                          </For>
+            <div class='min-h-80 max-h-160 overflow-y-auto px-6 py-6'>
+              <Show
+                when={decks().length > 0}
+                fallback={
+                  <p class='text-sm text-muted-foreground'>
+                    No decks yet. Create one by importing a card list.
+                  </p>
+                }>
+                <ul>
+                  <For each={decks()}>
+                    {deck => (
+                      <li class='flex items-center justify-between gap-5 border-b border-border py-5 last:border-b-0'>
+                        <div class='flex min-w-0 items-center gap-4'>
+                          <img
+                            src={getDeckPreviewImageUrl(deck)}
+                            alt=''
+                            class='size-14 shrink-0 rounded-md border border-border object-cover'
+                            loading='lazy'
+                          />
+                          <div class='min-w-0'>
+                            <div class='flex min-w-0 items-center gap-2.5'>
+                              <p class='truncate text-base font-medium'>{deck.name || 'Untitled'}</p>
+                              <Show when={deck.tags?.length}>
+                                <div class='flex shrink-0 flex-wrap items-center gap-1.5'>
+                                  <For each={deck.tags}>
+                                    {tag => (
+                                      <span class='rounded bg-white px-2 py-0.5 text-xs leading-none text-black'>
+                                        {tag.name}
+                                      </span>
+                                    )}
+                                  </For>
+                                </div>
+                              </Show>
+                            </div>
+                            <p class='mt-1 text-sm text-muted-foreground'>{deckCardCount(deck)} cards</p>
+                          </div>
                         </div>
-                      </div>
+                        <Button
+                          variant='outline'
+                          type='button'
+                          class='shrink-0 gap-1.5'
+                          onClick={() => setEditingDeck(deck)}>
+                          <PencilIcon class='size-4' />
+                          Edit
+                        </Button>
+                      </li>
                     )}
                   </For>
-                </div>
-              </div>
-            )}
-          </For>
-        </div>
-      </div>
-    </section>
-  );
-}
+                </ul>
+              </Show>
+            </div>
+          </section>
 
-function GettingStartedVideo() {
-  return (
-    <section class='py-20 bg-gray-900 border-t border-gray-800'>
-      <div class='max-w-4xl mx-auto px-6 lg:px-8 flex flex-col gap-8'>
-        <div class='text-center'>
-          <h2 class='text-3xl font-bold text-white'>See it in action</h2>
-          <p class='text-gray-400 mt-3'>
-            Watch the getting started guide and be up and running in minutes.
-          </p>
+          <section class='rounded-lg border border-border bg-card'>
+            <div class='border-b border-border px-6 py-4'>
+              <h2 class='text-base font-medium'>Getting started</h2>
+            </div>
+            <div class='px-6 py-6'>
+              <ol class='list-decimal space-y-3 pl-5 text-base text-muted-foreground'>
+                <li>Import a deck from a card list.</li>
+                <li>Start a new game.</li>
+                <li>Share the room link with up to 3 other players.</li>
+              </ol>
+              <p class='mt-6 text-base text-muted-foreground'>
+                Decks are saved in local storage. Export a backup to avoid losing them.
+              </p>
+            </div>
+          </section>
         </div>
-        <div class='rounded-xl overflow-hidden' style='aspect-ratio: 16/9;'>
-          <iframe
-            width='100%'
-            height='100%'
-            src='https://www.youtube.com/embed/W-MgOhw-4vU'
-            title='Arcanetable getting started'
-            frameborder='0'
-            allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture'
-            allowfullscreen
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
+      </main>
 
-function Sparkstone() {
-  return (
-    <section class='py-20 bg-gray-950 border-t border-gray-800'>
-      <div class='max-w-4xl mx-auto px-6 text-center flex flex-col gap-6'>
-        <h2 class='text-3xl font-bold text-white'>Built by Sparkstone</h2>
-        <p class='text-gray-400 max-w-2xl mx-auto'>
-          Arcanetable is an open source project from Sparkstone, a small independent studio building
-          tools for people who take their hobbies seriously. If you want to follow along, report a
-          bug, or contribute, the GitHub is always open.
-        </p>
-        <div class='flex justify-center gap-4 flex-wrap'>
-          <a
-            href='https://sparkstonepdx.com'
-            target='_blank'
-            rel='noopener noreferrer'
-            class='inline-flex items-center gap-2 bg-gray-800 text-white px-6 py-3 rounded-xl border border-gray-700 hover:bg-gray-700 transition'>
-            Visit Sparkstone →
-          </a>
-          <a
-            href='https://github.com/odama626/arcanetable/'
-            target='_blank'
-            rel='noopener noreferrer'
-            class='inline-flex items-center gap-2 bg-gray-800 text-white px-6 py-3 rounded-xl border border-gray-700 hover:bg-gray-700 transition'>
-            GitHub →
-          </a>
-        </div>
-      </div>
-    </section>
+      <Show when={editingDeck()} keyed>
+        {deck => (
+          <Portal>
+            <DeckEditor
+              onClose={() => setEditingDeck()}
+              deck={structuredClone(unwrap(deck))}
+              onChange={updatedDeck => {
+                saveDeck(updatedDeck);
+              }}
+              onDelete={() => {
+                const deckId = deck.id;
+                if (deckId) deleteDeck(deckId);
+              }}
+            />
+          </Portal>
+        )}
+      </Show>
+    </div>
   );
-}
+};
 
-function Community() {
-  return (
-    <section class='py-20 bg-gray-950 border-t border-gray-800'>
-      <div class='max-w-4xl mx-auto px-6 text-center flex flex-col gap-6'>
-        <h2 class='text-3xl font-bold text-white'>Support the Project</h2>
-        <p class='text-gray-400 max-w-2xl mx-auto'>
-          Arcanetable is free, open source, and built in spare time. The best ways to help: hang out
-          in the Discord, share it with your playgroup, or buy us a coffee if it's been worth it.
-        </p>
-        <div class='flex justify-center gap-4 flex-wrap'>
-          <a
-            href='https://discord.gg/wzdj2W9vvf'
-            target='_blank'
-            rel='noopener noreferrer'
-            class='inline-flex items-center gap-2 bg-gray-800 text-white px-6 py-3 rounded-xl border border-gray-700 hover:bg-gray-700 transition'>
-            Join the Discord
-          </a>
-          <a
-            href='https://ko-fi.com/sparkstonepdx'
-            target='_blank'
-            rel='noopener noreferrer'
-            class='inline-flex items-center gap-2 bg-gray-800 text-white px-6 py-3 rounded-xl border border-gray-700 hover:bg-gray-700 transition'>
-            Buy us a coffee →
-          </a>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Footer() {
-  return (
-    <footer class='py-12 bg-gray-800 text-center'>
-      <p class='text-gray-400 mb-4'>
-        Found a bug or want to help?{' '}
-        <a
-          href='https://github.com/odama626/arcanetable/'
-          target='_blank'
-          rel='noopener noreferrer'
-          class='text-indigo-400 hover:text-indigo-300 underline'>
-          Open an issue on GitHub
-        </a>{' '}
-        or{' '}
-        <a
-          href='https://discord.gg/wzdj2W9vvf'
-          target='_blank'
-          rel='noopener noreferrer'
-          class='text-indigo-400 hover:text-indigo-300 underline'>
-          join the Discord
-        </a>
-        .
-      </p>
-      <p class='text-gray-400 mb-4'>
-        See what's new in the{' '}
-        <A class='text-indigo-400 hover:text-indigo-300 underline' href='/changes'>
-          Changelog
-        </A>
-      </p>
-      <p class='text-gray-500 text-sm'>
-        Built by{' '}
-        <a
-          href='https://sparkstonepdx.com'
-          target='_blank'
-          rel='noopener noreferrer'
-          class='text-gray-300 hover:text-white underline'>
-          Sparkstone
-        </a>
-      </p>
-    </footer>
-  );
-}
+export default LandingPage;

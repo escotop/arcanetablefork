@@ -1,0 +1,83 @@
+.container {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background-color: hsl(var(--background));
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+.editorForm {
+  display: grid;
+  grid-template-areas: 'list header' 'list form';
+  grid-template-rows: auto 1fr;
+  grid-template-columns: 40ch 1fr;
+  height: 100%;
+  min-height: 0;
+}
+
+.innerContainer {
+  display: grid;
+  grid-template-columns: 50ch 1fr;
+  align-items: center;
+  position: relative;
+  gap: 1rem;
+  padding-inline: 1rem;
+}
+
+.formContainer {
+  grid-area: list;
+  background-color: hsl(var(--background));
+  /* border-radius: 0.5rem; */
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.cardList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-bottom: 5rem;
+}
+
+.cardListScrollContainer {
+  grid-area: form;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.multiSelectControl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+  width: 100%;
+
+  /* &:has(.multiSelectItem) {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+  } */
+}
+
+.multiSelectItem {
+  white-space: nowrap;
+}
+
+.multiSelectInput {
+  display: flex;
+  align-items: center;
+  flex-grow: 1;
+  input {
+    padding: 0;
+  }
+}

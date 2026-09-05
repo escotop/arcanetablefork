@@ -50,13 +50,6 @@ const PeekMenu: Component = props => {
   let inputRef;
 
   const cardGrouping = useCardGrouping(cardSystem.types ?? [], peekCards);
-  const visibleCount = createMemo(() => {
-    peekFilterText();
-    peekTypeFilter();
-    const area = playArea();
-    const filtered = area?.peekZone.filteredCards;
-    return filtered ? filtered.length : cardCount();
-  });
 
   function drawAfterRevealing(card: Card) {
     const area = playArea();
@@ -89,11 +82,8 @@ const PeekMenu: Component = props => {
     <>
       <Show when={peekCards().length > 0 && playArea()?.peekZone?.observable}>
         <div class={styles.searchContainer}>
-          <div class={styles.search}>
-            <h2 class='text-white text-xl text-left mb-4'>
-              Peek — from {peekCards()[0]?.mesh?.userData?.previousLocation} | {visibleCount()}
-              <Show when={visibleCount() !== cardCount()}> / {cardCount()}</Show>
-            </h2>
+          <div class={styles.searchHeader}>
+            <div class={styles.search}>
             <div class='mb-3 flex flex-wrap gap-2'>
               <button
                 type='button'
@@ -137,7 +127,14 @@ const PeekMenu: Component = props => {
                 </button>
               </Show>
             </div>
-            <Command>
+            <Command
+              onKeyDown={e => {
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  dismissPeek();
+                }
+              }}>
               <CommandInput
                 ref={inputRef}
                 placeholder='Search'
@@ -232,6 +229,7 @@ const PeekMenu: Component = props => {
                 </MenubarMenu>
               </Menubar>
             </Command>
+            </div>
           </div>
         </div>
       </Show>

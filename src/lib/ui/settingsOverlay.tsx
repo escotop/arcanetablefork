@@ -286,20 +286,8 @@ export default function SettingsOverlay(props: {
               </div>
             </div>
             <div class='mt-4 space-y-2'>
-              <Label for='invite-code'>Invite code</Label>
-              <div class='flex gap-2'>
-                <input
-                  id='invite-code'
-                  type='text'
-                  readonly
-                  value={params.gameId}
-                  class='flex h-10 min-w-0 flex-1 rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono ring-offset-background select-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
-                />
-                <CopyLinkButton text={params.gameId} variant='outline' size='sm'>
-                  Copy
-                </CopyLinkButton>
-              </div>
-              <CopyLinkButton variant='ghost' size='sm' class='px-0'>
+              <Label>Invite link</Label>
+              <CopyLinkButton variant='outline' size='sm'>
                 Copy invite link
               </CopyLinkButton>
             </div>

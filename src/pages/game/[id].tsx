@@ -1,41 +1,38 @@
-import {  useSearchParams } from '@solidjs/router';
-import { Component,  createSignal, onCleanup, onMount, Show } from 'solid-js';
+import { useSearchParams } from '@solidjs/router';
+import { Component, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { unwrap } from 'solid-js/store';
-import CopyLinkButton from '~/components/ui/copy-link-button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '~/components/ui/dialog';
+import { toast } from 'solid-sonner';
 import { useCardSystemContext } from '~/lib/cardSystemContext';
 import { getDeckStore } from '~/lib/deckStore';
 import {
   cleanup,
   isInitialized,
   isSpectating,
-  players,
   selectedDeckId,
+  setIsIntitialized,
   setSelectedDeckId,
 } from '~/lib/globals';
 import { HotKeys } from '~/lib/shortcuts/hotkeys';
 import StackTraceDialog from '~/lib/stack-trace-dialog';
 import DeckPicker from '~/lib/ui/deckPicker';
 import GameLoadingOverlay from '~/lib/ui/gameLoadingOverlay';
+import MultiplayerSyncOverlay from '~/lib/ui/multiplayerSyncOverlay';
 import Overlay from '~/lib/ui/overlay';
+import { beginLoadProfile, endLoadProfile, markLoadProfile, profileAsync } from '~/lib/loadProfile';
 import { loadDeckAndJoin, localInit, tryReconnectToGame } from '~/main3d';
-import {
-  beginLoadProfile,
-  endLoadProfile,
-  profileAsync,
-} from '~/lib/loadProfile';
 
 const GamePage: Component = props => {
-  const [inviteDismissed, setInviteDismissed] = createSignal(false);
   const [reconnecting, setReconnecting] = createSignal(true);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [, setSearchParams] = useSearchParams();
   const [cardSystemStore, { initCardSystem, setCardSystem }] = useCardSystemContext();
 
   const isGameLoading = () =>
     reconnecting() || (!!selectedDeckId() && !isInitialized() && !isSpectating());
 
   onMount(async () => {
-    beginLoadProfile('game page load', { gameId: props.params.gameId });
+    beginLoadProfile('open game', { gameId: props.params.gameId });
+    setSearchParams({ system: undefined }, { replace: true });
+
     let reconnected = false;
     try {
       await profileAsync('localInit', () => localInit({ gameId: props.params.gameId }));
@@ -44,10 +41,13 @@ const GamePage: Component = props => {
       );
       if (reconnected) {
         setSelectedDeckId('reconnected');
+        markLoadProfile('reconnected to existing seat');
+      } else {
+        markLoadProfile('awaiting deck selection');
       }
     } finally {
       setReconnecting(false);
-      endLoadProfile({ reconnected, gameId: props.params.gameId });
+      endLoadProfile({ reconnected });
     }
   });
 
@@ -62,38 +62,46 @@ const GamePage: Component = props => {
       </Show>
       <Show when={isInitialized()}>
         <Overlay />
+        <MultiplayerSyncOverlay />
         <HotKeys />
       </Show>
       <Show when={cardSystemStore && !reconnecting()}>
         <Show when={!selectedDeckId() && !isSpectating()}>
           <DeckPicker
             onStart={async settings => {
-              beginLoadProfile('new game join', { gameId: props.params.gameId, deckId: settings.deckId });
+              beginLoadProfile('join with deck', {
+                gameId: props.params.gameId,
+                deckId: settings.deckId,
+              });
               setSelectedDeckId(settings.deckId);
-              const deckStore = getDeckStore();
-              let deck = structuredClone(unwrap(deckStore.decks[settings.deckId]));
-              const cardSystem = await profileAsync('setCardSystem', () =>
-                setCardSystem(deck.system || cardSystemStore.system),
-              );
-              setSearchParams({ system: cardSystem.uri }, { replace: true });
+              try {
+                const deckStore = getDeckStore();
+                const deck = await profileAsync('clone deck from store', async () =>
+                  structuredClone(unwrap(deckStore.decks[settings.deckId])),
+                );
+                if (!deck) {
+                  throw new Error('Mazo no encontrado');
+                }
+                const cardSystem = await profileAsync('setCardSystem', () =>
+                  setCardSystem(deck.system || cardSystemStore.system),
+                );
 
-              settings.deck = deck;
-              settings.cardSystem = cardSystem;
-              await profileAsync('loadDeckAndJoin', () => loadDeckAndJoin(settings, initCardSystem));
-              endLoadProfile({ deckId: settings.deckId });
+                settings.deck = deck;
+                settings.cardSystem = cardSystem;
+                await loadDeckAndJoin(settings, initCardSystem);
+              } catch (error) {
+                setSelectedDeckId(undefined);
+                setIsIntitialized(false);
+                toast.error(
+                  error instanceof Error ? error.message : 'No se pudo iniciar la partida',
+                );
+                throw error;
+              } finally {
+                endLoadProfile({ deckId: settings.deckId });
+              }
             }}
           />
         </Show>
-      </Show>
-      <Show when={selectedDeckId() && players().length < 2 && !inviteDismissed()}>
-        <Dialog open onOpenChange={open => setInviteDismissed(!open)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Invite a Friend</DialogTitle>
-            </DialogHeader>
-            <CopyLinkButton />
-          </DialogContent>
-        </Dialog>
       </Show>
       <StackTraceDialog />
     </>

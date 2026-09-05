@@ -1,20 +1,13 @@
-import { createMemo, createSignal, onCleanup, onMount, Show } from 'solid-js';
+import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { Command, CommandInput } from '~/components/ui/command';
 import { Menubar, MenubarItem, MenubarMenu } from '~/components/ui/menubar';
-import { getLocalPlayArea, players, setHoverSignal, setPeekFilterText } from '../globals';
+import { getLocalPlayArea, setHoverSignal, setPeekFilterText } from '../globals';
 import styles from './peekMenu.module.css';
-import { cleanupCard } from '../card';
 import { Card } from '../constants';
 
 export default function RevealMenu() {
   const playArea = () => getLocalPlayArea();
   const [peekCards, setPeekCards] = createSignal<Card[]>([]);
-
-  const revealingPlayer = createMemo(() => {
-    let card = peekCards()?.[0];
-    if (!card) return;
-    return players().find(player => player.id === card.mesh.userData.clientId);
-  });
 
   let inputRef;
 
@@ -38,11 +31,8 @@ export default function RevealMenu() {
       <Show when={peekCards()?.length > 0 && playArea()}>
         {area => (
         <div class={styles.searchContainer}>
-          <div class={styles.search}>
-            <h2 class='text-white text-xl text-left mb-4'>
-              Revealed — from {revealingPlayer()?.entry?.name} |{' '}
-              {area.revealZone.observable.cardCount}
-            </h2>
+          <div class={styles.searchHeader}>
+            <div class={styles.search}>
             <Command>
               <CommandInput
                 ref={inputRef}
@@ -68,6 +58,7 @@ export default function RevealMenu() {
                 </MenubarMenu>
               </Menubar>
             </Command>
+            </div>
           </div>
         </div>
         )}

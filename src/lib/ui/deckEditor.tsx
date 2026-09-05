@@ -42,6 +42,7 @@ import {
 } from '../deck';
 import { cardSystem, colorHashDark } from '../globals';
 import { devLog } from '../devLog';
+import { searchCards } from '../scryfall/client';
 import { cn } from '../utils';
 import styles from './deckEditor.module.css';
 import CardList from './deckEditor/cardList';
@@ -55,9 +56,11 @@ import { capitalize, debounce } from 'lodash-es';
 import { createStore, reconcile, SetStoreFunction, unwrap } from 'solid-js/store';
 import { getCardKey, hydrateDeck, serializeDeck } from '../deckStore';
 import { useCardSystemContext } from '../cardSystemContext';
+import { MTG_CARD_SYSTEM } from '../mtgCardSystem';
 import AddIcon from 'lucide-solid/icons/plus';
 import SubIcon from 'lucide-solid/icons/minus';
 import SearchIcon from 'lucide-solid/icons/search';
+import ImagesIcon from 'lucide-solid/icons/images';
 import { useSearchParams } from '@solidjs/router';
 import { trackDeep } from '@solid-primitives/deep';
 import DownloadIcon from 'lucide-solid/icons/download';
@@ -82,7 +85,6 @@ import {
 } from '~/components/ui/dialog';
 import { toast } from 'solid-sonner';
 import { Alert, AlertDescription, AlertTitle } from '~/components/ui/alert';
-import { AlertDialog, AlertDialogContent } from '~/components/ui/alert-dialog';
 import intersectionObserver from '../intersectionObserver';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import DeckImportDialog from './deckEditor/deckImportDialog';
@@ -106,6 +108,8 @@ interface Props {
   deck: Deck;
 }
 
+const NEW_DECK_PRINTING_TIP_KEY = 'mtgplayer-deck-editor-printing-tip-seen';
+
 export const DeckEditor: Component<Props> = props => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchResults, setSearchResults] = createSignal();
@@ -116,11 +120,14 @@ export const DeckEditor: Component<Props> = props => {
   const [printDialogOpen, setPrintDialogOpen] = createSignal(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
   const [closeConfirmDialogOpen, setCloseConfirmDialogOpen] = createSignal(false);
+  const [newDeckTipOpen, setNewDeckTipOpen] = createSignal(false);
   const [typeFilter, setTypeFilter] = createSignal<string | null>(null);
   let formRef: HTMLFormElement;
 
   const [deck, setDeck] = createStore<Deck>(
-    props.deck?.name ? unwrap(props.deck) : { cards: {}, inPlay: {} },
+    props.deck?.id
+      ? structuredClone(unwrap(props.deck))
+      : { cards: {}, inPlay: {}, system: MTG_CARD_SYSTEM.id },
   );
 
   const getDeckList = createMemo(() => {
@@ -136,11 +143,19 @@ export const DeckEditor: Component<Props> = props => {
   });
 
   onMount(async () => {
-    if (deck.system) {
-      await setCardSystem(deck.system);
+    if (!props.deck?.id && !localStorage.getItem(NEW_DECK_PRINTING_TIP_KEY)) {
+      setNewDeckTipOpen(true);
+    }
+    await setCardSystem(deck.system ?? MTG_CARD_SYSTEM.id);
+    if (props.deck?.id || Object.keys(deck.cards ?? {}).length > 0) {
       await rehydrateDeck(deck);
     }
   });
+
+  function closeNewDeckTip() {
+    localStorage.setItem(NEW_DECK_PRINTING_TIP_KEY, '1');
+    setNewDeckTipOpen(false);
+  }
 
   createEffect(
     on(
@@ -387,22 +402,14 @@ export const DeckEditor: Component<Props> = props => {
 
   function onSearch(q?: string, t?: string | string[], page?: number) {
     if (cancelSearch) return;
-    const url = new URL(cardSystem.cardSearchEndpoint);
 
-    if (q) {
-      url.searchParams.set('q', q);
-    }
+    const types = Array.isArray(t) ? t : t ? [t] : [];
+    const searchPage = page ?? 1;
 
-    if (Array.isArray(t)) {
-      t.forEach(t => url.searchParams.append('type', t));
-    } else if (t) {
-      url.searchParams.append('type', t);
-    }
-    if (page) {
-      url.searchParams.set('page', page.toString());
-    }
-
-    let searchString = getSearchString(cardSystem.id, url.searchParams);
+    let searchString = getSearchString(cardSystem.id, new URLSearchParams({
+      q: q ?? '',
+      ...(types.length ? Object.fromEntries(types.map(type => ['type', type])) : {}),
+    }));
 
     const isSearchSame = searchString === lastSearchString;
     lastSearchString = searchString;
@@ -417,10 +424,9 @@ export const DeckEditor: Component<Props> = props => {
     }
 
     function fetchPage(append?: true) {
-      fetch(url)
-        .then(r => r.json())
+      searchCards(q ?? '', { types, page: searchPage })
         .then(result => {
-          if (result.code === 'error') {
+          if ((result as { code?: string }).code === 'error') {
             toast(`failed to load search results. Try again later`);
             return;
           }
@@ -428,10 +434,8 @@ export const DeckEditor: Component<Props> = props => {
           const newResults = result.data.map(detail => populateCardInfo(detail));
 
           const isSearchSame =
-            getSearchString(cardSystem.id, new URLSearchParams(location.search)) ===
-            getSearchString(result.id, url.searchParams);
+            getSearchString(cardSystem.id, new URLSearchParams(location.search)) === searchString;
 
-          // search changed while paging, stop
           if (append && !isSearchSame) return;
 
           if (append) {
@@ -441,12 +445,8 @@ export const DeckEditor: Component<Props> = props => {
           }
 
           setSearchParams({ page: result.page, totalPages: result.total_pages }, { replace: true });
-
-          if (isSearchSame && result.page < result.total_pages) {
-            url.searchParams.set('page', result.page + 1);
-            // fetchPage(true);
-          }
-        });
+        })
+        .catch(() => toast('failed to load search results. Try again later'));
     }
     fetchPage(isSearchSame);
   }
@@ -770,11 +770,15 @@ export const DeckEditor: Component<Props> = props => {
           </div>
           <div class={styles.cardListScrollContainer} aria-hidden='false'>
             <div
-              class='top-0 sticky z-10 backdrop-blur-xl p-2'
+              class='top-0 sticky z-10 backdrop-blur-xl px-2 pt-2 pb-1'
               style='background: hsla(var(--background) / .7);'>
-              <Command style='background: transparent;' value={searchParams.q || ''}>
+              <Command
+                class='h-auto w-full flex-none rounded-none border-0 bg-transparent shadow-none'
+                style='background: transparent;'
+                value={searchParams.q || ''}>
                 <CommandInput
-                  wrapperStyle='border-bottom-color: var(--color-gray-400);'
+                  wrapperStyle='border-bottom: none; padding-inline: 0;'
+                  class='h-9 py-1'
                   style='background: transparent;'
                   placeholder='Search'
                   value={searchParams.q ?? ''}
@@ -782,7 +786,7 @@ export const DeckEditor: Component<Props> = props => {
                 />
               </Command>
               <ToggleGroup
-                class='inline-flex py-2 gap-1'
+                class='inline-flex gap-1 pb-1'
                 multiple
                 value={
                   Array.isArray(searchParams.type)
@@ -909,17 +913,37 @@ export const DeckEditor: Component<Props> = props => {
                               <Show
                                 when={!card.detail?.name || !getCardImage(card)}
                                 fallback={
-                                  <Button
-                                    variant='ghost'
-                                    size='icon'
-                                    onClick={() =>
-                                      setSearchParams({
-                                        dialog: 'card-preview',
-                                        src: getCardImage(card),
-                                      })
-                                    }>
-                                    <SearchIcon />
-                                  </Button>
+                                  <>
+                                    <Show when={deckCard()?.qty > 0 && supportsCardPrintings()}>
+                                      <Button
+                                        type='button'
+                                        variant='ghost'
+                                        size='icon'
+                                        title='Choose printing'
+                                        onClick={e => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          openPrintingPicker(cardKey());
+                                        }}>
+                                        <ImagesIcon />
+                                      </Button>
+                                    </Show>
+                                    <Button
+                                      type='button'
+                                      variant='ghost'
+                                      size='icon'
+                                      title='Preview card'
+                                      onClick={e => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        const src = getCardImage(card);
+                                        if (src) {
+                                          setSearchParams({ dialog: 'card-preview', src });
+                                        }
+                                      }}>
+                                      <SearchIcon />
+                                    </Button>
+                                  </>
                                 }>
                                 <div class='pl-2'>{card.name}</div>
                               </Show>
@@ -1004,6 +1028,7 @@ export const DeckEditor: Component<Props> = props => {
             onClose={closeImportDialog}
             onImport={importedDeck => {
               setDeck('cards', reconcile(importedDeck.cards ?? {}, { merge: false }));
+              setDeck('inPlay', reconcile(importedDeck.inPlay ?? {}, { merge: false }));
               if (importedDeck.name) setDeck('name', importedDeck.name);
               if (importedDeck.system && importedDeck.system !== deck.system) {
                 setDeck('system', importedDeck.system);
@@ -1020,6 +1045,21 @@ export const DeckEditor: Component<Props> = props => {
             cards={getDeckList()}
             onClose={closePrintDialog}
           />
+        </Show>
+        <Show when={newDeckTipOpen()}>
+          <EditorOverlayDialog onClose={closeNewDeckTip}>
+            <DialogHeader>
+              <DialogTitle>Choosing card art</DialogTitle>
+            </DialogHeader>
+            <p>
+              Right click an added card to choose an official impression or community ones.
+            </p>
+            <DialogFooter>
+              <Button type='button' onClick={closeNewDeckTip}>
+                Got it
+              </Button>
+            </DialogFooter>
+          </EditorOverlayDialog>
         </Show>
         <Show when={closeConfirmDialogOpen()}>
           <EditorOverlayDialog onClose={closeConfirmDialog}>
@@ -1056,13 +1096,14 @@ export const DeckEditor: Component<Props> = props => {
             }}
           />
         </Show>
-        <Show when={searchParams.dialog === 'card-preview'}>
-          <AlertDialog open onOpenChange={isOpen => !isOpen && closeCurrentDialog()}>
-            <AlertDialogContent>
-              <AlertTitle />
-              <img src={searchParams.src} />
-            </AlertDialogContent>
-          </AlertDialog>
+        <Show when={searchParams.dialog === 'card-preview' && searchParams.src}>
+          <EditorOverlayDialog onClose={closeCurrentDialog}>
+            <img
+              src={searchParams.src as string}
+              alt=''
+              class='mx-auto max-h-[80vh] w-auto max-w-full rounded-md'
+            />
+          </EditorOverlayDialog>
         </Show>
       </Portal>
     </>

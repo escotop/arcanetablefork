@@ -30,6 +30,7 @@ export interface GameState {
 }
 
 interface CardDetailPart {
+  id?: string;
   name: string;
   component: 'token' | unknown;
   uri: string;
@@ -177,7 +178,7 @@ export function isMagicCardSystem(
   system: Pick<CardSystem, 'imageUriFormat' | 'id'> | undefined,
 ): boolean {
   if (!system) return false;
-  return system.imageUriFormat === 'scryfall' || system.id === 'scry-server-mtg';
+  return system.imageUriFormat === 'scryfall' || system.id === 'mtgplayer';
 }
 
 export const FORMATS = [

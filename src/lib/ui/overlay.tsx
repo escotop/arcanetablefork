@@ -83,6 +83,7 @@ export default function Overlay() {
     if (!parent) return;
 
     const canvas = focusRenderer.domElement;
+    canvas.style.background = 'transparent';
     parent.appendChild(canvas);
 
     onCleanup(() => {

@@ -1,6 +1,10 @@
 import { CardEntry, CardEntryDetail, DetailedCardEntry, isMagicCardSystem } from './constants';
 import { fetchCardInfo, populateCardInfo } from './deck';
-import { hasRequestedPrinting } from './deckPrinting';
+import {
+  hasRequestedPrinting,
+  normalizePrintingCollectorNumber,
+  normalizePrintingSetCode,
+} from './deckPrinting';
 import { getCardKey } from './deckStore';
 import { devLog } from './devLog';
 import { cardSystem } from './globals';
@@ -10,7 +14,10 @@ const COLLECTION_CHUNK_SIZE = 75;
 const COLLECTION_CHUNK_DELAY_MS = 120;
 const INDIVIDUAL_LOOKUP_DELAY_MS = 120;
 
-type CollectionIdentifier = { name: string } | { set: string; collector_number: string };
+type CollectionIdentifier =
+  | { id: string }
+  | { name: string }
+  | { set: string; collector_number: string };
 
 interface ScryfallCollectionResponse {
   object?: string;
@@ -48,6 +55,15 @@ function getCardSystemBaseUrl() {
   }
 }
 
+function usesLegacyDeckImageProxy(baseUrl: string) {
+  if (!baseUrl) return false;
+  try {
+    return new URL(baseUrl).hostname !== 'api.scryfall.com';
+  } catch {
+    return true;
+  }
+}
+
 function mapProxyImageUris(
   cardName: string,
   imageUris: Record<string, string> | undefined,
@@ -56,8 +72,8 @@ function mapProxyImageUris(
   const normal = imageUris?.normal ?? imageUris?.large ?? imageUris?.small;
   const crop = imageUris?.art_crop;
 
-  if (!baseUrl) {
-    return imageUris ?? { full: {}, art: {} };
+  if (!usesLegacyDeckImageProxy(baseUrl)) {
+    return imageUris ?? {};
   }
 
   return {
@@ -98,7 +114,7 @@ export function mapScryfallCardForDeck(card: Record<string, unknown>): CardEntry
     card_faces: mappedFaces as CardEntryDetail['card_faces'],
     all_parts: ((card.all_parts as Array<Record<string, unknown>>) ?? []).map(part => ({
       ...part,
-      uri: baseUrl ? `${baseUrl}/cards/named?id=${part.id}` : part.uri,
+      uri: baseUrl ? `${baseUrl}/cards/${part.id}` : part.uri,
     })),
   } as CardEntryDetail;
 }
@@ -129,32 +145,100 @@ async function postCollection(
   return null;
 }
 
-async function resolveNamesViaCollection(names: string[]) {
-  const resolvedByName = new Map<string, CardEntryDetail>();
+function getBatchIdentifier(entry: CardEntry): CollectionIdentifier | null {
+  if (entry.id) {
+    return { id: entry.id };
+  }
 
-  for (let index = 0; index < names.length; index += COLLECTION_CHUNK_SIZE) {
-    const chunk = names.slice(index, index + COLLECTION_CHUNK_SIZE);
-    const identifiers = chunk.map(name => ({ name }));
-    const body = await postCollection(identifiers);
+  const set = normalizePrintingSetCode(entry.set);
+  const collector = normalizePrintingCollectorNumber(entry.collector_number);
+  if (set && collector) {
+    return { set, collector_number: collector };
+  }
+
+  if (entry.name && !hasRequestedPrinting(entry)) {
+    return { name: entry.name };
+  }
+
+  return null;
+}
+
+function identifierKey(identifier: CollectionIdentifier) {
+  if ('id' in identifier) return `id:${identifier.id}`;
+  if ('set' in identifier) return `set:${identifier.set}:${identifier.collector_number}`;
+  return `name:${normalizeCardName(identifier.name)}`;
+}
+
+function findCardForEntry(entry: CardEntry, data: Array<Record<string, unknown>>) {
+  if (entry.id) {
+    const byId = data.find(card => String(card.id) === entry.id);
+    if (byId) return byId;
+  }
+
+  const set = normalizePrintingSetCode(entry.set);
+  const collector = normalizePrintingCollectorNumber(entry.collector_number);
+  if (set && collector) {
+    const byPrinting = data.find(
+      card =>
+        normalizePrintingSetCode(String(card.set)) === set &&
+        normalizePrintingCollectorNumber(String(card.collector_number)) === collector,
+    );
+    if (byPrinting) return byPrinting;
+  }
+
+  return data.find(card => cardNamesMatch(String(card.name), entry.name));
+}
+
+async function resolveEntriesViaCollection(entries: CardEntry[]) {
+  const resolved = new Map<string, CardEntryDetail>();
+  if (!entries.length) return resolved;
+
+  const identifiersByKey = new Map<string, CollectionIdentifier>();
+  for (const entry of entries) {
+    const identifier = getBatchIdentifier(entry);
+    if (!identifier) continue;
+    identifiersByKey.set(identifierKey(identifier), identifier);
+  }
+
+  const identifiers = [...identifiersByKey.values()];
+  const entriesByIdentifierKey = new Map<string, CardEntry[]>();
+  for (const entry of entries) {
+    const identifier = getBatchIdentifier(entry);
+    if (!identifier) continue;
+    const key = identifierKey(identifier);
+    const bucket = entriesByIdentifierKey.get(key) ?? [];
+    bucket.push(entry);
+    entriesByIdentifierKey.set(key, bucket);
+  }
+
+  for (let index = 0; index < identifiers.length; index += COLLECTION_CHUNK_SIZE) {
+    const chunk = identifiers.slice(index, index + COLLECTION_CHUNK_SIZE);
+    const chunkKeys = new Set(chunk.map(identifierKey));
+    const body = await postCollection(chunk);
 
     if (!body) {
       devLog.warn('[deck import] Collection chunk failed for', chunk.length, 'cards');
       continue;
     }
 
-    for (const requestedName of chunk) {
-      const rawCard = (body.data ?? []).find(card => cardNamesMatch(String(card.name), requestedName));
-      if (rawCard) {
-        resolvedByName.set(normalizeCardName(requestedName), mapScryfallCardForDeck(rawCard));
+    for (const key of chunkKeys) {
+      for (const entry of entriesByIdentifierKey.get(key) ?? []) {
+        const entryKey = getCardKey(entry);
+        if (resolved.has(entryKey)) continue;
+
+        const rawCard = findCardForEntry(entry, body.data ?? []);
+        if (rawCard) {
+          resolved.set(entryKey, mapScryfallCardForDeck(rawCard));
+        }
       }
     }
 
-    if (index + COLLECTION_CHUNK_SIZE < names.length) {
+    if (index + COLLECTION_CHUNK_SIZE < identifiers.length) {
       await delay(COLLECTION_CHUNK_DELAY_MS);
     }
   }
 
-  return resolvedByName;
+  return resolved;
 }
 
 function buildDetailedEntry(entry: CardEntry, payload: CardEntryDetail): DetailedCardEntry {
@@ -177,7 +261,42 @@ function notFoundEntry(entry: CardEntry, reason: string): DetailedCardEntry {
 }
 
 export function canUseBatchImport(entries: CardEntry[]) {
-  return isMagicCardSystem(cardSystem) && entries.some(entry => !entry.id && !hasRequestedPrinting(entry));
+  return isMagicCardSystem(cardSystem) && entries.some(entry => getBatchIdentifier(entry) !== null);
+}
+
+function findResolvedImportCard(
+  entry: CardEntry,
+  cards: Record<string, DetailedCardEntry>,
+) {
+  return (
+    cards[getCardKey(entry)] ??
+    Object.values(cards).find(
+      card =>
+        card.name === entry.name &&
+        (!entry.set ||
+          normalizePrintingSetCode(card.set) === normalizePrintingSetCode(entry.set)),
+    )
+  );
+}
+
+export function buildImportedInPlay(
+  entries: CardEntry[],
+  inPlayIndices: number[],
+  cards: Record<string, DetailedCardEntry>,
+) {
+  const inPlay: Record<string, DetailedCardEntry> = {};
+
+  for (const index of inPlayIndices) {
+    const entry = entries[index];
+    if (!entry) continue;
+
+    const resolved = findResolvedImportCard(entry, cards);
+    if (resolved) {
+      inPlay[getCardKey(resolved)] = resolved;
+    }
+  }
+
+  return inPlay;
 }
 
 export async function fetchCardInfoForImport(
@@ -194,20 +313,16 @@ export async function fetchCardInfoForImport(
     onProgress?.(current, total, name);
   };
 
-  const batchable = entries.filter(entry => !entry.id && !hasRequestedPrinting(entry));
-  const individual = entries.filter(entry => entry.id || hasRequestedPrinting(entry));
+  const batchable = canUseBatchImport(entries)
+    ? entries.filter(entry => getBatchIdentifier(entry) !== null)
+    : [];
+  const nonBatchable = entries.filter(entry => getBatchIdentifier(entry) === null);
 
-  const uniqueNames = [...new Set(batchable.map(entry => normalizeCardName(entry.name)))];
-  const resolvedByName = canUseBatchImport(entries)
-    ? await resolveNamesViaCollection(
-        uniqueNames.map(name => batchable.find(entry => normalizeCardName(entry.name) === name)!.name),
-      )
-    : new Map<string, CardEntryDetail>();
-
+  const resolvedByEntryKey = await resolveEntriesViaCollection(batchable);
   const missingAfterBatch: CardEntry[] = [];
 
   for (const entry of batchable) {
-    const payload = resolvedByName.get(normalizeCardName(entry.name));
+    const payload = resolvedByEntryKey.get(getCardKey(entry));
     if (payload) {
       const detailed = buildDetailedEntry(entry, payload);
       cards[getCardKey(detailed)] = detailed;
@@ -220,8 +335,8 @@ export async function fetchCardInfoForImport(
     report(entry.name);
   }
 
-  const pendingIndividual = [...individual, ...missingAfterBatch];
-  const individualKeys = new Set(individual.map(entry => getCardKey(entry)));
+  const pendingIndividual = [...nonBatchable, ...missingAfterBatch];
+  const individualKeys = new Set(nonBatchable.map(entry => getCardKey(entry)));
 
   for (let index = 0; index < pendingIndividual.length; index++) {
     const entry = pendingIndividual[index];

@@ -196,10 +196,11 @@ export function normalizeTextureUrl(url: string | undefined): string | undefined
       innerUri &&
       (parsed.pathname.endsWith('/card_images/') || parsed.pathname.endsWith('/card_art/'));
 
-    if (isImageProxy) {
-      const inner = new URL(innerUri);
-      if (!inner.hostname.endsWith('scryfall.io')) {
-        return inner.href;
+    if (isImageProxy && innerUri) {
+      try {
+        return new URL(innerUri).href;
+      } catch {
+        // fall through
       }
     }
 

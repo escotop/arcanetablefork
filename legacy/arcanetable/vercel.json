@@ -1,0 +1,11 @@
+{
+  "bunVersion": "1.4.x",
+  "buildCommand": "bun run build",
+  "installCommand": "bun install",
+  "outputDirectory": ".output/public",
+  "framework": null,
+  "rewrites": [
+    { "source": "/image-proxy", "destination": "/api/image-proxy" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

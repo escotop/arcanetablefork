@@ -49,6 +49,7 @@ import { counters } from './ui/counterDialog';
 import { cleanupFromNode, isValidMaterial } from './utils';
 import { serializeCardUserDataForLog } from './gameLogEvents';
 import { devLog } from './devLog';
+import { getCardById, getCardNamed } from './scryfall/client';
 
 export interface CardUserData {
   cardBack?: Material;
@@ -174,9 +175,19 @@ export async function loadCardTextures(
   card: Card,
   cache: Map<string, Promise<MeshStandardMaterial>> = new Map(),
 ) {
-  const [front, back] = syncCardFaceUrls(card);
+  if (!getCardImage(card)) {
+    await ensureCardImageDetail(card);
+  }
 
-  if (!front) throw new Error('front texture not found');
+  let [front, back] = syncCardFaceUrls(card);
+
+  if (!front) {
+    devLog.warn('[loadCardTextures] missing image, using fallback for', card.detail?.name ?? card.id);
+    front = getFallbackTextureUrl();
+    if (card.mesh) {
+      card.mesh.userData.card_face_urls = back ? [front, back] : [front];
+    }
+  }
 
   const frontPromise = loadTextureMaterial(front, cache);
   frontPromise.then(mat => {
@@ -196,6 +207,47 @@ export async function loadCardTextures(
   }
 
   await frontPromise;
+}
+
+const pendingImageHydration = new Map<string, Promise<void>>();
+
+function cardImageHydrationKey(card: Card) {
+  const detail = card.detail;
+  if (detail?.id) return detail.id;
+  return `${detail?.name ?? 'unknown'}:${detail?.set ?? ''}:${detail?.collector_number ?? ''}`;
+}
+
+async function ensureCardImageDetail(card: Card): Promise<void> {
+  if (getCardImage(card)) return;
+  if (!card.detail?.name) return;
+
+  const key = cardImageHydrationKey(card);
+  const pending = pendingImageHydration.get(key);
+  if (pending) {
+    await pending;
+    return;
+  }
+
+  const job = (async () => {
+    try {
+      const payload = card.detail.id
+        ? await getCardById(card.detail.id)
+        : await getCardNamed(card.detail.name, {
+            set: card.detail.set,
+            id: card.detail.id,
+          });
+      if (!payload) return;
+      card.detail = { ...card.detail, ...payload };
+      card.detail.search = card.detail.search ?? getSearchLine(card.detail);
+    } catch (error) {
+      devLog.warn('[ensureCardImageDetail] lookup failed', card.detail?.name, error);
+    } finally {
+      pendingImageHydration.delete(key);
+    }
+  })();
+
+  pendingImageHydration.set(key, job);
+  await job;
 }
 
 const TRANSFORMS = {
@@ -240,7 +292,6 @@ export function cloneCard(card: Card, newId: string): Card {
     newCard.mesh.rotation.copy(card.mesh.rotation);
   }
   setCardData(newCard.mesh, 'id', newCard.id);
-  setCardData(newCard.mesh, 'isToken', true);
   updateModifiers(newCard);
   newCard.detail.search = card.detail.search ?? getSearchLine(newCard.detail);
   cardsById.set(newCard.id, newCard);
@@ -307,9 +358,9 @@ export function resolveImageUrl(
   format: 'standard' | 'scryfall' = cardSystem.imageUriFormat,
 ) {
   if (!uris) return undefined;
-  if (format === 'scryfall') {
-    return uris.large ?? uris.normal;
-  }
+
+  const direct = uris.large ?? uris.normal;
+  if (format === 'scryfall' && direct) return direct;
 
   const full = Object.values(uris.full ?? {});
   if (full.length > 0) return full[0];
@@ -317,7 +368,7 @@ export function resolveImageUrl(
   const art = Object.values(uris.art ?? {});
   if (art.length > 0) return art[0];
 
-  return uris.large ?? uris.normal;
+  return direct;
 }
 
 export function getCardImage(card: DetailedCardEntry | Card, face = 0) {
@@ -715,15 +766,17 @@ export function setCounterLabelHoverTarget(cardId: string | null) {
 
   if (expandedCounterLabelsCardId) {
     const prev = cardsById.get(expandedCounterLabelsCardId);
-    if (prev) updateCounterLayouts(prev, false);
+    if (prev?.mesh) updateCounterLayouts(prev, false);
     expandedCounterLabelsCardId = null;
   }
 
   if (!cardId) return;
 
-  expandedCounterLabelsCardId = cardId;
   const card = cardsById.get(cardId);
-  if (card) updateCounterLayouts(card, true);
+  if (!card?.mesh) return;
+
+  expandedCounterLabelsCardId = cardId;
+  updateCounterLayouts(card, true);
 }
 
 function drawRoundedRect(
@@ -829,10 +882,10 @@ function applyCounterLayout(
   expanded: boolean,
 ) {
   const mesh = card.modifiers[counter.id] as Mesh | undefined;
-  if (!mesh) return;
+  if (!mesh || !card.mesh) return;
 
   const labels = getCounterLabelTextures(card.id, counter.id, value, counter.name);
-  const label = expanded ? labels.expanded : labels.compact;
+  const label = expanded || counter.id === 'token' ? labels.expanded : labels.compact;
 
   mesh.material[4].map = label.texture;
   mesh.material[5].map = label.texture;
@@ -848,6 +901,8 @@ function applyCounterLayout(
 }
 
 function updateCounterLayouts(card: Card, expanded: boolean) {
+  if (!card.mesh) return;
+
   const countersById = Object.fromEntries(counters().map(counter => [counter.id, counter]));
   const modifierCounters = new Set([
     ...Object.keys(card.mesh.userData.modifiers?.counters ?? {}),

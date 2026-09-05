@@ -1,5 +1,6 @@
+import { ensureCardMesh } from './card';
 import { Card, CardZone } from './constants';
-import { expect, zonesById } from './globals';
+import { expect, getLocalPlayerClientId, zonesById } from './globals';
 import { serializeCardUserDataForLog } from './gameLogEvents';
 import { Intersection, Object3D } from 'three';
 import { AnimationOpts, serializeAnimation } from './animations';
@@ -25,6 +26,11 @@ export function createTransferCardEvent<AddOptions extends {}>(
   const { addOptions = {}, userData } = opts;
 
   expect(!!card, `card is undefined`);
+  if (!card.mesh) {
+    const ownerId = card.clientId ?? getLocalPlayerClientId();
+    if (ownerId !== undefined) ensureCardMesh(card, ownerId);
+  }
+  expect(!!card.mesh, `card mesh is undefined`);
 
   return {
     type: 'transferCard',

@@ -1,0 +1,102 @@
+.App {
+  text-align: center;
+  position: fixed;
+  width: 100%;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.focusCamera {
+  position: fixed;
+  z-index: 100;
+}
+
+.focusCameraContainer {
+  position: relative;
+  height: var(--focus-panel-height, 50vh);
+  aspect-ratio: var(--focus-panel-aspect, 0.716);
+  width: auto;
+  transition:
+    height 0.2s ease-out,
+    aspect-ratio 0.2s ease-out;
+}
+
+.focusCanvasSlot {
+  position: absolute;
+  inset: 0;
+
+  :global(canvas) {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+  }
+}
+
+.spanishPreviewOverlay {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  text-align: center;
+  background: hsla(var(--background) / 0.72);
+  color: hsl(var(--foreground));
+}
+
+.spanishPreviewMessage {
+  max-width: 18ch;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.cardActions {
+  pointer-events: initial;
+  top: var(--y);
+  left: var(--x);
+  transform: translate(var(--offset-x), var(--offset-y));
+  position: fixed;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mainMenu {
+  pointer-events: initial;
+  position: fixed;
+  bottom: 180px;
+  left: 2rem;
+  display: flex;
+  gap: 1rem;
+  flex-direction: row;
+}
+
+.mainMenu > * > * {
+  /* margin: 0 !important; */
+  width: 100%;
+  /* padding-left: 0.5rem !important; */
+  /* padding-right: 0.5rem !important; */
+}
+
+.mainMenu .menu {
+  height: auto;
+  white-space: nowrap;
+}
+
+.log {
+  height: 202px;
+  width: 40vw;
+  overflow: auto;
+  text-align: left;
+}
+
+.log * {
+  overflow-anchor: none;
+}
+
+.log .anchor {
+  overflow-anchor: auto;
+  height: 1px;
+}

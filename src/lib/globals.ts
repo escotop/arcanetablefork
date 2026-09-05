@@ -22,7 +22,6 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { IndexeddbPersistence } from 'y-indexeddb';
 import { touchGameLastAccess } from './gamePersistence';
 import { markLoadProfile, profileAsync } from './loadProfile';
-import { WebrtcProvider } from 'y-webrtc';
 import { WebsocketProvider } from 'y-websocket';
 import { Doc } from 'yjs';
 import { YArray, YMap } from 'yjs/dist/src/internals';
@@ -39,6 +38,7 @@ import {
   TABLE_COLOR,
 } from './constants';
 import type { PlayArea } from './playArea';
+import { DEFAULT_CARD_BACK_URL } from './mtgCardSystem';
 import TextureLoaderWorker from './textureLoaderWorker?worker';
 import { type TextureLoaderWorkerType } from './textureLoaderWorker';
 import { sanitizeGameLogEvent } from './gameLogEvents';
@@ -50,6 +50,7 @@ import { CSS3DRenderer } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import GUI from 'lil-gui';
 import { createLocalStore } from './localStore';
 import { clearPlayerSessionRegistry, clearJoinBinding, unregisterPlayerSession } from './playerSession';
+import { resetMultiplayerSyncState } from './multiplayerSync';
 import { clearWaterdrops } from './waterdropEffect';
 import { clearPingSync } from './pingSync';
 import { resetCameraView, captureLocalCameraView } from './cameraView';
@@ -97,6 +98,24 @@ export let [logs, setLogs] = createStore([]);
 export let [processedEvents, setProcessedEvents] = createSignal(0);
 let gameStateImportInProgress = false;
 let eventCatchUpComplete = false;
+let syncPaused = false;
+let gameplayBlocked = false;
+
+export function setSyncPaused(value: boolean) {
+  syncPaused = value;
+}
+
+export function isSyncPaused() {
+  return syncPaused;
+}
+
+export function setGameplayBlocked(value: boolean) {
+  gameplayBlocked = value;
+}
+
+export function isGameplayBlocked() {
+  return gameplayBlocked;
+}
 
 export function setEventCatchUpComplete(value: boolean) {
   eventCatchUpComplete = value;
@@ -142,6 +161,8 @@ export const colorHashLight = new ColorHash({ lightness: 0.7 });
 export const colorHashDark = new ColorHash({ lightness: 0.2 });
 export const [selectedDeckId, setSelectedDeckId] = createSignal<string | undefined>();
 export const FOCUS_PANEL_BASE_HEIGHT_RATIO = 0.5;
+/** Render layer used by the hover/zoom panel — only the hovered card is shown. */
+export const FOCUS_PANEL_LAYER = 1;
 export const FOCUS_PANEL_WIDE_ASPECT = 750 / 700;
 export const FOCUS_PANEL_MIN_SCALE = 0.25;
 export const FOCUS_PANEL_MAX_SCALE = 1.5;
@@ -225,7 +246,17 @@ export function getLocalPlayArea(): PlayArea | undefined {
   return clientId !== undefined ? playAreas[clientId] : undefined;
 }
 
-export const DEFAULT_CARD_BACK = '/arcane-table-back.webp';
+export function isLocalCardGridSearchOpen() {
+  const area = getLocalPlayArea();
+  if (!area) return false;
+  return (
+    area.peekZone.cards.length > 0 ||
+    area.revealZone.cards.length > 0 ||
+    area.tokenSearchZone.cards.length > 0
+  );
+}
+
+export const DEFAULT_CARD_BACK = DEFAULT_CARD_BACK_URL;
 
 [('warn', 'error')].forEach(captureConsole);
 
@@ -270,9 +301,28 @@ export function headlessInit(opts = {}) {
   provider = opts?.provider;
 }
 
+function loadTexture(url: string): Promise<THREE.Texture> {
+  return new Promise((resolve, reject) => {
+    textureLoader.load(
+      url,
+      texture => resolve(texture),
+      undefined,
+      error => reject(error instanceof Error ? error : new Error(String(error))),
+    );
+  });
+}
+
 export async function setCardBackTexture(url: string) {
   const old = cardBackTexture;
-  cardBackTexture = await new Promise(resolve => textureLoader.load(url, resolve));
+  try {
+    cardBackTexture = await loadTexture(url);
+  } catch (error) {
+    devLog.warn('[setCardBackTexture] failed to load', url, error);
+    if (!cardBackTexture) {
+      cardBackTexture = old;
+    }
+    return;
+  }
   cardBackTexture.colorSpace = THREE.SRGBColorSpace;
 
   scene.traverse(obj => {
@@ -299,7 +349,7 @@ export function initClock() {
   clock = new Clock();
 }
 
-export const DEFAULT_CARD_SYSTEM_URI = 'https://scry-server-mtg.arcanetable.app';
+export const DEFAULT_CARD_SYSTEM_URI = 'https://api.scryfall.com';
 
 function waitForIndexedDbSync(): Promise<void> {
   if (!indexeddbPersistence) return Promise.resolve();
@@ -316,31 +366,13 @@ function waitForIndexedDbSync(): Promise<void> {
     setTimeout(() => {
       indexeddbPersistence!.off('synced', onSynced);
       resolve();
-    }, 1500);
+    }, 500);
   });
 }
 
-function parseEnvUrlList(value: string | undefined): string[] | undefined {
-  if (!value) return undefined;
-  return value
-    .split(',')
-    .map(url => url.trim())
-    .filter(Boolean);
-}
-
 function createSyncProvider(gameId: string) {
-  const useWebRtc = import.meta.env.VITE_YJS_USE_WEBRTC === 'true';
   const wsUrl =
     (import.meta.env.VITE_YJS_WS_URL as string | undefined) ?? 'wss://ws.arcanetable.app';
-
-  if (useWebRtc && !import.meta.env.PROD && !import.meta.env.VITE_YJS_WS_URL) {
-    const signaling =
-      parseEnvUrlList(import.meta.env.VITE_YJS_SIGNALING_URL as string | undefined) ?? [
-        'wss://signaling.arcanetable.app',
-      ];
-    return new WebrtcProvider(gameId, ydoc, { signaling });
-  }
-
   return new WebsocketProvider(wsUrl, gameId, ydoc);
 }
 
@@ -354,11 +386,7 @@ export async function init({ gameId }) {
   provider = createSyncProvider(gameId);
   markLoadProfile('sync provider created', { gameId });
 
-  loadingManager.onProgress = function (item, loaded, total) {
-    devLog.log(item, loaded, total);
-  };
-
-  cardBackTexture = textureLoader.load(cardSystem.cardBack ?? `/arcane-table-back.webp`);
+  cardBackTexture = textureLoader.load(cardSystem.cardBack ?? DEFAULT_CARD_BACK);
   cardBackTexture.colorSpace = THREE.SRGBColorSpace;
 
   cardLoadingTexture = textureLoader.load(`/loading-texture.png`);
@@ -386,13 +414,14 @@ export async function init({ gameId }) {
 
   const { focusWidth, focusHeight } = getFocusPanelDimensions();
 
-  focusRenderer = new WebGLRenderer();
+  focusRenderer = new WebGLRenderer({ alpha: true, antialias: true });
   focusRenderer.setPixelRatio(window.devicePixelRatio);
   focusRenderer.setSize(focusWidth, focusHeight);
   focusRenderer.shadowMap.enabled = true;
-  focusRenderer.setClearAlpha(0x05050e);
+  focusRenderer.setClearColor(0x000000, 0);
 
   focusCamera = new PerspectiveCamera(50, focusWidth / focusHeight, 1, 2000);
+  focusCamera.layers.set(FOCUS_PANEL_LAYER);
 
   scene = new Scene();
 
@@ -417,7 +446,9 @@ export async function init({ gameId }) {
   const pmrem = new THREE.PMREMGenerator(renderer);
   pmrem.compileEquirectangularShader();
 
-  new HDRLoader().load('/qwantani_night_puresky_4k.hdr', texture => {
+  new HDRLoader().load(
+    '/qwantani_night_puresky_4k.hdr',
+    texture => {
     texture.mapping = THREE.EquirectangularReflectionMapping;
     texture.colorSpace = THREE.SRGBColorSpace;
 
@@ -445,7 +476,12 @@ export async function init({ gameId }) {
     scene.environmentIntensity = 0.4;
     scene.environment = envMap;
     pmrem.dispose();
-  });
+    },
+    undefined,
+    error => {
+      devLog.warn('[init] HDR environment failed to load', error);
+    },
+  );
 
   focusRayCaster = new Raycaster();
 
@@ -512,9 +548,11 @@ export function startSpectating() {
  * @deprecated use dispatchEvent instead
  */
 export function sendEvent(event) {
+  if (syncPaused || isGameplayBlocked()) {
+    return;
+  }
   event.clientID = getLocalPlayerClientId();
   event.locallyApplied = true;
-  logger.warn('sendEvent', event.type);
   sanitizeGameLogEvent(event);
   gameLog.push([event]);
 }
@@ -537,12 +575,12 @@ export async function flushDispatchEventQueue() {
       clientID: events[0].clientID,
     };
     sanitizeGameLogEvent(event);
-    logger.log('[dispatchGameEvent]', event);
     gameLog.push([event]);
   });
 }
 
 export function dispatchGameEvent(event: any, timing = 0) {
+  if (syncPaused || isGameplayBlocked()) return;
   event.clientID = getLocalPlayerClientId();
   if (batch.length > 0 && timing !== batchTiming) {
     flushDispatchEventQueue();
@@ -580,6 +618,9 @@ export function setupCss3dRenderer(container: HTMLElement) {
 
 export function cleanup() {
   tearingDown = true;
+  setSyncPaused(false);
+  setGameplayBlocked(false);
+  resetMultiplayerSyncState();
   clearSpanishPreview();
   setLocalPlayerClientId(undefined);
   clearPlayerSessionRegistry();

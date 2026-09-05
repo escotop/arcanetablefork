@@ -25,7 +25,7 @@ interface Author {
 const baseURL = import.meta.env.VITE_SITE_URL ?? 'http://localhost:3000';
 
 const SITE_DEFAULTS = {
-  title: 'Arcanetable - 3D TCG Playtesting in Your Browser',
+  title: 'Untapped Table - 3D MTG Playtesting in Your Browser',
   image: 'https://arcanetable.app/table.webp',
   url: baseURL,
   keywords: [

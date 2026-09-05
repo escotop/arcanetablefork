@@ -28,8 +28,8 @@ import { TextField, TextFieldTextArea } from '~/components/ui/text-field';
 
 import { CardSystem, Deck, DetailedCardEntry } from '~/lib/constants';
 
-import { loadCardList } from '~/lib/deck';
-import { fetchCardInfoForImport } from '~/lib/deckImportLookup';
+import { parseImportedCardList } from '~/lib/deck';
+import { buildImportedInPlay, fetchCardInfoForImport } from '~/lib/deckImportLookup';
 
 import useCardGrouping from './cardGroupings';
 
@@ -69,7 +69,11 @@ export interface DeckImportDialogProps {
 
 let cache = new Map();
 
-
+const DECK_LIST_PLACEHOLDER = `Deck
+4 Lightning Bolt
+Commander
+1x Alela, Artful Provocateur (brc) 119
+1 Orcish Bowmasters [ltr] #433`;
 
 export default function DeckImportDialog(props: DeckImportDialogProps) {
 
@@ -77,7 +81,7 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
 
   const [textContent, setTextContent] = createSignal('');
 
-  const [deck, updateDeck] = createStore<Deck>({ name: '', cards: {} } as Deck);
+  const [deck, updateDeck] = createStore<Deck>({ name: '', cards: {}, inPlay: {} } as Deck);
 
   const [loading, setLoading] = createSignal(false);
 
@@ -175,10 +179,11 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
       setLoading(false);
       setProgress({ current: 0, total: 0, name: '' });
       updateDeck('cards', reconcile({}));
+      updateDeck('inPlay', reconcile({}));
       return;
     }
 
-    const newCardEntries = loadCardList(cardListText);
+    const { cards: newCardEntries, inPlayIndices } = parseImportedCardList(cardListText);
     cache.clear();
     setLoading(true);
     setProgress({ current: 0, total: newCardEntries.length, name: '' });
@@ -192,6 +197,7 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
       if (generation !== parseGeneration) return;
 
       updateDeck('cards', reconcile(cards));
+      updateDeck('inPlay', reconcile(buildImportedInPlay(newCardEntries, inPlayIndices, cards)));
     } finally {
       if (generation === parseGeneration) {
         setLoading(false);
@@ -270,7 +276,7 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
 
                 class='h-96 whitespace-pre'
 
-                placeholder='Paste a decklist or drop a deck list file'
+                placeholder={DECK_LIST_PLACEHOLDER}
 
                 onInput={e => {
 

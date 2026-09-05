@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
+import { getDeckPreviewImageUrl } from '../deck';
 import { createDeckStore } from '../deckStore';
 import { useCardSystemContext } from '../cardSystemContext';
 import { colorHashDark } from '../globals';
@@ -254,9 +255,7 @@ function DeckOption(props: DeckOptionProps) {
         disabled={!props.selectable}>
         <div
           class='bg-cover'
-          style={`background-image: url(${
-            props.deck.coverImage ?? '/arcane-table-back.webp'
-          }); height: 100%;`}></div>
+          style={`background-image: url(${getDeckPreviewImageUrl(props.deck)}); height: 100%;`}></div>
         <div class='absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent py-4 px-2 text-left'>
           <h3 class='text-white text-xl font-semibold'>{props.deck?.name}</h3>
           <div class='flex flex-row gap-2 pt-2 flex-wrap'>
