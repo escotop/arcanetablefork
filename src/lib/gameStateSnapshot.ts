@@ -10,6 +10,7 @@ import {
   setProcessedEvents,
   setGameStateImportInProgress,
   setEventCatchUpComplete,
+  finishHistoricalLogReplay,
   playAreas,
   resetGameSceneForReplay,
 } from './globals';
@@ -192,6 +193,7 @@ async function reconnectLocalPlayArea(gameId: string) {
   readjustPlayAreas();
   void area.loadTextures();
   setEventCatchUpComplete(true);
+  finishHistoricalLogReplay();
 }
 
 async function finalizeAfterReplay(gameId: string) {

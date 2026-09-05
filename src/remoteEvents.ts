@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import { Object3D, Vector3 } from 'three';
 import { animateObject, queueAnimationGroup, rehydrateAnimation } from './lib/animations';
 import {
+  applyCardOrientation,
   cloneCard,
   splitUserdata,
   setCardData,
@@ -37,6 +38,7 @@ import {
   zonesById,
   isGameStateImportInProgress,
   isEventCatchUpComplete,
+  isHistoricalLogReplayInProgress,
   resetGameSceneForReplay,
 } from './lib/globals';
 import { PlayArea } from './lib/playArea';
@@ -75,6 +77,7 @@ let timing = 100;
 let processEventsChain: Promise<void> = Promise.resolve();
 
 function shouldSkipLocallyAppliedEvent(event: { clientID?: number; locallyApplied?: boolean }) {
+  if (isHistoricalLogReplayInProgress()) return false;
   if (!event.locallyApplied || !isEventCatchUpComplete()) return false;
   const localClientId = getLocalPlayerClientId();
   return localClientId !== undefined && event.clientID === localClientId;
@@ -122,6 +125,7 @@ function shouldSkipEventOnCatchUp(event: {
   skipReplay?: boolean;
   payload?: Record<string, unknown>;
 }) {
+  if (isHistoricalLogReplayInProgress()) return false;
   return !isEventCatchUpComplete() && isSearchOrDismissReplayEvent(event);
 }
 
@@ -315,13 +319,25 @@ export async function waitForGameLogCatchUp(options?: { maxWaitMs?: number }) {
 
 const USERDATA_BLOCK_LIST = ['cardBack', 'publicCardBack'];
 
+function shouldSyncOrientationFromEvents() {
+  return !isEventCatchUpComplete() || isHistoricalLogReplayInProgress();
+}
+
 function applyEventUserData(card: Card, userData: Record<string, unknown>) {
   if (!card.mesh) return;
   const { id, ...fields } = userData;
+  const orientationChanged = 'isTapped' in fields || 'isFlipped' in fields;
   Object.entries(fields).forEach(([key, value]) => {
     if (USERDATA_BLOCK_LIST.includes(key)) return;
     setCardData(card.mesh!, key, value);
   });
+  if (
+    orientationChanged &&
+    card.mesh.userData.location === 'battlefield' &&
+    shouldSyncOrientationFromEvents()
+  ) {
+    applyCardOrientation(card.mesh);
+  }
 }
 
 function resolveEventCard(cardId: string | undefined, playArea?: PlayArea): Card | undefined {
@@ -668,7 +684,12 @@ const EVENTS = {
       Object.assign(target.userData, cloneable);
     }
 
-    animateObject(target, rehydrateAnimation(event.payload.animation));
+    const opts = rehydrateAnimation(event.payload.animation);
+    if (shouldSyncOrientationFromEvents()) {
+      opts.duration = 0;
+      opts.completeOnCancel = true;
+    }
+    animateObject(target, opts);
   },
   async transferCard(event: Event, playArea: PlayArea, card: Card) {
     const fromZone = resolveZoneFromEvent(event.payload.fromZoneId, playArea);
@@ -722,10 +743,19 @@ const EVENTS = {
       event.payload.extendedOptions.addOptions.skipAnimation = true;
     }
 
-    await transferCard(card, resolvedFromZone, toZone, {
+    const replaying = shouldSyncOrientationFromEvents();
+    const transferOptions = {
       ...(event.payload.extendedOptions ?? {}),
       preventTransmit: true,
-    });
+    };
+    if (replaying) {
+      transferOptions.addOptions = { ...transferOptions.addOptions, skipAnimation: true };
+    }
+
+    await transferCard(card, resolvedFromZone, toZone, transferOptions);
+    if (card.mesh && toZone?.zone === 'battlefield' && replaying) {
+      applyCardOrientation(card.mesh);
+    }
     const remote = isRemotePlayerEvent(event);
     if (toZone?.zone === 'hand') {
       playDrawSound(remote);
@@ -742,6 +772,14 @@ const EVENTS = {
       .filter(Boolean);
 
     await restackItems(new Vector3().fromArray(event.payload.anchor), items);
+
+    for (const mesh of items) {
+      if (!mesh) continue;
+      const zoneId = zone?.id ?? mesh.userData.zoneId;
+      if (!zoneId) continue;
+      setCardData(mesh, `zone.${zoneId}.position`, mesh.position.toArray());
+      setCardData(mesh, `zone.${zoneId}.rotation`, mesh.rotation.toArray());
+    }
   },
   createCard(event: Event, playArea: PlayArea) {
     let card = cloneCard({ detail: event.payload.userData.card.detail }, event.payload.userData.id);
@@ -761,9 +799,18 @@ const EVENTS = {
     zone?.addCard(card, options);
   },
   tap(event: Event, playArea: PlayArea, card: Card) {
-    if (card?.mesh) {
-      playTapSound(isRemotePlayerEvent(event));
-      playArea?.tap(card.mesh, { skipAnimation: !isEventCatchUpComplete() });
+    if (!card?.mesh) return;
+
+    const isReplay = shouldSyncOrientationFromEvents();
+    playTapSound(isRemotePlayerEvent(event));
+
+    if (isReplay) {
+      playArea?.tap(card.mesh, { skipAnimation: true, syncOnly: true });
+      return;
+    }
+
+    if (isRemotePlayerEvent(event)) {
+      playArea?.tap(card.mesh, { syncOnly: true });
     }
   },
   async flip(event: Event, playArea: PlayArea, card: Card) {
@@ -771,6 +818,9 @@ const EVENTS = {
     playArea?.applyFlipVisual(card.mesh, { animate: isEventCatchUpComplete() });
     if (card.mesh.userData.isDoubleSided) {
       await loadCardTextures(card);
+      if (!isEventCatchUpComplete() || isHistoricalLogReplayInProgress()) {
+        playArea?.applyFlipVisual(card.mesh, { animate: false });
+      }
     }
   },
   clone(event: Event, playArea: PlayArea) {

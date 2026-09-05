@@ -56,7 +56,7 @@ export function createTapEvent(object3D: Object3D) {
     payload: {
       userData: {
         id: object3D.userData.id,
-        isTapped: !object3D.userData.isTapped,
+        isTapped: !!object3D.userData.isTapped,
       },
     },
   } as const;

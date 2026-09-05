@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import { CatmullRomCurve3, Euler, Group, Object3D, Vector3 } from 'three';
-import { animateObject } from './animations';
+import { animateObject, cancelAnimation } from './animations';
 import { cleanupCard, getSerializableCard, setCardData } from './card';
 import { Card, CARD_HEIGHT, CardZone } from './constants';
 import { cardsById, getProjectionVec, isEventCatchUpComplete, setHoverSignal, settings, zonesById } from './globals';
@@ -10,6 +10,43 @@ import { createStore, SetStoreFunction } from 'solid-js/store';
 import { createRoot } from 'solid-js';
 
 const HAND_ROTATION = new Euler(Math.PI * 0.2, 0, 0);
+const HAND_ARC_RADIUS = 140;
+const HAND_ARC_MAX_SPREAD_DEG = 42;
+const HAND_ARC_LIFT = 0.12;
+const HAND_FAN_ROTATION = 0.35;
+
+function applyHandRenderOrder(cards: Card[], focusedIndex?: number) {
+  for (let i = 0; i < cards.length; i++) {
+    const mesh = cards[i]?.mesh;
+    if (!mesh || mesh.userData.location !== 'hand') continue;
+
+    // Above left neighbors (j < i), below right neighbors (j > i).
+    mesh.renderOrder = focusedIndex === i ? i - 0.5 : i;
+  }
+}
+
+function getHandCardLayout(index: number, count: number) {
+  if (count <= 0) {
+    return { position: new Vector3(), rotation: new Euler() };
+  }
+  if (count === 1) {
+    return { position: new Vector3(0, 0, 0), rotation: new Euler() };
+  }
+
+  const center = (count - 1) / 2;
+  const offset = index - center;
+  const spreadRad = (Math.min(HAND_ARC_MAX_SPREAD_DEG, count * 3.5) * Math.PI) / 180;
+  const angle = (offset / (count - 1)) * spreadRad;
+
+  const x = HAND_ARC_RADIUS * Math.sin(angle);
+  const y = HAND_ARC_RADIUS * (1 - Math.cos(angle)) * HAND_ARC_LIFT;
+  const z = index * -0.125;
+
+  return {
+    position: new Vector3(x, y, z),
+    rotation: new Euler(0, 0, -angle * HAND_FAN_ROTATION),
+  };
+}
 
 export class Hand implements CardZone {
   public mesh: Group;
@@ -70,7 +107,7 @@ export class Hand implements CardZone {
 
   adjustHandPosition() {
     this.mesh.userData.resting = {
-      position: new Vector3(this.cards.length * -2.5, this.mesh.position.y, this.mesh.position.z),
+      position: new Vector3(0, this.mesh.position.y, this.mesh.position.z),
       rotation: HAND_ROTATION.clone(),
     };
 
@@ -78,6 +115,33 @@ export class Hand implements CardZone {
       to: this.mesh.userData.resting,
       duration: 0.2,
     });
+  }
+
+  private relayoutCards(options: { animate?: boolean; skipIndex?: number } = {}) {
+    const { animate = true, skipIndex } = options;
+    const count = this.cards.length;
+
+    for (let i = 0; i < count; i++) {
+      const cardMesh = this.cards[i]?.mesh;
+      if (!cardMesh || cardMesh.userData.location !== 'hand') continue;
+
+      const layout = getHandCardLayout(i, count);
+      cardMesh.userData.resting = layout;
+
+      if (i === skipIndex || i === this.focusedIndex) continue;
+
+      if (animate) {
+        animateObject(cardMesh, {
+          to: layout,
+          duration: 0.15,
+        });
+      } else {
+        cardMesh.position.copy(layout.position);
+        cardMesh.rotation.copy(layout.rotation);
+      }
+    }
+
+    applyHandRenderOrder(this.cards, this.focusedIndex);
   }
 
   getSerializable() {
@@ -93,7 +157,7 @@ export class Hand implements CardZone {
   focusCardAtIndex(index: number, { keyboard = false } = {}) {
     if (index < 0 || index >= this.cards.length) return;
     if (this.focusedIndex !== undefined && this.focusedIndex !== index) {
-      animateUnfocusCard(this.mesh, this.cards, this.focusedIndex);
+      animateUnfocusCard(this.mesh, this.cards, this.focusedIndex, index);
     }
     this.focusedIndex = index;
     if (keyboard) {
@@ -104,7 +168,7 @@ export class Hand implements CardZone {
 
   clearFocus() {
     if (this.focusedIndex === undefined) return;
-    animateUnfocusCard(this.mesh, this.cards, this.focusedIndex);
+    animateUnfocusCard(this.mesh, this.cards, this.focusedIndex, undefined);
     this.focusedIndex = undefined;
     this.keyboardFocusedIndex = undefined;
   }
@@ -154,19 +218,20 @@ export class Hand implements CardZone {
       card.mesh.addEventListener('mouseout', this.cardMouseOut);
     }
 
-    let restingPosition = new Vector3(index * 5, 0, index * -0.125);
+    const layout = getHandCardLayout(index, this.cards.length);
+    const restingPosition = layout.position;
 
-    setCardData(card.mesh, 'resting', {
-      position: restingPosition,
-      rotation: new Euler(),
-    });
+    setCardData(card.mesh, 'resting', layout);
+    card.mesh.renderOrder = index;
+
+    this.relayoutCards({ animate: true, skipIndex: index });
 
     let initialRotation = getGlobalRotation(card.mesh);
     const animateEntry = !skipAnimation && isEventCatchUpComplete();
 
     if (!animateEntry) {
-      card.mesh.position.copy(restingPosition);
-      card.mesh.rotation.set(0, 0, 0);
+      card.mesh.position.copy(layout.position);
+      card.mesh.rotation.copy(layout.rotation);
       if (destroy) {
         this.removeCard(card.mesh);
         cleanupCard(card);
@@ -176,9 +241,9 @@ export class Hand implements CardZone {
       this.isInteractive = false;
       animateObject(card.mesh, {
         completeOnCancel: true,
-        path: new CatmullRomCurve3([initialPosition, restingPosition]),
+        path: new CatmullRomCurve3([initialPosition, layout.position]),
         to: {
-          rotation: new Euler(0, 0, 0),
+          rotation: layout.rotation,
         },
         from: {
           rotation: initialRotation,
@@ -218,13 +283,16 @@ export class Hand implements CardZone {
     let card = cardsById.get(event.mesh.userData.id)!;
     let index = this.cards.indexOf(card);
     if (this.keyboardFocusedIndex === index) return;
-    animateUnfocusCard(this.mesh, this.cards, index);
+    animateUnfocusCard(this.mesh, this.cards, index, undefined);
     if (this.focusedIndex === index) {
       this.focusedIndex = undefined;
     }
   };
 
   removeCard(cardMesh: Object3D) {
+    cancelAnimation(cardMesh);
+    cardMesh.renderOrder = 0;
+
     let worldPosition = new Vector3();
     cardMesh.getWorldPosition(worldPosition);
     let cardIndex = this.cards.findIndex(c => c.id === cardMesh.userData.id);
@@ -242,6 +310,7 @@ export class Hand implements CardZone {
     this.setObservable('cardCount', this.cards.length);
 
     this.adjustHandPosition();
+    this.relayoutCards({ animate: true, skipIndex: this.focusedIndex });
     if (this.focusedIndex === cardIndex) {
       this.focusedIndex = undefined;
       this.keyboardFocusedIndex = undefined;
@@ -250,20 +319,6 @@ export class Hand implements CardZone {
       if (this.keyboardFocusedIndex !== undefined) {
         this.keyboardFocusedIndex--;
       }
-    }
-    for (let i = cardIndex; i < this.cards.length; i++) {
-      let cardMesh = this.cards[i]?.mesh;
-      if (!cardMesh) {
-        devLog.warn(`card mesh undefined`, new Error().stack);
-        devLog.warn(i, this.cards.length, this.cards.slice());
-        continue;
-      }
-      if (cardMesh.userData.location !== 'hand' || !cardMesh.userData.resting) continue;
-      cardMesh.userData.resting.position = new Vector3(i * 5, 0, i * -0.125);
-      animateObject(cardMesh, {
-        to: cardMesh.userData.resting,
-        duration: 0.1,
-      });
     }
   }
 
@@ -279,53 +334,33 @@ export class Hand implements CardZone {
   }
 }
 
-function animateFocusCard(handMesh: Group, cards: Card[], index: number) {
-  let hoverHeight = settings.enableCameraTilt ? 10 : 15;
-  animateObject(cards[index].mesh, {
-    to: {
-      position: new Vector3().addVectors(
-        cards[index].mesh.userData.resting.position,
-        new Vector3(10, hoverHeight, 5),
-      ),
-      rotation: cards[index].mesh.userData.resting.rotation,
-    },
-    duration: 0.1,
-  });
-  animateObject(handMesh, {
-    to: {
-      position: handMesh.userData.resting.position.clone().add(new Vector3(-10, 0, 0)),
-    },
-    duration: 0.1,
-  });
+function animateFocusCard(_handMesh: Group, cards: Card[], index: number) {
+  const hoverHeight = settings.enableCameraTilt ? 4 : 6;
+  const card = cards[index];
+  const resting = card.mesh.userData.resting;
 
-  for (let i = index + 1; i < cards.length; i++) {
-    let cardMesh = cards[i].mesh;
-    let resting = cardMesh.userData.resting;
-    if (cardMesh.userData.location !== 'hand') continue;
-    animateObject(cardMesh, {
-      to: {
-        position: resting.position.clone().add(new Vector3(20, 0, 0)),
-        rotation: resting.rotation,
-      },
-      duration: 0.1,
-    });
-  }
+  applyHandRenderOrder(cards, index);
+
+  animateObject(card.mesh, {
+    to: {
+      position: resting.position.clone().add(new Vector3(0, hoverHeight, 0)),
+      rotation: resting.rotation,
+    },
+    duration: 0.15,
+  });
 }
 
-function animateUnfocusCard(handMesh: Group, cards: Card[], index: number) {
-  let card = cards[index];
+function animateUnfocusCard(
+  _handMesh: Group,
+  cards: Card[],
+  index: number,
+  nextFocusedIndex?: number,
+) {
+  const card = cards[index];
+  applyHandRenderOrder(cards, nextFocusedIndex);
 
   animateObject(card.mesh, {
     to: card.mesh.userData.resting,
-    duration: 0.1,
+    duration: 0.15,
   });
-  animateObject(handMesh, {
-    to: handMesh.userData.resting,
-    duration: 0.1,
-  });
-  for (let i = index + 1; i < cards.length; i++) {
-    let cardMesh = cards[i].mesh;
-    if (cardMesh.userData.location !== 'hand') continue;
-    animateObject(cardMesh, { to: cardMesh.userData.resting, duration: 0.1 });
-  }
 }

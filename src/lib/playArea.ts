@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid';
 import { CatmullRomCurve3, Euler, Group, Mesh, MeshStandardMaterial, Object3D, Quaternion, Vector3 } from 'three';
 import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import { getPlayAreaPlayerColor, textColorOnBackground } from './playerColor';
-import { animateObject } from './animations';
+import { animateObject, cancelAnimation } from './animations';
 import {
   applyCardOrientation,
   cleanupCard,
@@ -46,6 +46,7 @@ import {
   createDismissZoneEvent,
   createFlipEvent,
   createPeekCardsEvent,
+  createTapEvent,
   createTransferEntireZoneEvent,
   createTransferCardEvent,
   SKIP_REPLAY,
@@ -224,6 +225,7 @@ export class PlayArea {
   }
 
   reapplyBattlefieldOrientations() {
+    this.battlefieldZone.mesh.updateMatrixWorld(true);
     for (const card of this.battlefieldZone.cards) {
       if (card.mesh) {
         applyCardOrientation(card.mesh);
@@ -707,8 +709,16 @@ export class PlayArea {
     });
   }
 
-  tap(cardMesh: Mesh, options: { skipAnimation?: boolean } = {}) {
+  tap(cardMesh: Mesh, options: { skipAnimation?: boolean; syncOnly?: boolean } = {}) {
+    if (!options.syncOnly) {
+      setCardData(cardMesh, 'isTapped', !cardMesh.userData.isTapped);
+      if (this.isLocalPlayArea && isEventCatchUpComplete()) {
+        dispatchGameEvent(createTapEvent(cardMesh));
+      }
+    }
+
     const zone = zonesById.get(cardMesh.userData.zoneId);
+    cancelAnimation(cardMesh);
     const targetQuaternion = getRotationFromCardState(cardMesh.userData);
     const skipAnimation = options.skipAnimation ?? !isEventCatchUpComplete();
 
@@ -843,7 +853,10 @@ export class PlayArea {
       preloadStackTextures(this.graveyardZone, cache),
       preloadStackTextures(this.exileZone, cache),
     ];
-    void Promise.all(jobs).finally(() => cache.clear());
+    void Promise.all(jobs).finally(() => {
+      cache.clear();
+      this.reapplyBattlefieldOrientations();
+    });
   }
 
   destroy() {
@@ -886,8 +899,10 @@ export class PlayArea {
       ...state,
       isLocalPlayer: options.isLocalPlayer ?? false,
     };
+    const battlefield = state.battlefield;
     const playArea = PlayArea.FromNetworkState({
       ...mergedState,
+      battlefield: battlefield ? { id: battlefield.id, cards: [] } : undefined,
       clientId,
       clientID: clientId,
     });
@@ -903,6 +918,7 @@ export class PlayArea {
     restoreSerializedZoneCards(playArea.peekZone, state.peekZone, clientId, card =>
       playArea.peekZone.addCard(card, { skipAnimation: true }),
     );
+    restoreSerializedBattlefieldCards(playArea.battlefieldZone, battlefield, clientId);
     playArea.updatePositions();
     playArea.loadTextures();
     return playArea;
@@ -923,6 +939,23 @@ function restoreSerializedZoneCards(
   }
 }
 
+function restoreSerializedBattlefieldCards(
+  zone: CardArea,
+  serialized?: { cards?: Array<Record<string, unknown>> },
+  clientId?: number,
+) {
+  if (!serialized?.cards?.length || clientId === undefined) return;
+
+  for (const entry of serialized.cards) {
+    const card = cardFromSerializable(entry, clientId);
+    const position = entry.position as [number, number, number] | undefined;
+    zone.addCard(card, {
+      skipAnimation: true,
+      ...(position ? { positionArray: position } : {}),
+    });
+  }
+}
+
 function cardFromSerializable(serialized: Record<string, unknown>, clientId: number): Card {
   const userData = serialized.userData as Record<string, unknown> | undefined;
   const embedded = userData?.card as Card | undefined;
@@ -936,7 +969,9 @@ function cardFromSerializable(serialized: Record<string, unknown>, clientId: num
   const card = initializeCardMesh(base, clientId);
   if (userData) {
     for (const [key, value] of Object.entries(userData)) {
-      if (key === 'card') continue;
+      if (key === 'card' || key === 'spanishPreviewSavedMat' || key === 'spanishPreviewSavedUrl') {
+        continue;
+      }
       setCardData(card.mesh!, key, value);
     }
   }

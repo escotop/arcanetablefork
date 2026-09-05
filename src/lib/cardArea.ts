@@ -11,7 +11,8 @@ import {
   Raycaster,
   Vector3,
 } from 'three';
-import { animateObject } from './animations';
+import { animateObject, cancelAnimation } from './animations';
+import { isEventCatchUpComplete, isHistoricalLogReplayInProgress } from './globals';
 import { applyCardOrientation, getRotationFromCardState, getSerializableCard, setCardData } from './card';
 import {
   Card,
@@ -99,13 +100,17 @@ export class CardArea implements CardZone<{ positionArray?: [number, number, num
     this.cards.push(card);
     this.setObservable('cardCount', this.cards.length);
 
+    const instant =
+      skipAnimation || !isEventCatchUpComplete() || isHistoricalLogReplayInProgress();
     const targetQuaternion = getRotationFromCardState(card.mesh.userData);
     setCardData(card.mesh, `zone.${this.id}.position`, position.toArray());
+    cancelAnimation(card.mesh);
     applyCardOrientation(card.mesh, this.id);
 
-    if (skipAnimation) {
+    if (instant) {
       card.mesh.position.copy(position);
       card.mesh.quaternion.copy(targetQuaternion);
+      card.mesh.rotation.setFromQuaternion(card.mesh.quaternion);
     } else {
       animateObject(card.mesh, {
         completeOnCancel: true,

@@ -125,6 +125,17 @@ export function isEventCatchUpComplete() {
   return eventCatchUpComplete;
 }
 
+/** True while rebuilding table state from the persisted log (reload/reconnect). */
+let historicalLogReplayInProgress = true;
+
+export function isHistoricalLogReplayInProgress() {
+  return historicalLogReplayInProgress;
+}
+
+export function finishHistoricalLogReplay() {
+  historicalLogReplayInProgress = false;
+}
+
 export function hasPersistedGameState() {
   return !!indexeddbPersistence?.synced && gameLog.length > 0;
 }
@@ -138,6 +149,7 @@ export function isGameStateImportInProgress() {
 }
 
 export function resetGameSceneForReplay() {
+  clearSpanishPreview();
   Object.values(playAreas).forEach(playArea => {
     if (playArea && table) table.remove(playArea.mesh);
     playArea?.destroy();
@@ -152,6 +164,7 @@ export function resetGameSceneForReplay() {
   setLocalPlayerClientId(undefined);
   setIsIntitialized(false);
   setEventCatchUpComplete(false);
+  historicalLogReplayInProgress = true;
 }
 export let [isSpectating, setIsSpectating] = createSignal(false);
 export let [playerCount, setPlayerCount] = createSignal(0);

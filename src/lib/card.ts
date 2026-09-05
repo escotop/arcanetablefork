@@ -46,6 +46,7 @@ import {
   textureLoaderWorker,
 } from './globals';
 import { counters } from './ui/counterDialog';
+import { cancelAnimation } from './animations';
 import { cleanupFromNode, isValidMaterial } from './utils';
 import { serializeCardUserDataForLog } from './gameLogEvents';
 import { devLog } from './devLog';
@@ -137,6 +138,7 @@ export function createCardGeometry(card: Card, cache?: Map<string, ImageBitmap>)
   cardBackMat.transparent = true;
 
   alphaMap = alphaMap ?? textureLoader.load(`/alphaMap.webp`);
+  if (alphaMap.channel === undefined) alphaMap.channel = 0;
   let loadingMat = new MeshStandardMaterial({ map: cardLoadingTexture, alphaMap });
   loadingMat.transparent = true;
 
@@ -171,6 +173,20 @@ export function createCardGeometry(card: Card, cache?: Map<string, ImageBitmap>)
   return mesh;
 }
 
+function hasLoadedFrontTexture(card: Card, frontUrl: string) {
+  const mesh = card.mesh;
+  if (!mesh) return false;
+
+  const normalized = normalizeTextureUrl(frontUrl);
+  const currentUrl = normalizeTextureUrl(mesh.userData.card_face_urls?.[0] ?? '');
+  if (normalized !== currentUrl) return false;
+
+  const mat = mesh.material[4] as MeshStandardMaterial | undefined;
+  if (!mat?.map || mat.map === cardLoadingTexture) return false;
+
+  return true;
+}
+
 export async function loadCardTextures(
   card: Card,
   cache: Map<string, Promise<MeshStandardMaterial>> = new Map(),
@@ -189,10 +205,12 @@ export async function loadCardTextures(
     }
   }
 
-  const frontPromise = loadTextureMaterial(front, cache);
-  frontPromise.then(mat => {
-    card.mesh.material[4] = mat.clone();
-  });
+  const frontLoaded = hasLoadedFrontTexture(card, front);
+  const frontPromise = frontLoaded
+    ? Promise.resolve()
+    : loadTextureMaterial(front, cache).then(mat => {
+        card.mesh.material[4] = mat.clone();
+      });
 
   if (back) {
     const backPromise = loadTextureMaterial(back, cache);
@@ -320,7 +338,9 @@ export function getRotationFromCardState(userData) {
 }
 
 export function applyCardOrientation(cardMesh: Object3D, zoneId?: string) {
+  cancelAnimation(cardMesh);
   cardMesh.quaternion.copy(getRotationFromCardState(cardMesh.userData));
+  cardMesh.rotation.setFromQuaternion(cardMesh.quaternion);
   const id = zoneId ?? cardMesh.userData.zoneId;
   if (id && cardMesh.userData.zone?.[id]) {
     setCardData(cardMesh, `zone.${id}.rotation`, cardMesh.rotation.toArray());
@@ -507,6 +527,7 @@ function createCardTextureMaterial(image: ImageBitmap) {
   map.colorSpace = SRGBColorSpace;
   map.format = RGBAFormat;
   map.type = UnsignedByteType;
+  map.channel = 0;
   map.needsUpdate = true;
 
   const mat = new MeshStandardMaterial({
@@ -517,6 +538,12 @@ function createCardTextureMaterial(image: ImageBitmap) {
   mat.transparent = true;
   mat.needsUpdate = true;
   return mat;
+}
+
+export function createCardFrontMaterial(image: ImageBitmap) {
+  alphaMap = alphaMap ?? textureLoader.load(`/alphaMap.webp`);
+  if (alphaMap.channel === undefined) alphaMap.channel = 0;
+  return createCardTextureMaterial(image);
 }
 
 function getFallbackTextureUrl() {

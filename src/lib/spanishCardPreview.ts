@@ -1,6 +1,6 @@
 import { createSignal } from 'solid-js';
-import { MeshStandardMaterial, SRGBColorSpace, Texture } from 'three';
 import { Card } from './constants';
+import { createCardFrontMaterial } from './card';
 import { fetchCardPrintings, getPrintingPreviewUrl, supportsCardPrintings } from './deck';
 import { cardsById, textureLoaderWorker } from './globals';
 
@@ -37,20 +37,15 @@ export async function fetchSpanishPrintingImageUrl(card: Card): Promise<string |
   return match ? getPrintingPreviewUrl(match) : undefined;
 }
 
-async function loadFrontMaterial(url: string, template?: MeshStandardMaterial) {
+async function loadFrontMaterial(url: string) {
   const image = await textureLoaderWorker.loadTexture(url);
-  const map = new Texture(image);
-  map.colorSpace = SRGBColorSpace;
-  map.needsUpdate = true;
+  return createCardFrontMaterial(image);
+}
 
-  const mat = new MeshStandardMaterial({
-    color: 0xffffff,
-    map,
-    alphaMap: template?.alphaMap,
-    transparent: !!template?.alphaMap,
-  });
-  mat.needsUpdate = true;
-  return mat;
+export function clearSpanishPreviewForCard(cardId?: string) {
+  if (cardId && activeCardId === cardId) {
+    clearSpanishPreview();
+  }
 }
 
 export function clearSpanishPreview() {
@@ -61,8 +56,12 @@ export function clearSpanishPreview() {
   const card = cardsById.get(activeCardId);
   const mesh = card?.mesh;
   if (mesh?.userData.spanishPreviewSavedMat) {
+    const previewMat = mesh.material[4];
     mesh.material[4] = mesh.userData.spanishPreviewSavedMat;
     mesh.material[4].needsUpdate = true;
+    if (previewMat && previewMat !== mesh.userData.spanishPreviewSavedMat) {
+      previewMat.dispose();
+    }
     mesh.userData.card_face_urls[0] = mesh.userData.spanishPreviewSavedUrl;
     delete mesh.userData.spanishPreviewSavedMat;
     delete mesh.userData.spanishPreviewSavedUrl;
@@ -102,7 +101,7 @@ export async function activateSpanishPreview(cardId: string) {
     mesh.userData.spanishPreviewSavedUrl = mesh.userData.card_face_urls[0];
   }
 
-  const mat = await loadFrontMaterial(imageUrl, mesh.userData.spanishPreviewSavedMat);
+  const mat = await loadFrontMaterial(imageUrl);
   if (generation !== applyGeneration || activeCardId !== cardId) {
     mat.dispose();
     return;

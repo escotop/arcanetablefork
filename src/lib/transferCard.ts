@@ -88,6 +88,11 @@ export async function transferCard<AddOptions extends {}>(
       if (toZone.zone === 'peek' || toZone.zone === 'reveal') {
         setCardData(card.mesh, 'isPublic', true);
       }
+    }
+
+    await toZone.addCard(card, addOptions);
+
+    if (textureZones.has(toZone.zone)) {
       const textureLoad = loadCardTextures(card).catch(error => {
         devLog.warn('[transferCard] texture load failed', card.detail?.name ?? card.id, error);
       });
@@ -97,7 +102,7 @@ export async function transferCard<AddOptions extends {}>(
         await textureLoad;
       }
     }
-    await toZone.addCard(card, addOptions);
+
     if (toZone.zone === 'graveyard' || toZone.zone === 'exile') {
       onStackCardAdded(toZone as CardStack);
     }

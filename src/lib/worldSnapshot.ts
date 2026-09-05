@@ -8,6 +8,7 @@ import {
   resetGameSceneForReplay,
   sendEvent,
   setEventCatchUpComplete,
+  finishHistoricalLogReplay,
   setIsIntitialized,
   setLocalPlayerClientId,
   setPlayAreas,
@@ -30,7 +31,7 @@ import {
   persistJoinBinding,
   registerPlayerSession,
 } from './playerSession';
-import { getActiveJoinClientIdsFromLog } from '../remoteEvents';
+import { getActiveJoinClientIdsFromLog, waitForGameLogCatchUp } from '../remoteEvents';
 import { setCounters } from './ui/counterDialog';
 import { refreshMultiplayerSyncState } from './multiplayerSync';
 
@@ -91,16 +92,14 @@ export function isSyncHost(): boolean {
   return Number(localId) === hostId;
 }
 
-export function gameNeedsSnapshotSync(playerSessionId: string): boolean {
+export function gameNeedsSnapshotSync(_playerSessionId: string): boolean {
   if (!gameLog?.length) return false;
   if (getActiveJoinClientIdsFromLog().size === 0) return false;
-
-  const existingJoin = findJoinClientIdForSession(gameLog, playerSessionId);
-  if (existingJoin !== undefined) return true;
 
   const remoteOnline = players().filter(
     player => player.id !== provider?.awareness?.clientID && !player.entry?.isSpectating,
   );
+  // Solo reload should replay the event log; snapshot export races with local replay.
   return remoteOnline.length > 0;
 }
 
@@ -195,8 +194,19 @@ export async function applyWorldSnapshot(
   setPlayerCount(snapshot.playAreas.length);
   restorePlayerAwareness(snapshot.players, gameId);
 
-  setProcessedEvents(gameLog.length);
   readjustPlayAreas();
+
+  // Replay only events that arrived after the snapshot was taken.
+  setProcessedEvents(snapshot.logLength);
+  if (processedEvents() < gameLog.length) {
+    await waitForGameLogCatchUp({ maxWaitMs: 15_000 });
+  }
+
+  readjustPlayAreas();
+  Object.values(playAreas).forEach(area => area?.reapplyBattlefieldOrientations());
+  requestAnimationFrame(() => {
+    Object.values(playAreas).forEach(area => area?.reapplyBattlefieldOrientations());
+  });
 
   if (localArea) {
     localArea.setAsLocalPlayArea();
@@ -208,6 +218,7 @@ export async function applyWorldSnapshot(
   }
 
   setEventCatchUpComplete(true);
+  finishHistoricalLogReplay();
 }
 
 async function waitForBarrierSnapshot(barrierId: string, maxWaitMs: number): Promise<WorldSnapshot> {
@@ -250,7 +261,8 @@ function publishSnapshotForBarrier(barrier: SyncBarrier) {
     return;
   }
 
-  void flushDispatchEventQueue().then(() => {
+  void flushDispatchEventQueue().then(async () => {
+    await waitForGameLogCatchUp({ maxWaitMs: 10_000 });
     const snapshot = exportWorldSnapshot(barrier.id);
     gameState.doc?.transact(() => {
       const current = gameState.get('syncBarrier') as SyncBarrier | undefined;

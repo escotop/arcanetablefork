@@ -1,4 +1,10 @@
-const LOG_OMITTED_USERDATA_KEYS = new Set(['cardBack', 'publicCardBack', 'resting']);
+const LOG_OMITTED_USERDATA_KEYS = new Set([
+  'cardBack',
+  'publicCardBack',
+  'resting',
+  'spanishPreviewSavedMat',
+  'spanishPreviewSavedUrl',
+]);
 
 /** Strip Three.js materials and other non-JSON fields before persisting to Yjs. */
 export function serializeCardUserDataForLog(userData: Record<string, unknown>) {

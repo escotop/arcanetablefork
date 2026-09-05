@@ -47,7 +47,7 @@ export default function StackTraceDialog(props) {
         </DialogHeader>
         <DialogDescription style='overflow: hidden;'>
           <div class='error-report-help'>
-            <h3>Help improve Arcanetable</h3>
+            <h3>Help debug the issue</h3>
 
             <p>
               If you have a moment, please share the copied error report in the

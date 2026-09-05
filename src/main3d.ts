@@ -6,7 +6,7 @@ import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { cancelAnimation, renderAnimations, serializeAnimation } from './lib/animations';
 import { cloneCard, getCardMeshTetherPoint, setCardData, setCounterLabelHoverTarget, updateTextureAnimation } from './lib/card';
-import { clearSpanishPreview } from './lib/spanishCardPreview';
+import { clearSpanishPreview, clearSpanishPreviewForCard } from './lib/spanishCardPreview';
 import {
   CARD_STACK_OFFSET,
   CARD_THICKNESS,
@@ -61,6 +61,7 @@ import {
   setIsIntitialized,
   setLocalPlayerClientId,
   setEventCatchUpComplete,
+  finishHistoricalLogReplay,
   setPlayAreas,
   setPlayers,
   setSettings,
@@ -111,11 +112,7 @@ import {
   markLoadProfile,
   profileAsync,
 } from './lib/loadProfile';
-import {
-  createAnimationEvent,
-  createTapEvent,
-  createTransferCardEvent,
-} from './lib/createEvents';
+import { createRestackEvent, createTransferCardEvent } from './lib/createEvents';
 
 var container;
 
@@ -191,7 +188,7 @@ async function waitForGameLogReplay(maxWaitMs = 30_000) {
     waitForGameLogCatchUp({ maxWaitMs }),
   );
   syncPlayAreasFromGameLog();
-  Object.values(playAreas).forEach(area => area?.reapplyBattlefieldOrientations());
+  scheduleBattlefieldOrientationSync();
   markLoadProfile('gameLog replay counts', {
     eventsReplayed: processedEvents() - replayStart,
     gameLogLength: logLength,
@@ -229,6 +226,13 @@ async function waitForPlayAreaOnTable(clientId: number, maxWaitMs = 15_000) {
   return playAreas[clientId];
 }
 
+function scheduleBattlefieldOrientationSync() {
+  Object.values(playAreas).forEach(area => area?.reapplyBattlefieldOrientations());
+  requestAnimationFrame(() => {
+    Object.values(playAreas).forEach(area => area?.reapplyBattlefieldOrientations());
+  });
+}
+
 function ensurePlayAreaOnTable(area: PlayArea) {
   if (area.mesh.parent !== table) {
     table.add(area.mesh);
@@ -244,8 +248,14 @@ async function finalizeReconnectedPlayArea(
   const area = getLocalPlayArea();
   if (!area) return false;
 
+  area.setAsLocalPlayArea();
+  area.subscribeEvents(sendEvent);
   playArea = area;
   hand = area.hand;
+  setLocalPlayerClientId(area.clientId);
+  registerPlayerSession(playerSessionId, area.clientId);
+  persistJoinBinding(gameId, { playerSessionId, clientId: area.clientId });
+  setIsIntitialized(true);
 
   const meta = loadGameMeta(gameId);
   if (meta?.cardSystemUri && initCardSystem) {
@@ -270,10 +280,13 @@ async function finalizeReconnectedPlayArea(
 
   ensurePlayAreaOnTable(area);
   readjustPlayAreas();
+  scheduleBattlefieldOrientationSync();
   markLoadProfile('reclaim play area ready', { joinClientId: area.clientId, cardCount: area.deck.cards.length });
   void area.loadTextures();
   renderer?.compile(scene, camera);
   markLoadProfile('renderer compile (reconnect)');
+  finishHistoricalLogReplay();
+  setEventCatchUpComplete(true);
   return true;
 }
 
@@ -282,9 +295,9 @@ async function reclaimLocalPlayArea(
   gameId: string,
   playerSessionId: string,
   initCardSystem?: (uri: string) => Promise<unknown>,
-  options?: { maxReplayWaitMs?: number; maxAreaWaitMs?: number },
+  options?: { maxReplayWaitMs?: number; maxAreaWaitMs?: number; skipReplayWait?: boolean },
 ) {
-  if (!hasSnapshotCatchUp()) {
+  if (!options?.skipReplayWait && !hasSnapshotCatchUp()) {
     await waitForGameLogReplay(options?.maxReplayWaitMs ?? 30_000);
   }
 
@@ -325,10 +338,12 @@ async function reclaimLocalPlayArea(
   setIsIntitialized(true);
   ensurePlayAreaOnTable(area);
   readjustPlayAreas();
+  scheduleBattlefieldOrientationSync();
   markLoadProfile('reclaim play area ready', { joinClientId, cardCount: area.deck.cards.length });
   void area.loadTextures();
   renderer?.compile(scene, camera);
   markLoadProfile('renderer compile (reconnect)');
+  finishHistoricalLogReplay();
   setEventCatchUpComplete(true);
   return true;
 }
@@ -541,11 +556,13 @@ export async function loadDeckAndJoin(
   }
 
   if (existingJoinClientId !== undefined) {
-    if (hasSnapshotCatchUp() && getLocalPlayArea()) {
+    await profileAsync('gameLog replay (join)', () => waitForGameLogReplay(15_000));
+
+    if (getLocalPlayArea()) {
       await profileAsync('finalize reconnected play area (join)', () =>
         finalizeReconnectedPlayArea(currentGameId, playerSessionId, initCardSystem),
       );
-      markLoadProfile('join complete', { path: 'snapshot-catchup' });
+      markLoadProfile('join complete', { path: 'reconnect-after-replay' });
       return;
     }
 
@@ -555,7 +572,7 @@ export async function loadDeckAndJoin(
         currentGameId,
         playerSessionId,
         initCardSystem,
-        { maxReplayWaitMs: 10_000, maxAreaWaitMs: 10_000 },
+        { maxReplayWaitMs: 10_000, maxAreaWaitMs: 10_000, skipReplayWait: true },
       ),
     );
     if (reclaimed) {
@@ -623,6 +640,7 @@ export async function loadDeckAndJoin(
   ensurePlayAreaOnTable(playArea);
 
   readjustPlayAreas();
+  finishHistoricalLogReplay();
   setEventCatchUpComplete(true);
   refreshMultiplayerSyncState();
 
@@ -801,7 +819,10 @@ function onDocumentClick(event: PointerEvent) {
   if (target.userData.zone === 'battlefield') {
     setHoverSignal({ mouse });
   } else if (target.userData.location === 'battlefield') {
-    dispatchGameEvent(createTapEvent(target));
+    const cardMesh = clickedCard ?? getCardMesh(target);
+    if (cardMesh) {
+      getLocalPlayArea()?.tap(cardMesh as THREE.Mesh);
+    }
 
     flushDispatchEventQueue().then(() => {
       setHoverSignal(signal => {
@@ -909,6 +930,8 @@ function onDocumentDragStart(event: PointerEvent) {
 
   if (targets.length > 0) {
     targets.forEach((target, i) => {
+      clearSpanishPreviewForCard(target.userData.id);
+
       const dragOffset = new THREE.Vector3(
         0,
         CARD_STACK_OFFSET * (targets.length - i - 1),
@@ -985,6 +1008,8 @@ async function onDocumentDrop(event) {
 
     restackItemsLocally(dragged, intersections);
 
+    const sameZoneTargets: THREE.Object3D[] = [];
+
     for (const target of dragged) {
       setCardData(target, 'isDragging', false);
 
@@ -995,15 +1020,7 @@ async function onDocumentDrop(event) {
       if (fromZoneId && fromZoneId === toZoneId) {
         setCardData(target, `zone.${toZone.id}.position`, target.position.toArray());
         setCardData(target, `zone.${toZone.id}.rotation`, target.rotation.toArray());
-        dispatchGameEvent(
-          createAnimationEvent(target, {
-            duration: 0.2,
-            to: {
-              position: target.position,
-              rotation: target.rotation,
-            },
-          }),
-        );
+        sameZoneTargets.push(target);
         continue;
       }
 
@@ -1025,6 +1042,10 @@ async function onDocumentDrop(event) {
         }),
       );
       shouldClearSelection = true;
+    }
+
+    if (sameZoneTargets.length > 0) {
+      dispatchGameEvent(createRestackEvent(intersection, sameZoneTargets));
     }
 
     await flushDispatchEventQueue();
@@ -1153,10 +1174,26 @@ export function startAnimating() {
   animate();
 }
 
-let hover: THREE.Object3D;
+let hover: { object: THREE.Object3D; colors: THREE.Color[] } | undefined;
 let keyboardHandHoverIndex: number | undefined;
 /** Card under the mouse when hand zoom was activated; mouse may stay there without taking over. */
 let keyboardHandHoverMouseLock: string | undefined;
+
+function restoreHoverMaterialColors() {
+  if (!hover?.object || !hover.colors.length) return;
+
+  const materials = Array.isArray(hover.object.material)
+    ? hover.object.material
+    : hover.object.material
+      ? [hover.object.material]
+      : [];
+
+  materials.forEach((mat, i) => {
+    const saved = hover!.colors[i];
+    if (!saved || typeof mat?.color?.set !== 'function') return;
+    mat.color.set(saved);
+  });
+}
 
 function applyHoverTarget(mesh: THREE.Object3D) {
   const tether = getCardMeshTetherPoint(mesh);
@@ -1179,7 +1216,7 @@ export function dismissZoomPanel() {
     if (hover.object.userData?.location === 'hand') {
       hover.object.dispatchEvent({ type: 'mouseout', mesh: hover.object });
     }
-    hover.object.material?.forEach?.((mat, i) => mat.color.set(hover.colors[i]));
+    restoreHoverMaterialColors();
     hover = undefined;
   }
 
@@ -1318,7 +1355,7 @@ function highlightHover(intersects: THREE.Intersection<THREE.Object3D<THREE.Obje
     } else {
       if (needsCleanup && hover) {
         clearSpanishPreview();
-        hover.object.material?.forEach?.((mat, i) => mat.color.set(hover.colors[i]));
+        restoreHoverMaterialColors();
         const pinnedMesh = getLocalPlayArea()?.hand.cards[keyboardHandHoverIndex]?.mesh;
         if (hover.object !== pinnedMesh) {
           hover.object.dispatchEvent({ type: 'mouseout', mesh: hover.object });
@@ -1333,7 +1370,7 @@ function highlightHover(intersects: THREE.Intersection<THREE.Object3D<THREE.Obje
 
   if (needsCleanup && hover) {
     clearSpanishPreview();
-    hover.object.material?.forEach?.((mat, i) => mat.color.set(hover.colors[i]));
+    restoreHoverMaterialColors();
 
     const area = getLocalPlayArea();
     const pinnedMesh =
