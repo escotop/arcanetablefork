@@ -6,6 +6,20 @@ import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 import styles from './manaCounters.module.css';
 
+function handleIconPointerDown(
+  event: PointerEvent,
+  onAdjust: (delta: number) => void,
+) {
+  if (event.button === 0) {
+    onAdjust(1);
+    return;
+  }
+  if (event.button === 2) {
+    event.preventDefault();
+    onAdjust(-1);
+  }
+}
+
 const MANA_COUNTERS = [
   { id: 'plains', label: 'White', icon: '/plains.png' },
   { id: 'island', label: 'Blue', icon: '/island.png' },
@@ -51,29 +65,14 @@ const ManaCounters: Component = () => {
               <span class={styles.count} aria-live='polite'>
                 {counts[counter.id]}
               </span>
-              <div class={styles.iconWrap}>
-                <img class={styles.icon} src={counter.icon} alt={counter.label} draggable={false} />
-              </div>
-              <div class={styles.controls}>
-                <Button
-                  type='button'
-                  variant='outline'
-                  size='xsicon'
-                  class={styles.adjustButton}
-                  aria-label={`Decrease ${counter.label} mana`}
-                  onClick={() => adjust(counter.id, -1)}>
-                  −
-                </Button>
-                <Button
-                  type='button'
-                  variant='outline'
-                  size='xsicon'
-                  class={styles.adjustButton}
-                  aria-label={`Increase ${counter.label} mana`}
-                  onClick={() => adjust(counter.id, 1)}>
-                  +
-                </Button>
-              </div>
+              <button
+                type='button'
+                class={styles.iconWrap}
+                aria-label={`${counter.label} mana: ${counts[counter.id]}. Left click +1, right click -1.`}
+                onPointerDown={event => handleIconPointerDown(event, delta => adjust(counter.id, delta))}
+                onContextMenu={event => event.preventDefault()}>
+                <img class={styles.icon} src={counter.icon} alt='' draggable={false} />
+              </button>
             </div>
           )}
         </For>

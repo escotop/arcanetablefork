@@ -73,7 +73,18 @@
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
+  padding: 0;
+  border: none;
   background: transparent;
+  cursor: pointer;
+}
+
+.iconWrap:hover {
+  filter: brightness(1.08);
+}
+
+.iconWrap:active {
+  filter: brightness(0.92);
 }
 
 .icon {
@@ -83,22 +94,6 @@
   object-fit: cover;
   user-select: none;
   -webkit-user-drag: none;
-}
-
-.controls {
-  display: flex;
-  align-items: center;
-  gap: 0.1rem;
-}
-
-.adjustButton {
-  width: 1.2rem;
-  height: 1.2rem;
-  min-width: 1.2rem;
-  padding: 0;
-  font-size: 0.8rem;
-  line-height: 1;
-  font-weight: 700;
 }
 
 .resetButton {
