@@ -796,7 +796,9 @@ const EVENTS = {
     return playArea?.executeShuffleDeck(event.payload.order);
   },
   mulligan(event: Event, playArea: PlayArea) {
-    return playArea.executeMulligan(event.payload.drawCount, event.payload.order);
+    return playArea.executeMulligan(event.payload.drawCount, event.payload.order, {
+      remote: isRemotePlayerEvent(event),
+    });
   },
   dismissZone(event: Event, playArea: PlayArea) {
     const zone = resolveZoneFromEvent(event.payload.zoneId, playArea);

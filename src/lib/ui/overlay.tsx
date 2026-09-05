@@ -281,28 +281,6 @@ export function MainMenu(props: { playArea?: PlayArea }) {
             onOpen={() => setVisibleDialog('settings')}
             onClose={() => setVisibleDialog(undefined)}
           />
-
-          <Dialog
-            open={isDialogVisible('donate')}
-            onOpenChange={isOpen => setVisibleDialog(isOpen ? 'donate' : undefined)}>
-            <DialogTrigger as={MenubarItem} class='w-full'>
-              Support Us
-            </DialogTrigger>
-            <DialogContent class='max-w-xl'>
-              <DialogHeader>Support Arcanetable Development</DialogHeader>
-              <DialogDescription>
-                <iframe
-                  id='kofiframe'
-                  src='https://ko-fi.com/sparkstonepdx/?hidefeed=true&widget=true&embed=true&preview=true'
-                  style='border:none;width:100%; border-radius: 8px;'
-                  height='712'
-                  title='sparkstonepdx'></iframe>
-              </DialogDescription>
-              <DialogFooter>
-                <Button onClick={() => setVisibleDialog()}>Close</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
         </MenubarMenu>
       </Menubar>
       <Show when={isLogVisible()}>

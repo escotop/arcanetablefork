@@ -50,7 +50,7 @@ import {
   createTransferCardEvent,
   SKIP_REPLAY,
 } from './createEvents';
-import { playCounterSoundForModifierChange, playShuffleDeckSound } from './sounds';
+import { playCounterSoundForModifierChange, playDrawSound, playShuffleDeckSound } from './sounds';
 
 /** Battlefield mesh uses BoxGeometry(200, 100) centered at the origin. */
 const BATTLEFIELD_HALF_W = 100;
@@ -561,7 +561,11 @@ export class PlayArea {
     dispatchGameEvent(event);
   }
 
-  async executeMulligan(drawCount: number, existingOrder?: number[]) {
+  async executeMulligan(
+    drawCount: number,
+    existingOrder?: number[],
+    options?: { remote?: boolean },
+  ) {
     const cardsInHand = this.hand.cards.length;
 
     await doXTimes(cardsInHand, () => {
@@ -571,10 +575,12 @@ export class PlayArea {
 
     const order = await this.deck.shuffle(existingOrder);
 
+    const remote = options?.remote ?? false;
     await doXTimes(
       drawCount,
       () => {
         transferCard(this.deck.cards[0], this.deck, this.hand, { preventTransmit: true });
+        playDrawSound(remote);
       },
       50,
     );
