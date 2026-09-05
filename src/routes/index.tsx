@@ -8,7 +8,9 @@ import { getDeckPreviewImageUrl } from '~/lib/deck';
 import { useCardSystemContext } from '~/lib/cardSystemContext';
 import { Deck } from '~/lib/constants';
 import { createDeckStore } from '~/lib/deckStore';
+import { getDeckCoverMetadata } from '~/lib/deck';
 import { DeckEditor } from '~/lib/ui/deckEditor';
+import { ManageDecksDropdown } from '~/lib/ui/manageDecksButton';
 import PencilIcon from 'lucide-solid/icons/pencil';
 
 function deckCardCount(deck: Deck) {
@@ -43,6 +45,21 @@ const LandingPage: Component = () => {
   onMount(() => {
     setGameUrl(`/game/${nanoid()}`);
     void initCardSystem();
+
+    for (const deck of decks()) {
+      const hasDetail = [...Object.values(deck.cards), ...Object.values(deck.inPlay ?? {})].some(
+        card => card.detail?.image_uris || card.detail?.card_faces?.length,
+      );
+      if (!hasDetail) continue;
+
+      const metadata = getDeckCoverMetadata(deck);
+      if (
+        metadata.coverImage !== deck.coverImage ||
+        metadata.coverImageFullArt !== deck.coverImageFullArt
+      ) {
+        setDeckStore('decks', deck.id, current => ({ ...current, ...metadata }));
+      }
+    }
   });
 
   function saveDeck(updatedDeck: Deck) {
@@ -55,7 +72,9 @@ const LandingPage: Component = () => {
       updatedDeck.id,
       ...entries.filter(id => id !== updatedDeck.id),
     ]);
-    setDeckStore('decks', { [updatedDeck.id]: updatedDeck });
+    setDeckStore('decks', {
+      [updatedDeck.id]: { ...updatedDeck, ...getDeckCoverMetadata(updatedDeck) },
+    });
   }
 
   function deleteDeck(deckId: string) {
@@ -89,9 +108,7 @@ const LandingPage: Component = () => {
           <section class='rounded-lg border border-border bg-card'>
             <div class='flex items-center justify-between gap-3 border-b border-border px-6 py-4'>
               <h2 class='text-base font-medium'>Decks</h2>
-              <Button variant='outline' type='button' size='sm' onClick={() => setEditingDeck({} as Deck)}>
-                New deck
-              </Button>
+              <ManageDecksDropdown onNewDeck={() => setEditingDeck({} as Deck)} />
             </div>
 
             <div class='min-h-80 max-h-160 overflow-y-auto px-6 py-6'>

@@ -2,11 +2,10 @@ import { createStore, SetStoreFunction, unwrap } from 'solid-js/store';
 import { nanoid } from 'nanoid';
 import { createContext, onMount, ParentProps, useContext } from 'solid-js';
 import { CardEntry, Deck, DetailedCardEntry, CardSystem } from './constants';
-import { fetchCardInfo, parseImportedCardList } from './deck';
+import { fetchCardInfo, getDeckCoverMetadata, parseImportedCardList } from './deck';
 import { buildImportedInPlay, fetchCardInfoForImport } from './deckImportLookup';
 import { applyCustomArtToEntry } from './customCardArt';
 import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
-import { getCardArtImage } from './card';
 import { setCardSystem as setGlobalCardSystem } from './globals';
 import { CardSystemContext } from './cardSystemContext';
 import { MTG_CARD_SYSTEM, normalizeCardSystemId } from './mtgCardSystem';
@@ -197,24 +196,17 @@ export async function hydrateDeck(originalDeck: Deck) {
 export function serializeDeck(deck: Deck) {
   const serializedDeck = { ...deck, cards: {}, inPlay: {} };
 
-  let mostPopularCard: DetailedCardEntry;
-
   for (const [name, card] of Object.entries(deck.cards)) {
     if (card.qty < 1) continue;
     serializedDeck.cards[name] = { ...card, detail: undefined };
-    if (!mostPopularCard || card.detail.popularity > mostPopularCard?.detail?.popularity) {
-      mostPopularCard = card;
-    }
   }
 
   for (const [name, card] of Object.entries(deck.inPlay ?? {})) {
     if (card.qty < 1) continue;
     serializedDeck.inPlay[name] = { ...card, detail: undefined };
-    if (!mostPopularCard || card.detail.popularity > mostPopularCard?.detail?.popularity) {
-      mostPopularCard = card;
-    }
   }
-  serializedDeck.coverImage = getCardArtImage(mostPopularCard!);
+
+  Object.assign(serializedDeck, getDeckCoverMetadata(deck));
   return serializedDeck;
 }
 

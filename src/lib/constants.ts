@@ -142,6 +142,7 @@ export interface Deck {
   name: string;
   cardList?: string;
   coverImage?: string;
+  coverImageFullArt?: boolean;
   counters?: Counter[];
 }
 

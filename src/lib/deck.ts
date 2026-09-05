@@ -9,6 +9,7 @@ import {
   dematerializeCard,
   ensureCardMesh,
   getCardImage,
+  getCardArtImage,
   getSearchLine,
   getSerializableCard,
   loadCardTextures,
@@ -837,35 +838,101 @@ export function getPrintingPreviewUrl(printing: CardPrintingOption) {
 
 const DEFAULT_DECK_PREVIEW = '/arcane-table-back.webp';
 
-export function getDeckPreviewCard(deck: StoredDeck): DetailedCardEntry | undefined {
-  const inPlayCards = Object.values(deck.inPlay ?? {}).filter(card => (card.qty ?? 0) > 0);
-  if (inPlayCards.length) return inPlayCards[0];
-
-  return Object.values(deck.cards ?? {}).find(card => (card.qty ?? 0) > 0);
+function cardPopularity(card: DetailedCardEntry) {
+  return card.detail?.popularity ?? (card as DetailedCardEntry & { popularity?: number }).popularity ?? 99999;
 }
 
-function scryfallCardImageUrl(card: DetailedCardEntry) {
+export function getDeckCoverCard(deck: StoredDeck): DetailedCardEntry | undefined {
+  let best: DetailedCardEntry | undefined;
+
+  const consider = (card: DetailedCardEntry) => {
+    if ((card.qty ?? 0) <= 0) return;
+    if (!best || cardPopularity(card) < cardPopularity(best)) {
+      best = card;
+    }
+  };
+
+  Object.values(deck.inPlay ?? {}).forEach(consider);
+  Object.values(deck.cards ?? {}).forEach(consider);
+  return best ?? Object.values(deck.cards ?? {}).find(card => (card.qty ?? 0) > 0);
+}
+
+function cardHasFullArt(detail: CardEntryDetail | undefined) {
+  if (!detail) return false;
+
+  const candidates = [detail, ...(detail.card_faces ?? [])];
+  return candidates.some(face => {
+    const extended = face as CardEntryDetail & {
+      full_art?: boolean;
+      frame_effects?: string[];
+      illustration_type?: string;
+    };
+    if (extended.full_art) return true;
+    if (extended.illustration_type === 'full_art') return true;
+    return (
+      extended.frame_effects?.some(
+        effect => effect === 'extendedart' || effect === 'fullart' || effect === 'showcase',
+      ) ?? false
+    );
+  });
+}
+
+export function getDeckCoverMetadata(
+  deck: StoredDeck,
+): Pick<StoredDeck, 'coverImage' | 'coverImageFullArt'> {
+  const card = getDeckCoverCard(deck);
+  if (!card?.detail) return {};
+
+  const coverImage = normalizeTextureUrl(getCardArtImage(card)) ?? getCardArtImage(card);
+  if (!coverImage) return { coverImageFullArt: cardHasFullArt(card.detail) };
+
+  return {
+    coverImage,
+    coverImageFullArt: cardHasFullArt(card.detail),
+  };
+}
+
+function scryfallCardImageUrl(card: DetailedCardEntry, version: 'normal' | 'art_crop' = 'normal') {
   if (card.id) {
-    return `https://api.scryfall.com/cards/${encodeURIComponent(card.id)}?format=image&version=normal`;
+    return `https://api.scryfall.com/cards/${encodeURIComponent(card.id)}?format=image&version=${version}`;
   }
   if (card.set && card.collector_number) {
-    return `https://api.scryfall.com/cards/${encodeURIComponent(card.set)}/${encodeURIComponent(card.collector_number)}?format=image&version=normal`;
+    return `https://api.scryfall.com/cards/${encodeURIComponent(card.set)}/${encodeURIComponent(card.collector_number)}?format=image&version=${version}`;
   }
   return undefined;
 }
 
 export function getDeckPreviewImageUrl(deck: StoredDeck) {
-  const card = getDeckPreviewCard(deck);
+  const card = getDeckCoverCard(deck);
   if (!card) return deck.coverImage ?? DEFAULT_DECK_PREVIEW;
 
   if (card.customArtUrl) {
     return normalizeTextureUrl(card.customArtUrl) ?? card.customArtUrl;
   }
 
+  const useArtPreview = deck.coverImageFullArt === true || cardHasFullArt(card.detail);
+
+  if (useArtPreview) {
+    const art =
+      normalizeTextureUrl(getCardArtImage(card)) ??
+      deck.coverImage ??
+      scryfallCardImageUrl(card, 'art_crop');
+    if (art) return art;
+  }
+
+  if (deck.coverImage && deck.coverImageFullArt === true && !card.detail?.image_uris) {
+    return deck.coverImage;
+  }
+
   const fromDetail = getCardImage(card);
   if (fromDetail) return fromDetail;
 
   return scryfallCardImageUrl(card) ?? deck.coverImage ?? DEFAULT_DECK_PREVIEW;
+}
+
+/** @deprecated use getDeckCoverCard */
+export function getDeckPreviewCard(deck: StoredDeck): DetailedCardEntry | undefined {
+  return getDeckCoverCard(deck);
 }
 
 export function getPrintingLabel(printing: CardPrintingOption) {
