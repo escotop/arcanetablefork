@@ -5,11 +5,14 @@ import AddIcon from 'lucide-solid/icons/plus';
 import SubIcon from 'lucide-solid/icons/minus';
 import SearchIcon from 'lucide-solid/icons/search';
 import ImagesIcon from 'lucide-solid/icons/images';
+import StarIcon from 'lucide-solid/icons/star';
 import random from 'lodash-es/random';
 import { getCardImage } from '~/lib/card';
 import { DetailedCardEntry, Deck } from '~/lib/constants';
+import { canBeCommander, isCommanderCard } from '~/lib/deckCommander';
 import { CardPrintingOption, prefetchCardPrintings, supportsCardPrintings } from '~/lib/deck';
 import { cardSystem } from '~/lib/globals';
+import { cn } from '~/lib/cnUtil';
 import PrintingSelect from './printingSelect';
 
 interface Props {
@@ -20,12 +23,14 @@ interface Props {
   onChangePrinting(storageKey: string, printing: CardPrintingOption): void;
   onPreview(src: string): void;
   onOpenPrintings?(): void;
+  onToggleCommander?(storageKey: string): void;
   variant?: 'default' | 'token';
   pinnedPrintings?: CardPrintingOption[];
 }
 
 const DeckGridCard: Component<Props> = props => {
   const isToken = () => props.variant === 'token';
+  const isCommander = () => isCommanderCard(props.card());
   let rootRef: HTMLDivElement | undefined;
 
   onMount(() => {
@@ -61,6 +66,32 @@ const DeckGridCard: Component<Props> = props => {
         }
         style={`anchor-name: --card-${props.index}; height: 100%;`}
       />
+      <Show
+        when={
+          !isToken() &&
+          props.card()?.qty > 0 &&
+          props.onToggleCommander &&
+          (canBeCommander(props.card()) || isCommander())
+        }>
+        <div
+          class='absolute top-2 left-2 z-20'
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}>
+          <Button
+            type='button'
+            variant='secondary'
+            size='icon'
+            class={cn('size-7 shadow-md', isCommander() && 'text-yellow-400')}
+            title={isCommander() ? 'Remove commander' : 'Mark as commander'}
+            onClick={e => {
+              e.preventDefault();
+              e.stopPropagation();
+              props.onToggleCommander?.(props.storageKey);
+            }}>
+            <StarIcon class={cn('size-4', isCommander() && 'fill-current')} />
+          </Button>
+        </div>
+      </Show>
       <Show when={props.card()?.qty > 0 && supportsCardPrintings()}>
         <div
           class='absolute bottom-2 right-2 z-20'

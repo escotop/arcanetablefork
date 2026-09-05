@@ -92,6 +92,25 @@ import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import DeckImportDialog from './deckEditor/deckImportDialog';
 import PrintDeckModal from './deckEditor/printDeckModal';
 import useCardGrouping, { getCardTypeCategory } from './deckEditor/cardGroupings';
+import CommanderBracketModal from './deckEditor/commanderBracketModal';
+import BracketEstimateTag from './bracketEstimateTag';
+import {
+  buildCommanderBracketPayload,
+  CommanderBracketApiError,
+  CommanderBracketEstimate,
+  buildCommanderBracketShareUrl,
+  estimateCommanderBracket,
+  getBracketEstimateFromResult,
+} from '../commanderBracket';
+import {
+  canBeCommander,
+  compareCommanderFirst,
+  countCommanders,
+  isCommanderCard,
+  MAX_COMMANDERS,
+  sortCommandersFirst,
+  toggleCommanderCategories,
+} from '../deckCommander';
 import { collectTokenPartIds, getDefaultTokenEntry, getTokenKey, mergeTokenPrintings, resolveTokensByIds } from '../deckTokens';
 import OverflowMenuIcon from 'lucide-solid/icons/ellipsis';
 import DeleteIcon from 'lucide-solid/icons/trash-2';
@@ -124,6 +143,11 @@ export const DeckEditor: Component<Props> = props => {
   const [printDialogOpen, setPrintDialogOpen] = createSignal(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
   const [closeConfirmDialogOpen, setCloseConfirmDialogOpen] = createSignal(false);
+  const [bracketModalOpen, setBracketModalOpen] = createSignal(false);
+  const [bracketLoading, setBracketLoading] = createSignal(false);
+  const [bracketError, setBracketError] = createSignal<string>();
+  const [bracketResult, setBracketResult] = createSignal<CommanderBracketEstimate>();
+  const [bracketShareUrl, setBracketShareUrl] = createSignal<string>();
   const [newDeckTipOpen, setNewDeckTipOpen] = createSignal(false);
   const [typeFilter, setTypeFilter] = createSignal<string | null>(null);
   let formRef: HTMLFormElement;
@@ -136,7 +160,7 @@ export const DeckEditor: Component<Props> = props => {
 
   const getDeckList = createMemo(() => {
     trackDeep(deck.cards);
-    return Object.values(deck?.cards || {});
+    return sortCommandersFirst(Object.values(deck?.cards || {}));
   });
 
   const deckCardKeys = createMemo(() => Object.keys(deck.cards ?? {}));
@@ -228,6 +252,18 @@ export const DeckEditor: Component<Props> = props => {
   const updateDeck: SetStoreFunction<Deck> = (...params: any[]) => {
     (setDeck as any)(...params);
     setIsDirty(true);
+  };
+
+  function invalidateBracketEstimate() {
+    if (deck.bracketEstimate != null) {
+      setDeck('bracketEstimate', undefined);
+      setIsDirty(true);
+    }
+  }
+
+  const updateDeckCards: SetStoreFunction<Deck> = (...params: any[]) => {
+    invalidateBracketEstimate();
+    (updateDeck as any)(...params);
   };
 
   function withPrintingImages(
@@ -335,6 +371,65 @@ export const DeckEditor: Component<Props> = props => {
     if (!supportsCardPrintings() || !entry) return;
     if (entry.name) prefetchCardPrintings(entry.name);
     setTokenPrintingPickerKey(tokenKey);
+  }
+
+  function toggleCommander(storageKey: string) {
+    const entry = deck.cards[storageKey];
+    if (!entry?.qty) return;
+
+    const nextIsCommander = !isCommanderCard(entry);
+    if (nextIsCommander && !canBeCommander(entry)) return;
+    if (nextIsCommander && countCommanders(Object.values(deck.cards)) >= MAX_COMMANDERS) {
+      toast.error(`You can mark at most ${MAX_COMMANDERS} commanders.`);
+      return;
+    }
+
+    const nextCategories = toggleCommanderCategories(entry.categories, nextIsCommander);
+    updateDeckCards('cards', storageKey, 'categories', nextCategories);
+
+    if (nextIsCommander) {
+      const nextEntry = { ...entry, categories: nextCategories };
+      updateDeck('inPlay', getCardKey(nextEntry), { ...nextEntry, qty: 1 });
+    }
+  }
+
+  async function openBracketEstimate() {
+    setBracketModalOpen(true);
+    setBracketLoading(true);
+    setBracketError(undefined);
+    setBracketResult(undefined);
+
+    const cards = getDeckList();
+    const payload = buildCommanderBracketPayload(cards);
+    setBracketShareUrl(buildCommanderBracketShareUrl(payload));
+
+    try {
+      const result = await estimateCommanderBracket(cards);
+      setBracketResult(result);
+      const bracket = getBracketEstimateFromResult(result);
+      if (bracket != null) {
+        updateDeck('bracketEstimate', bracket);
+      } else {
+        invalidateBracketEstimate();
+      }
+    } catch (error) {
+      const message =
+        error instanceof CommanderBracketApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : 'Could not estimate bracket.';
+      setBracketError(message);
+    } finally {
+      setBracketLoading(false);
+    }
+  }
+
+  function closeBracketModal() {
+    setBracketModalOpen(false);
+    setBracketLoading(false);
+    setBracketError(undefined);
+    setBracketShareUrl(undefined);
   }
 
   async function changeCardPrinting(storageKey: string, printing: CardPrintingOption) {
@@ -579,19 +674,26 @@ export const DeckEditor: Component<Props> = props => {
     trackDeep(deck.cards);
     const filter = typeFilter();
     const keys = deckCardKeys();
-    if (!filter || filter === 'tokens') return keys;
+    if (filter === 'tokens') return keys;
+
+    const sortKeys = (list: string[]) =>
+      [...list].sort((a, b) => compareCommanderFirst(deck.cards[a], deck.cards[b]));
+
+    if (!filter) return sortKeys(keys);
 
     const lowerTypes = (cardSystem.types ?? []).map(type => type.toLowerCase());
 
-    return keys.filter(key => {
-      const entry = deck.cards[key];
-      if (!entry?.qty) return false;
+    return sortKeys(
+      keys.filter(key => {
+        const entry = deck.cards[key];
+        if (!entry?.qty) return false;
 
-      const type = getCardTypeCategory(entry, lowerTypes);
+        const type = getCardTypeCategory(entry, lowerTypes);
 
-      if (filter === 'unsorted') return !type;
-      return type === filter;
-    });
+        if (filter === 'unsorted') return !type;
+        return type === filter;
+      }),
+    );
   });
 
   return (
@@ -655,7 +757,16 @@ export const DeckEditor: Component<Props> = props => {
                 </button>
               </Show>
             </div>
-            <div class='ml-auto' />
+            <div class='ml-auto flex items-center gap-2'>
+            <BracketEstimateTag bracket={deck.bracketEstimate} />
+            <Button
+              class='cursor-pointer'
+              variant='outline'
+              type='button'
+              disabled={bracketLoading()}
+              onClick={() => void openBracketEstimate()}>
+              Estimate deck
+            </Button>
             <Button
               class='cursor-pointer'
               variant='outline'
@@ -666,6 +777,7 @@ export const DeckEditor: Component<Props> = props => {
               }}>
               Close
             </Button>
+            </div>
           </div>
           <div class={`gap-5 pt-4 ${styles.formContainer}`}>
             <input type='hidden' value={props?.deck?.id ?? nanoid()} name='id' />
@@ -725,6 +837,7 @@ export const DeckEditor: Component<Props> = props => {
                   {state => (
                     <>
                       <div class={styles.multiSelectControl}>
+                        <BracketEstimateTag bracket={deck.bracketEstimate} class='mr-1' />
                         <For each={state.selectedOptions()}>
                           {option => (
                             <span
@@ -761,10 +874,10 @@ export const DeckEditor: Component<Props> = props => {
               <CardList
                 entries={getDeckList()}
                 addCard={entry => {
-                  updateDeck('cards', getCardKey(entry), 'qty', number => number + 1);
+                  updateDeckCards('cards', getCardKey(entry), 'qty', number => number + 1);
                 }}
                 removeCard={entry =>
-                  updateDeck('cards', getCardKey(entry), 'qty', number => Math.max(number - 1, 0))
+                  updateDeckCards('cards', getCardKey(entry), 'qty', number => Math.max(number - 1, 0))
                 }
               />
             </Show>
@@ -941,8 +1054,9 @@ export const DeckEditor: Component<Props> = props => {
                             storageKey={storageKey}
                             index={index()}
                             card={() => deck.cards[storageKey]}
-                            updateDeck={updateDeck}
+                            updateDeck={updateDeckCards}
                             onChangePrinting={changeCardPrinting}
+                            onToggleCommander={toggleCommander}
                             onPreview={src => setSearchParams({ dialog: 'card-preview', src })}
                             onOpenPrintings={() => openPrintingPicker(storageKey)}
                           />
@@ -1096,7 +1210,7 @@ export const DeckEditor: Component<Props> = props => {
                                   onClick={() => {
                                     let id = getCardKey(unwrap(card));
                                     if (deck.cards[id]) {
-                                      return updateDeck('cards', id, 'qty', (qty = 1) =>
+                                      return updateDeckCards('cards', id, 'qty', (qty = 1) =>
                                         Math.max(qty - 1, 0),
                                       );
                                     }
@@ -1116,9 +1230,9 @@ export const DeckEditor: Component<Props> = props => {
                                 onClick={() => {
                                   let id = getCardKey(unwrap(card));
                                   if (deck.cards[id]) {
-                                    return updateDeck('cards', id, 'qty', (qty = 1) => qty + 1);
+                                    return updateDeckCards('cards', id, 'qty', (qty = 1) => qty + 1);
                                   }
-                                  updateDeck('cards', id, { ...unwrap(card), qty: 1 });
+                                  updateDeckCards('cards', id, { ...unwrap(card), qty: 1 });
                                 }}>
                                 <AddIcon
                                   class='text-white'
@@ -1150,6 +1264,14 @@ export const DeckEditor: Component<Props> = props => {
       </div>
 
       <Portal>
+        <CommanderBracketModal
+          open={bracketModalOpen()}
+          loading={bracketLoading()}
+          error={bracketError()}
+          result={bracketResult()}
+          shareUrl={bracketShareUrl()}
+          onClose={closeBracketModal}
+        />
         <Show when={printingPickerKey() && deck.cards[printingPickerKey()!]}>
           <PrintingPickerModal
             entry={deck.cards[printingPickerKey()!]}
@@ -1191,6 +1313,7 @@ export const DeckEditor: Component<Props> = props => {
           <DeckImportDialog
             onClose={closeImportDialog}
             onImport={importedDeck => {
+              invalidateBracketEstimate();
               setDeck('cards', reconcile(importedDeck.cards ?? {}, { merge: false }));
               setDeck('inPlay', reconcile(importedDeck.inPlay ?? {}, { merge: false }));
               if (importedDeck.name) setDeck('name', importedDeck.name);

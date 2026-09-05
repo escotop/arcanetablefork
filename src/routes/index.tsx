@@ -10,6 +10,7 @@ import { Deck } from '~/lib/constants';
 import { createDeckStore } from '~/lib/deckStore';
 import { getDeckCoverMetadata } from '~/lib/deck';
 import { DeckEditor } from '~/lib/ui/deckEditor';
+import BracketEstimateTag from '~/lib/ui/bracketEstimateTag';
 import { ManageDecksDropdown } from '~/lib/ui/manageDecksButton';
 import PencilIcon from 'lucide-solid/icons/pencil';
 
@@ -133,8 +134,9 @@ const LandingPage: Component = () => {
                           <div class='min-w-0'>
                             <div class='flex min-w-0 items-center gap-2.5'>
                               <p class='truncate text-base font-medium'>{deck.name || 'Untitled'}</p>
-                              <Show when={deck.tags?.length}>
-                                <div class='flex shrink-0 flex-wrap items-center gap-1.5'>
+                              <div class='flex shrink-0 flex-wrap items-center gap-1.5'>
+                                <BracketEstimateTag bracket={deck.bracketEstimate} />
+                                <Show when={deck.tags?.length}>
                                   <For each={deck.tags}>
                                     {tag => (
                                       <span class='rounded bg-white px-2 py-0.5 text-xs leading-none text-black'>
@@ -142,8 +144,8 @@ const LandingPage: Component = () => {
                                       </span>
                                     )}
                                   </For>
-                                </div>
-                              </Show>
+                                </Show>
+                              </div>
                             </div>
                             <p class='mt-1 text-sm text-muted-foreground'>{deckCardCount(deck)} cards</p>
                           </div>

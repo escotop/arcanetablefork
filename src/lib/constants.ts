@@ -45,6 +45,10 @@ export interface CardEntryDetail {
   mana_cost?: string;
   set?: string;
   collector_number?: string;
+  oracle_text?: string;
+  effect?: string;
+  power?: string | number | null;
+  toughness?: string | number | null;
   all_parts?: CardDetailPart[];
   card_faces?: CardEntryDetail[];
 }
@@ -139,6 +143,7 @@ export interface Deck {
   inPlay: Record<string, DetailedCardEntry>;
   tokens?: Record<string, DetailedCardEntry>;
   tags?: { name: string }[];
+  bracketEstimate?: number;
   startingLife: number;
   name: string;
   cardList?: string;

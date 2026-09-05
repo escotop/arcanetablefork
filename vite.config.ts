@@ -38,6 +38,15 @@ export default defineConfig({
     },
     dedupe: ['yjs'],
   },
-  server: { port: 3001 },
+  server: {
+    port: 3001,
+    proxy: {
+      '/api/commander-bracket': {
+        target: 'https://mtg-assistant.up.railway.app',
+        changeOrigin: true,
+        rewrite: () => '/decks/analyze-complete',
+      },
+    },
+  },
   build: { target: 'esnext' },
 });

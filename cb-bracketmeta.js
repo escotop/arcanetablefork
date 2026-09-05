@@ -1,0 +1,2 @@
+var e=[{bracket:1,name:`Bracket 1`,wotc:`Exhibition`,short:`1`,turns:`10+ turns`,hex:`#22c55e`},{bracket:2,name:`Bracket 2`,wotc:`Core`,short:`2`,turns:`8+ turns`,hex:`#3b82f6`},{bracket:3,name:`Bracket 3`,wotc:`Upgraded`,short:`3`,turns:`6+ turns`,hex:`#a855f7`},{bracket:4,name:`Bracket 4`,wotc:`Optimized`,short:`4`,turns:`4+ turns`,hex:`#f97316`},{bracket:5,name:`cEDH`,wotc:`cEDH`,short:`cEDH`,turns:`Any turn`,hex:`#ef4444`}];function t(t){return e.find(e=>e.bracket===t)}export{t as n,e as t};
+//# sourceMappingURL=bracketMeta-B3SZnIlA.js.map

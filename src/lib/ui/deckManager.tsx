@@ -16,6 +16,7 @@ import { colorHashDark } from '../globals';
 import { exportAllDecksZip, mergeImportedDecks, parseDecksZip } from '../deckBulkTransfer';
 import PencilIcon from 'lucide-solid/icons/pencil';
 import { DeckEditor } from './deckEditor';
+import BracketEstimateTag from './bracketEstimateTag';
 import styles from './deckPicker.module.css';
 import { Deck } from '../constants';
 import { produce, unwrap } from 'solid-js/store';
@@ -259,6 +260,7 @@ function DeckOption(props: DeckOptionProps) {
         <div class='absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent py-4 px-2 text-left'>
           <h3 class='text-white text-xl font-semibold'>{props.deck?.name}</h3>
           <div class='flex flex-row gap-2 pt-2 flex-wrap'>
+            <BracketEstimateTag bracket={props.deck.bracketEstimate} />
             <For each={props.deck.tags}>
               {tag => (
                 <span

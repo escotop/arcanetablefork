@@ -5,6 +5,7 @@
   "outputDirectory": "dist",
   "rewrites": [
     { "source": "/image-proxy", "destination": "/api/image-proxy" },
+    { "source": "/api/commander-bracket", "destination": "/api/commander-bracket" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
