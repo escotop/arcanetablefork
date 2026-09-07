@@ -13,6 +13,7 @@ import { untapAll } from '~/lib/shortcuts/commands/field';
 import { useSearchParams } from '@solidjs/router';
 import { dispatchGameEvent, onConcede } from '~/lib/globals';
 import { createPassTurnEvent } from '~/lib/createEvents';
+import { computeNextTurnState } from '~/lib/turnOrder';
 import { Button } from '~/components/ui/button';
 import MoveSubMenu from './move-submenu';
 import { useMenuContext } from './context';
@@ -43,7 +44,7 @@ export default function TableMenuItems(props: MenuActionsProps) {
         component={menuCtx.item}
         class='w-full'
         onClick={() => {
-          dispatchGameEvent(createPassTurnEvent());
+          dispatchGameEvent(createPassTurnEvent(computeNextTurnState()));
         }}>
         Pass Turn <Dynamic component={menuCtx.shortcut}>space</Dynamic>
       </Dynamic>

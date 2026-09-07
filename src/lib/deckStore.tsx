@@ -6,6 +6,11 @@ import { fetchCardInfo, getDeckCoverMetadata, parseImportedCardList } from './de
 import { buildImportedInPlay, fetchCardInfoForImport } from './deckImportLookup';
 import { applyCustomArtToEntry } from './customCardArt';
 import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
+import {
+  computeDeckContentHash,
+  getHydratedDeck,
+  setHydratedDeck,
+} from './deckHydratedCache';
 import { setCardSystem as setGlobalCardSystem } from './globals';
 import { CardSystemContext } from './cardSystemContext';
 import { MTG_CARD_SYSTEM, normalizeCardSystemId } from './mtgCardSystem';
@@ -21,10 +26,23 @@ export const createDeckStore = () => {
   let deckStore = getDeckStore();
   setStore(deckStore);
 
+  let persistTimer: ReturnType<typeof setTimeout> | undefined;
+  let latestRaw: DeckStore | undefined;
+
+  const flushDeckStore = () => {
+    if (!latestRaw) return;
+    localStorage.setItem('mtgplayer-decks', JSON.stringify(latestRaw));
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', flushDeckStore);
+  }
+
   const updateStore: typeof setStore = (...update: any[]) => {
     (setStore as any)(...update);
-    let raw = unwrap(store);
-    localStorage.setItem('mtgplayer-decks', JSON.stringify(raw));
+    latestRaw = unwrap(store);
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(flushDeckStore, 400);
   };
 
   return [store, updateStore] as const;
@@ -173,6 +191,14 @@ async function hydrateTokenEntries(
 }
 
 export async function hydrateDeck(originalDeck: Deck) {
+  const contentHash = originalDeck.id ? computeDeckContentHash(originalDeck) : undefined;
+  if (originalDeck.id && contentHash) {
+    const cachedDeck = await getHydratedDeck(originalDeck.id, contentHash);
+    if (cachedDeck) {
+      return applyCustomArtToHydratedDeck(cachedDeck);
+    }
+  }
+
   let cache = new Map();
 
   let deck = structuredClone(originalDeck);
@@ -206,6 +232,24 @@ export async function hydrateDeck(originalDeck: Deck) {
   await hydrateTokenEntries(tokenEntries, cache, deck.tokens);
 
   deck = Object.assign({}, structuredClone(DEFAULT_DECK), deck);
+
+  if (originalDeck.id && contentHash) {
+    void setHydratedDeck(originalDeck.id, contentHash, deck);
+  }
+
+  return deck;
+}
+
+async function applyCustomArtToHydratedDeck(deck: Deck) {
+  async function refreshEntries(entries: Record<string, DetailedCardEntry>) {
+    for (const [key, card] of Object.entries(entries)) {
+      entries[key] = await applyCustomArtToEntry(card);
+    }
+  }
+
+  await refreshEntries(deck.cards);
+  if (deck.inPlay) await refreshEntries(deck.inPlay);
+  if (deck.tokens) await refreshEntries(deck.tokens);
 
   return deck;
 }

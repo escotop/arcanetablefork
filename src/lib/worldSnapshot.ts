@@ -3,7 +3,6 @@ import {
   gameLog,
   gameState,
   playAreas,
-  players,
   provider,
   resetGameSceneForReplay,
   sendEvent,
@@ -92,15 +91,49 @@ export function isSyncHost(): boolean {
   return Number(localId) === hostId;
 }
 
-export function gameNeedsSnapshotSync(_playerSessionId: string): boolean {
+export function gameNeedsSnapshotSync(playerSessionId: string, gameId: string): boolean {
   if (!gameLog?.length) return false;
-  if (getActiveJoinClientIdsFromLog().size === 0) return false;
 
-  const remoteOnline = players().filter(
-    player => player.id !== provider?.awareness?.clientID && !player.entry?.isSpectating,
-  );
-  // Solo reload should replay the event log; snapshot export races with local replay.
-  return remoteOnline.length > 0;
+  const joinClientId =
+    findJoinClientIdForSession(gameLog, playerSessionId) ??
+    getStoredJoinBinding(gameId)?.clientId;
+
+  // Solo reconexiones usan snapshot; un jugador nuevo entra sin barrera
+  return joinClientId !== undefined;
+}
+
+function getLocalPlayerSessionId(): string | undefined {
+  return provider?.awareness?.getLocalState()?.playerSessionId as string | undefined;
+}
+
+function isLocalJoiner(barrier: SyncBarrier): boolean {
+  const localSessionId = getLocalPlayerSessionId();
+  return !!localSessionId && localSessionId === barrier.joinerSessionId;
+}
+
+function shouldPublishSnapshotForBarrier(barrier: SyncBarrier): boolean {
+  if (barrier.status !== 'pending') return false;
+  if (isLocalJoiner(barrier)) return false;
+  return Object.values(playAreas).some(area => Boolean(area));
+}
+
+function getStoredWorldSnapshot(): WorldSnapshot | undefined {
+  const snapshot = gameState.get('worldSnapshot') as WorldSnapshot | undefined;
+  if (!snapshot?.playAreas?.length) return undefined;
+  if (snapshot.logLength > gameLog.length) return undefined;
+  return snapshot;
+}
+
+async function tryApplyStoredWorldSnapshot(gameId: string, playerSessionId: string): Promise<boolean> {
+  const snapshot = getStoredWorldSnapshot();
+  if (!snapshot) return false;
+
+  try {
+    await applyWorldSnapshot(gameId, playerSessionId, snapshot);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function exportWorldSnapshot(barrierId: string): WorldSnapshot {
@@ -256,13 +289,10 @@ function releaseSyncBarrier(barrierId: string) {
 }
 
 function publishSnapshotForBarrier(barrier: SyncBarrier) {
-  if (!isSyncHost() || barrier.status !== 'pending') return;
-  if (isSyncPaused() && (gameState.get('worldSnapshot') as WorldSnapshot | undefined)?.barrierId === barrier.id) {
-    return;
-  }
+  if (!shouldPublishSnapshotForBarrier(barrier)) return;
 
   void flushDispatchEventQueue().then(async () => {
-    await waitForGameLogCatchUp({ maxWaitMs: 10_000 });
+    await waitForGameLogCatchUp({ maxWaitMs: 5_000 });
     const snapshot = exportWorldSnapshot(barrier.id);
     gameState.doc?.transact(() => {
       const current = gameState.get('syncBarrier') as SyncBarrier | undefined;
@@ -278,6 +308,20 @@ function publishSnapshotForBarrier(barrier: SyncBarrier) {
   });
 }
 
+function publishPersistentWorldSnapshot() {
+  if (!Object.values(playAreas).some(area => Boolean(area))) return;
+
+  void flushDispatchEventQueue().then(async () => {
+    await waitForGameLogCatchUp({ maxWaitMs: 3_000 });
+    const snapshot = exportWorldSnapshot('persistent');
+    gameState.doc?.transact(() => {
+      const activeBarrier = gameState.get('syncBarrier') as SyncBarrier | undefined;
+      if (activeBarrier && activeBarrier.status === 'pending') return;
+      gameState.set('worldSnapshot', snapshot);
+    });
+  });
+}
+
 let lastObservedBarrier: SyncBarrier | undefined = gameState?.get?.('syncBarrier') as
   | SyncBarrier
   | undefined;
@@ -289,7 +333,11 @@ export function setupSyncBarrierObserver() {
     const barrier = gameState.get('syncBarrier') as SyncBarrier | undefined;
 
     if (!barrier) {
-      if (lastObservedBarrier && lastObservedBarrier.status !== 'released') {
+      if (
+        lastObservedBarrier &&
+        lastObservedBarrier.status !== 'released' &&
+        isLocalJoiner(lastObservedBarrier)
+      ) {
         setSyncPaused(false);
       }
       lastObservedBarrier = undefined;
@@ -297,13 +345,11 @@ export function setupSyncBarrierObserver() {
       return;
     }
 
-    if (barrier.id !== lastObservedBarrier?.id) {
-      if (barrier.status === 'pending') {
-        void flushDispatchEventQueue().then(() => {
-          setSyncPaused(true);
-          refreshMultiplayerSyncState();
-        });
-      }
+    if (barrier.id !== lastObservedBarrier?.id && barrier.status === 'pending' && isLocalJoiner(barrier)) {
+      void flushDispatchEventQueue().then(() => {
+        setSyncPaused(true);
+        refreshMultiplayerSyncState();
+      });
     }
 
     if (barrier.status === 'pending') {
@@ -311,7 +357,9 @@ export function setupSyncBarrierObserver() {
     }
 
     if (barrier.status === 'released') {
-      setSyncPaused(false);
+      if (isLocalJoiner(barrier)) {
+        setSyncPaused(false);
+      }
     }
 
     lastObservedBarrier = barrier;
@@ -319,12 +367,16 @@ export function setupSyncBarrierObserver() {
   });
 }
 
-/** Request a barrier, wait for host snapshot, hydrate scene, skip event replay. */
+/** Request a barrier, wait for snapshot, hydrate scene, skip event replay. */
 export async function acquireWorldSnapshot(
   gameId: string,
   playerSessionId: string,
 ): Promise<boolean> {
-  if (!gameNeedsSnapshotSync(playerSessionId)) return false;
+  if (!gameNeedsSnapshotSync(playerSessionId, gameId)) return false;
+
+  if (await tryApplyStoredWorldSnapshot(gameId, playerSessionId)) {
+    return true;
+  }
 
   const barrierId = nanoid();
   await flushDispatchEventQueue();
@@ -344,15 +396,43 @@ export async function acquireWorldSnapshot(
   });
 
   try {
-    const snapshot = await waitForBarrierSnapshot(barrierId, 25_000);
+    const snapshot = await waitForBarrierSnapshot(barrierId, 12_000);
     await applyWorldSnapshot(gameId, playerSessionId, snapshot);
     releaseSyncBarrier(barrierId);
     return true;
+  } catch {
+    if (await tryApplyStoredWorldSnapshot(gameId, playerSessionId)) {
+      releaseSyncBarrier(barrierId);
+      return true;
+    }
+    releaseSyncBarrier(barrierId);
+    return false;
   } finally {
     provider?.awareness?.setLocalStateField('syncJoining', false);
     setSyncPaused(false);
     refreshMultiplayerSyncState();
   }
+}
+
+export function setupPersistentSnapshotPublisher() {
+  if (!gameState) return;
+
+  let publishTimer: number | undefined;
+  const schedulePublish = () => {
+    if (publishTimer !== undefined) return;
+    publishTimer = window.setTimeout(() => {
+      publishTimer = undefined;
+      if (isSyncHost()) {
+        publishPersistentWorldSnapshot();
+      }
+    }, 1500);
+  };
+
+  gameLog.observe(schedulePublish);
+  gameState.observe(event => {
+    if (event.changes.keys.has('syncBarrier')) return;
+    schedulePublish();
+  });
 }
 
 export function hasSnapshotCatchUp(): boolean {

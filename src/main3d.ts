@@ -60,6 +60,7 @@ import {
   setHoverSignal,
   setIsIntitialized,
   setLocalPlayerClientId,
+  onLocalPlayAreaChanged,
   setEventCatchUpComplete,
   finishHistoricalLogReplay,
   setPlayAreas,
@@ -102,6 +103,7 @@ import {
   acquireWorldSnapshot,
   gameNeedsSnapshotSync,
   hasSnapshotCatchUp,
+  setupPersistentSnapshotPublisher,
   setupSyncBarrierObserver,
 } from './lib/worldSnapshot';
 import { getDeckStore } from './lib/deckStore';
@@ -113,6 +115,7 @@ import {
   markLoadProfile,
   profileAsync,
 } from './lib/loadProfile';
+import { initTurnOrderSync } from './lib/turnOrder';
 import { createRestackEvent, createTransferCardEvent } from './lib/createEvents';
 
 var container;
@@ -367,7 +370,8 @@ export async function tryReconnectToGame(
     return false;
   }
 
-  if (gameNeedsSnapshotSync(playerSessionId)) {
+  // Siempre intentar snapshot primero si hay múltiples jugadores
+  if (gameNeedsSnapshotSync(playerSessionId, gameId)) {
     const snapshotApplied = await profileAsync('acquire world snapshot', () =>
       acquireWorldSnapshot(gameId, playerSessionId),
     );
@@ -380,10 +384,12 @@ export async function tryReconnectToGame(
     }
   }
 
+  // Solo reclamar sin replay del log como fuente de datos
   const reclaimed = await profileAsync('reclaim local play area', () =>
     reclaimLocalPlayArea(joinClientId, gameId, playerSessionId, initCardSystem, {
-      maxReplayWaitMs: 20_000,
-      maxAreaWaitMs: 20_000,
+      maxReplayWaitMs: 5_000,
+      maxAreaWaitMs: 15_000,
+      skipReplayWait: true,
     }),
   );
   markLoadProfile('reconnect path', { path: 'reclaim', reclaimed });
@@ -428,6 +434,18 @@ export async function localInit(gameOptions: GameOptions) {
     })),
   );
 
+  onLocalPlayAreaChanged(area => {
+    playArea = area;
+    hand = area.hand;
+    keyboardHandHoverIndex = undefined;
+    keyboardHandHoverMouseLock = undefined;
+    readjustPlayAreas();
+    scheduleBattlefieldOrientationSync();
+    void area.loadTextures();
+  });
+
+  initTurnOrderSync();
+
   provider.on('sync', isSynced => {
     if (!isSynced) return;
     void waitForGameLogCatchUp({ maxWaitMs: 5000 }).then(() => syncPlayAreasFromGameLog());
@@ -466,6 +484,7 @@ export async function localInit(gameOptions: GameOptions) {
   });
   setupGameStateImportObserver(() => currentGameId);
   setupSyncBarrierObserver();
+  setupPersistentSnapshotPublisher();
   refreshMultiplayerSyncState();
 
   container.appendChild(renderer.domElement);
@@ -549,24 +568,33 @@ export async function loadDeckAndJoin(
     await profileAsync('multiplayer state (pre-join)', () =>
       waitForMultiplayerGameState(existingJoinClientId !== undefined ? 8000 : 3000),
     );
+    syncPlayAreasFromGameLog();
 
-    if (gameNeedsSnapshotSync(playerSessionId)) {
-      await profileAsync('acquire world snapshot (join)', () =>
+    if (existingJoinClientId !== undefined && gameNeedsSnapshotSync(playerSessionId, currentGameId)) {
+      const snapshotApplied = await profileAsync('acquire world snapshot (join)', () =>
         acquireWorldSnapshot(currentGameId, playerSessionId),
       );
+
+      if (snapshotApplied && getLocalPlayArea()) {
+        await profileAsync('finalize reconnected play area (join)', () =>
+          finalizeReconnectedPlayArea(currentGameId, playerSessionId, initCardSystem),
+        );
+        markLoadProfile('join complete', { path: 'snapshot-reconnect' });
+        return;
+      }
     }
   } else {
     markLoadProfile('skipped multiplayer pre-sync — solo/new table');
   }
 
   if (existingJoinClientId !== undefined) {
-    await profileAsync('gameLog replay (join)', () => waitForGameLogReplay(15_000));
-
+    // Solo intentar reclamar el área de juego, sin replay del log como fuente de datos
+    // El estado debe venir del snapshot o ser creado nuevo
     if (getLocalPlayArea()) {
       await profileAsync('finalize reconnected play area (join)', () =>
         finalizeReconnectedPlayArea(currentGameId, playerSessionId, initCardSystem),
       );
-      markLoadProfile('join complete', { path: 'reconnect-after-replay' });
+      markLoadProfile('join complete', { path: 'reconnect-existing' });
       return;
     }
 
@@ -576,7 +604,7 @@ export async function loadDeckAndJoin(
         currentGameId,
         playerSessionId,
         initCardSystem,
-        { maxReplayWaitMs: 10_000, maxAreaWaitMs: 10_000, skipReplayWait: true },
+        { maxReplayWaitMs: 5_000, maxAreaWaitMs: 10_000, skipReplayWait: true },
       ),
     );
     if (reclaimed) {
@@ -741,6 +769,16 @@ function isUnderLocalDeck(object: THREE.Object3D): boolean {
   return false;
 }
 
+function isDeckZoneObject(object: THREE.Object3D): boolean {
+  let node: Object3D | null = object;
+  while (node) {
+    const ud = node.userData;
+    if (ud?.location === 'deck' || ud?.zone === 'deck') return true;
+    node = node.parent;
+  }
+  return false;
+}
+
 function resolveContextMenuTarget(object: THREE.Object3D): THREE.Object3D {
   if (isUnderLocalDeck(object)) {
     let current: Object3D | null = object;
@@ -770,6 +808,7 @@ function onContextMenu(event: PointerEvent) {
   if (!intersects.length) return;
   let target = resolveContextMenuTarget(intersects[0].object);
   if (!target) return;
+  if (isDeckZoneObject(target) && !isUnderLocalDeck(target)) return;
 
   setContextMenuSignal({
     mouse: { x: event.x, y: event.y },
@@ -883,6 +922,8 @@ function onDocumentClick(event: PointerEvent) {
   if (target.parent?.userData.isInteractive) {
     target = target.parent;
   }
+
+  if (isDeckZoneObject(target) && !isUnderLocalDeck(target)) return;
 
   target.dispatchEvent({ type: 'click', event });
 }
@@ -1143,6 +1184,7 @@ async function onDocumentDrop(event) {
 
   const dragged = dragTargets.slice();
   dragTargets = [];
+  activatePostDragClickGuard();
 
   try {
     raycaster.setFromCamera(mouse, camera);
@@ -1249,7 +1291,6 @@ async function onDocumentDrop(event) {
     for (const target of dragged) {
       setCardData(target, 'isDragging', false);
     }
-    activatePostDragClickGuard();
   }
 }
 

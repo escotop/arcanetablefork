@@ -107,9 +107,10 @@ export function createRestackEvent(intersection: Intersection, items: Object3D[]
   };
 }
 
-export function createPassTurnEvent() {
+export function createPassTurnEvent(turnOrder: import('./turnOrder').TurnOrderState) {
   return {
     type: 'passTurn',
+    payload: { turnOrder },
   };
 }
 

@@ -386,6 +386,12 @@ export class Hand implements CardZone {
     this.syncManaOverlays();
   }
 
+  disableLocalHand() {
+    this.isLocalHand = false;
+    this.clearFocus();
+    this.clearDragPreview();
+  }
+
   syncManaOverlays() {
     if (!this.isLocalHand) return;
     for (let i = 0; i < this.cards.length; i++) {

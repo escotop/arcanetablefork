@@ -63,10 +63,10 @@ export function refreshMultiplayerSyncState() {
     player => player.entry?.syncJoining && player.id !== localClientId,
   );
 
-  const blocked = barrierActive || someoneElseJoining;
+  const blocked = isJoiner && (barrierActive || !!localState.syncJoining);
 
   let message = '';
-  if (blocked) {
+  if (barrierActive || someoneElseJoining) {
     if (isJoiner) {
       message = 'Joining game…';
     } else {

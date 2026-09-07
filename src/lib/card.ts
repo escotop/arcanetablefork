@@ -595,6 +595,49 @@ function syncCardFaceUrls(card: Card): [string, string | undefined] {
   return [front, back];
 }
 
+const localHandFlippedCards = new Set<string>();
+const handFaceTextureCache = new Map<string, Promise<MeshStandardMaterial>>();
+
+export function isLocalHandFlipped(cardId: string) {
+  return localHandFlippedCards.has(cardId);
+}
+
+export async function applyHandCardFace(card: Card, faceIndex: 0 | 1) {
+  if (!card.mesh) return;
+
+  await loadCardTextures(card);
+  const url = normalizeTextureUrl(
+    getCardImage(card, faceIndex) ?? card.mesh.userData.card_face_urls?.[faceIndex],
+  );
+  if (!url) return;
+
+  const mat = await loadTextureMaterial(url, handFaceTextureCache);
+  card.mesh.material[4] = mat.clone();
+  card.mesh.material[4].needsUpdate = true;
+}
+
+export function clearLocalHandFlip(cardId: string) {
+  if (!localHandFlippedCards.delete(cardId)) return;
+  const card = cardsById.get(cardId);
+  if (card?.mesh?.userData.location === 'hand') {
+    void applyHandCardFace(card, 0);
+  }
+}
+
+export async function toggleLocalHandFlip(card: Card) {
+  if (!card.mesh?.userData.isDoubleSided) return;
+  if (card.mesh.userData.location !== 'hand') return;
+
+  const showBackFace = !localHandFlippedCards.has(card.id);
+  if (showBackFace) {
+    localHandFlippedCards.add(card.id);
+  } else {
+    localHandFlippedCards.delete(card.id);
+  }
+
+  await applyHandCardFace(card, showBackFace ? 1 : 0);
+}
+
 export function getCardArtImage(card: { detail: CardEntryDetail }) {
   const uris = getImageUris(card);
   if (cardSystem.imageUriFormat === 'scryfall') {
@@ -715,6 +758,7 @@ export function setCardData<Field extends keyof CardUserData>(
     if (cardMesh.userData.location === 'hand' && value !== 'hand') {
       const card = cardsById.get(cardMesh.userData.id);
       if (card) removeHandManaOverlay(card);
+      clearLocalHandFlip(cardMesh.userData.id);
     }
     cardMesh.userData.previousLocation = cardMesh.userData.location;
   }

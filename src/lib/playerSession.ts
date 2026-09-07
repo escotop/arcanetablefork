@@ -55,6 +55,10 @@ export function getOrCreatePlayerSessionId(gameId: string): string {
   return sessionId;
 }
 
+export function setPlayerSessionId(gameId: string, playerSessionId: string) {
+  sessionStorage.setItem(`${STORAGE_PREFIX}:${gameId}`, playerSessionId);
+}
+
 export function persistJoinBinding(gameId: string, binding: JoinBinding) {
   sessionStorage.setItem(`${JOIN_BINDING_PREFIX}:${gameId}`, JSON.stringify(binding));
 }

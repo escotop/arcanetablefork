@@ -106,8 +106,12 @@ const LifeField: Component<{
   );
 };
 
-export const LocalPlayer: Component = props => {
+export const LocalPlayer: Component<{ isActiveTurn?: boolean; life?: number; commanderLife?: number; counters?: Record<string, number> }> = props => {
   const [open, setOpen] = createSignal(true);
+  const activeTurnClass = () =>
+    props.isActiveTurn
+      ? 'ring-2 ring-amber-400/80 shadow-[0_0_14px_rgba(251,191,36,0.35)]'
+      : '';
 
   function changeCounter(counterId, callback) {
     let localState = provider.awareness.getLocalState();
@@ -125,7 +129,7 @@ export const LocalPlayer: Component = props => {
   }
 
   return (
-    <Card>
+    <Card class={activeTurnClass()}>
       <div
         class='rounded-lg shadow-md flex-shrink-0 p-2 cursor-pointer transition-colors hover:bg-muted/40'
         title="View from your perspective"
@@ -274,9 +278,13 @@ export const LocalPlayer: Component = props => {
   );
 };
 
-export const NetworkPlayer: Component<{ clientId: number; playerSessionId?: string; name?: string; life?: number; commanderLife?: number; counters?: Record<string, number> }> = props => {
+export const NetworkPlayer: Component<{ clientId: number; playerSessionId?: string; name?: string; life?: number; commanderLife?: number; counters?: Record<string, number>; isActiveTurn?: boolean }> = props => {
   const [open, setOpen] = createSignal(false);
   const playerColor = () => displayPlayerColor(props);
+  const activeTurnClass = () =>
+    props.isActiveTurn
+      ? 'ring-2 ring-amber-400/80 shadow-[0_0_14px_rgba(251,191,36,0.35)]'
+      : '';
   const visibleCounterIds = createMemo(() =>
     Object.entries(props?.counters ?? {})
       .filter(entry => entry[1] !== 0)
@@ -285,7 +293,7 @@ export const NetworkPlayer: Component<{ clientId: number; playerSessionId?: stri
   );
 
   return (
-    <Card>
+    <Card class={activeTurnClass()}>
       <div
         class='rounded-lg shadow-md flex-shrink-0 p-2 cursor-pointer transition-colors hover:bg-muted/40'
         title="View from this player's perspective"
@@ -295,10 +303,13 @@ export const NetworkPlayer: Component<{ clientId: number; playerSessionId?: stri
           width: 'max-content',
           'max-width': '100%',
           border: `3px solid ${playerColor()}`,
+          ...(props.isActiveTurn
+            ? { 'box-shadow': `0 0 14px rgba(251, 191, 36, 0.35), inset 0 0 0 1px rgba(251, 191, 36, 0.45)` }
+            : {}),
         }}>
         <Collapsible onOpenChange={setOpen} open={open()}>
           <div class='flex items-center gap-2' style='min-height: 40px;'>
-            <span class='max-w-[8rem] shrink-0 truncate pr-1'>{props?.name}</span>
+            <span class='max-w-[8rem] shrink-0 truncate pr-1'>{props?.name?.trim() || 'Player'}</span>
             <div class='flex shrink-0 items-center gap-2'>
               <LifeReadout value={props?.life ?? 0} title='Life' />
               <Show when={isMagicCardSystem(cardSystem)}>

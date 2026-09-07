@@ -1,4 +1,6 @@
-import { players } from './globals';
+import { getLocalPlayerClientId, players, playAreas } from './globals';
+import type { TurnOrderState } from './turnOrder';
+import { getActiveTurnClientId } from './turnOrder';
 import type { PlayArea } from './playArea';
 
 function normalizeClientId(clientId: unknown): number | undefined {
@@ -9,6 +11,7 @@ function normalizeClientId(clientId: unknown): number | undefined {
 export function getPlayAreaPlayerEntry(playArea: PlayArea) {
   for (const player of players()) {
     if (player.entry?.isSpectating) continue;
+    if (player.entry?.syncJoining) continue;
     if (playArea.playerSessionId && player.entry?.playerSessionId === playArea.playerSessionId) {
       return player.entry;
     }
@@ -24,5 +27,67 @@ export function getPlayAreaPlayerEntry(playArea: PlayArea) {
 }
 
 export function getPlayAreaPlayerName(playArea: PlayArea) {
-  return getPlayAreaPlayerEntry(playArea)?.name || 'Player';
+  return getPlayAreaPlayerEntry(playArea)?.name?.trim() || 'Player';
+}
+
+export interface LifeBarPlayer {
+  clientId: number;
+  playerSessionId?: string;
+  name: string;
+  life?: number;
+  commanderLife?: number;
+  counters?: Record<string, number>;
+  isLocal: boolean;
+  isActiveTurn: boolean;
+}
+
+/** @deprecated use getLifeBarPlayersInTurnOrder */
+export type NetworkLifeBarPlayer = Omit<LifeBarPlayer, 'isLocal' | 'isActiveTurn'>;
+
+function buildLifeBarPlayer(area: PlayArea, turnState: TurnOrderState | null): LifeBarPlayer {
+  const localClientId = getLocalPlayerClientId();
+  const entry = getPlayAreaPlayerEntry(area);
+  const activeClientId = getActiveTurnClientId(turnState);
+
+  return {
+    clientId: area.clientId,
+    playerSessionId: area.playerSessionId ?? entry?.playerSessionId,
+    name: entry?.name?.trim() || getPlayAreaPlayerName(area),
+    life: entry?.life,
+    commanderLife: entry?.commanderLife,
+    counters: entry?.counters,
+    isLocal: !!area.isLocalPlayArea || area.clientId === localClientId,
+    isActiveTurn: area.clientId === activeClientId,
+  };
+}
+
+export function getLifeBarPlayersInTurnOrder(turnState: TurnOrderState | null): LifeBarPlayer[] {
+  const playersOnTable = Object.values(playAreas)
+    .filter((area): area is PlayArea => !!area)
+    .map(area => buildLifeBarPlayer(area, turnState));
+
+  const localPlayers = playersOnTable.filter(player => player.isLocal);
+  const remotePlayers = playersOnTable.filter(player => !player.isLocal);
+
+  const sortRemotePlayers = (players: LifeBarPlayer[]) => {
+    if (turnState?.order.length) {
+      const orderMap = new Map(turnState.order.map((clientId, index) => [clientId, index]));
+      return [...players].sort(
+        (left, right) =>
+          (orderMap.get(left.clientId) ?? Number.MAX_SAFE_INTEGER) -
+          (orderMap.get(right.clientId) ?? Number.MAX_SAFE_INTEGER),
+      );
+    }
+
+    return [...players].sort((left, right) => left.name.localeCompare(right.name));
+  };
+
+  return [...localPlayers, ...sortRemotePlayers(remotePlayers)];
+}
+
+/** Life bars for remote seats — one entry per play area, not raw awareness clients. */
+export function getNetworkLifeBarPlayers(): NetworkLifeBarPlayer[] {
+  return getLifeBarPlayersInTurnOrder(null)
+    .filter(player => !player.isLocal)
+    .map(({ isLocal: _isLocal, isActiveTurn: _isActiveTurn, ...player }) => player);
 }

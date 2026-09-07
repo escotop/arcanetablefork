@@ -8,6 +8,7 @@ import {
 import { getCardKey } from './deckStore';
 import { devLog } from './devLog';
 import { cardSystem } from './globals';
+import { setCachedCardDetailsFromRaw } from './scryfallCache';
 
 const SCRYFALL_COLLECTION_URL = 'https://api.scryfall.com/cards/collection';
 const COLLECTION_CHUNK_SIZE = 75;
@@ -236,6 +237,12 @@ async function resolveEntriesViaCollection(entries: CardEntry[]) {
     if (index + COLLECTION_CHUNK_SIZE < identifiers.length) {
       await delay(COLLECTION_CHUNK_DELAY_MS);
     }
+  }
+
+  if (resolved.size) {
+    await setCachedCardDetailsFromRaw(
+      [...resolved.values()].map(detail => detail as unknown as Record<string, unknown>),
+    );
   }
 
   return resolved;

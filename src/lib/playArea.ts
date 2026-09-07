@@ -44,7 +44,6 @@ import { collectTokenPartIds, mergeTokenPrintings, resolveTokensByIds } from './
 import {
   createDismissZoneEvent,
   createFlipEvent,
-  createPeekCardsEvent,
   createTapEvent,
   createTransferEntireZoneEvent,
   createTransferCardEvent,
@@ -110,6 +109,9 @@ export class PlayArea {
   private nameTagPivot: Object3D;
   private nameTagObject: CSS3DObject;
   private nameTagSuppressed = false;
+  private localDeckClickHandler = () => {
+    this.draw();
+  };
 
   constructor(
     public clientId: number,
@@ -156,9 +158,7 @@ export class PlayArea {
     this.hand = new Hand(state?.hand?.id, this.isLocalPlayArea);
 
     if (this.isLocalPlayArea) {
-      this.deck.mesh.addEventListener('click', e => {
-        this.draw();
-      });
+      this.attachLocalDeckListener();
     }
 
     this.mesh.add(this.deck.mesh);
@@ -318,16 +318,27 @@ export class PlayArea {
     this.inProgressActions.add(key);
 
     const sessionId = ++this.peekSessionId;
-    const skipAnimation = actualCount > 5;
-    await this.executePeekCards(this.deck, this.peekZone, actualCount, {
-      skipAnimation,
-      sessionId,
-    });
-
+    
+    // En lugar de usar el CardGrid 3D, usamos el modal 2D
     if (this.isLocalPlayArea) {
-      sendEvent(
-        createPeekCardsEvent(this.deck.id, this.peekZone.id, actualCount, { skipAnimation }),
-      );
+      // Obtener las cartas sin crearles meshes 3D
+      const cardsToShow = this.deck.cards.slice(0, actualCount);
+      
+      // Abrir el modal con los datos de las cartas
+      const { setCardSearchModalOpen, setCardSearchModalData } = await import('./globals');
+      setCardSearchModalData({
+        cards: cardsToShow,
+        zone: 'peek',
+        title: `Search Deck (${actualCount} cards)`,
+      });
+      setCardSearchModalOpen(true);
+    } else {
+      // Para jugadores remotos, usar el método antiguo (no afecta rendimiento local)
+      const skipAnimation = actualCount > 5;
+      await this.executePeekCards(this.deck, this.peekZone, actualCount, {
+        skipAnimation,
+        sessionId,
+      });
     }
 
     this.inProgressActions.delete(key);
@@ -498,6 +509,29 @@ export class PlayArea {
       const merged = mergeTokenPrintings(tokenDetails, this.tokenPrintings);
       this.availableTokens = merged.map(entry => ({ ...entry.detail, clientId: this.clientId }));
 
+      // Para el jugador local, usar el modal 2D
+      if (this.isLocalPlayArea) {
+        let availableCards = merged.map((entry, i) => {
+          return {
+            id: payload?.ids?.[i] ?? nanoid(),
+            clientId: this.clientId,
+            detail: entry.detail,
+            customArtUrl: entry.customArtUrl,
+            modifiers: {} as Card['modifiers'],
+          };
+        });
+
+        const { setCardSearchModalOpen, setCardSearchModalData } = await import('./globals');
+        setCardSearchModalData({
+          cards: availableCards,
+          zone: 'tokenSearch',
+          title: `Token Search (${availableCards.length} tokens)`,
+        });
+        setCardSearchModalOpen(true);
+        return;
+      }
+
+      // Para jugadores remotos, usar el método antiguo
       let availableCards = merged.map((entry, i) => {
         let card = cloneCard(
           { detail: entry.detail, customArtUrl: entry.customArtUrl },
@@ -524,6 +558,29 @@ export class PlayArea {
           this.tokenSearchZone.addCard(availableCards[i]);
         }, i * 50);
       }
+      return;
+    }
+
+    // Si ya tenemos availableTokens
+    if (this.isLocalPlayArea) {
+      let availableCards = this.availableTokens.map((detail, i) => {
+        const mergedEntry = mergeTokenPrintings([detail], this.tokenPrintings)[0];
+        return {
+          id: payload?.ids?.[i] ?? nanoid(),
+          clientId: this.clientId,
+          detail: mergedEntry.detail,
+          customArtUrl: mergedEntry.customArtUrl,
+          modifiers: {} as Card['modifiers'],
+        };
+      });
+
+      const { setCardSearchModalOpen, setCardSearchModalData } = await import('./globals');
+      setCardSearchModalData({
+        cards: availableCards,
+        zone: 'tokenSearch',
+        title: `Token Search (${availableCards.length} tokens)`,
+      });
+      setCardSearchModalOpen(true);
       return;
     }
 
@@ -625,22 +682,38 @@ export class PlayArea {
     if (this.tokenSearchZone.cards.length) {
       this.dismissFromZone(this.tokenSearchZone);
     }
-    await Promise.all(
-      this.graveyardZone.mesh.children.map((child, i) => {
-        if (!child.userData.id) return;
-        return new Promise<void>(resolve => {
-          let card = cardsById.get(child.userData.id);
+    
+    // Para el jugador local, usar el modal 2D
+    if (this.isLocalPlayArea) {
+      const cardsToShow = [...this.graveyardZone.cards];
+      
+      const { setCardSearchModalOpen, setCardSearchModalData } = await import('./globals');
+      setCardSearchModalData({
+        cards: cardsToShow,
+        zone: 'graveyard',
+        title: `Graveyard (${cardsToShow.length} cards)`,
+      });
+      setCardSearchModalOpen(true);
+    } else {
+      // Para jugadores remotos, usar el método antiguo
+      await Promise.all(
+        this.graveyardZone.mesh.children.map((child, i) => {
+          if (!child.userData.id) return;
+          return new Promise<void>(resolve => {
+            let card = cardsById.get(child.userData.id);
 
-          setTimeout(
-            () => {
-              transferCard(card, this.graveyardZone, this.peekZone);
-              resolve();
-            },
-            (this.graveyardZone.mesh.children.length - i) * 5,
-          );
-        });
-      }),
-    );
+            setTimeout(
+              () => {
+                transferCard(card, this.graveyardZone, this.peekZone);
+                resolve();
+              },
+              (this.graveyardZone.mesh.children.length - i) * 5,
+            );
+          });
+        }),
+      );
+    }
+    
     this.inProgressActions.delete('peekGraveyard');
   }
 
@@ -650,22 +723,38 @@ export class PlayArea {
     if (this.tokenSearchZone.cards.length) {
       this.dismissFromZone(this.tokenSearchZone);
     }
-    await Promise.all(
-      this.exileZone.mesh.children.map((child, i) => {
-        if (!child.userData.id) return;
-        return new Promise<void>(resolve => {
-          let card = cardsById.get(child.userData.id);
+    
+    // Para el jugador local, usar el modal 2D
+    if (this.isLocalPlayArea) {
+      const cardsToShow = [...this.exileZone.cards];
+      
+      const { setCardSearchModalOpen, setCardSearchModalData } = await import('./globals');
+      setCardSearchModalData({
+        cards: cardsToShow,
+        zone: 'exile',
+        title: `Exile (${cardsToShow.length} cards)`,
+      });
+      setCardSearchModalOpen(true);
+    } else {
+      // Para jugadores remotos, usar el método antiguo
+      await Promise.all(
+        this.exileZone.mesh.children.map((child, i) => {
+          if (!child.userData.id) return;
+          return new Promise<void>(resolve => {
+            let card = cardsById.get(child.userData.id);
 
-          setTimeout(
-            () => {
-              transferCard(card, this.exileZone, this.peekZone);
-              resolve();
-            },
-            (this.exileZone.mesh.children.length - i) * 5,
-          );
-        });
-      }),
-    );
+            setTimeout(
+              () => {
+                transferCard(card, this.exileZone, this.peekZone);
+                resolve();
+              },
+              (this.exileZone.mesh.children.length - i) * 5,
+            );
+          });
+        }),
+      );
+    }
+    
     // this.exileZone.clear();
     this.inProgressActions.delete('peekExile');
   }
@@ -793,11 +882,29 @@ export class PlayArea {
     this.peekZone.enableLocalFeatures();
     this.revealZone.enableLocalFeatures();
     this.tokenSearchZone.enableLocalFeatures();
+    this.attachLocalDeckListener();
+  }
 
-    if (!this.deck.mesh.userData.hasLocalDeckListener) {
-      this.deck.mesh.addEventListener('click', () => this.draw());
-      this.deck.mesh.userData.hasLocalDeckListener = true;
-    }
+  unsetAsLocalPlayArea() {
+    this.isLocalPlayArea = false;
+    this.applyNameTagOrientation();
+    this.detachLocalDeckListener();
+    this.hand.disableLocalHand();
+    this.peekZone.setLocalPlayArea(false);
+    this.revealZone.setLocalPlayArea(false);
+    this.tokenSearchZone.setLocalPlayArea(false);
+  }
+
+  private attachLocalDeckListener() {
+    if (this.deck.mesh.userData.hasLocalDeckListener) return;
+    this.deck.mesh.addEventListener('click', this.localDeckClickHandler);
+    this.deck.mesh.userData.hasLocalDeckListener = true;
+  }
+
+  private detachLocalDeckListener() {
+    if (!this.deck.mesh.userData.hasLocalDeckListener) return;
+    this.deck.mesh.removeEventListener('click', this.localDeckClickHandler);
+    this.deck.mesh.userData.hasLocalDeckListener = false;
   }
 
   getLocalState(): State {
@@ -806,8 +913,9 @@ export class PlayArea {
       graveyard: this.graveyardZone.getSerializable(),
       exile: this.exileZone.getSerializable(),
       battlefield: this.battlefieldZone.getSerializable(),
-      peekZone: this.peekZone.getSerializable(),
-      tokenSearchZone: this.tokenSearchZone.getSerializable(),
+      // No serializar peekZone ni tokenSearchZone para evitar restaurar búsquedas antiguas
+      peekZone: { id: this.peekZone.id, cards: [] },
+      tokenSearchZone: { id: this.tokenSearchZone.id, cards: [] },
       hand: this.hand.getSerializable(),
       deck: this.deck.getSerializable(),
       cards: this.cards.map(card => ({ ...card, mesh: undefined })),
@@ -818,7 +926,13 @@ export class PlayArea {
   }
 
   subscribeEvents(callback) {
-    this.listeners.push(callback);
+    if (!this.listeners.includes(callback)) {
+      this.listeners.push(callback);
+    }
+  }
+
+  unsubscribeEvents(callback) {
+    this.listeners = this.listeners.filter(listener => listener !== callback);
   }
 
   private emitEvent(event = {}) {
@@ -931,9 +1045,8 @@ export class PlayArea {
     restoreSerializedZoneCards(playArea.exileZone, state.exile, clientId, card =>
       playArea.exileZone.addCard(card, { skipAnimation: true }),
     );
-    restoreSerializedZoneCards(playArea.peekZone, state.peekZone, clientId, card =>
-      playArea.peekZone.addCard(card, { skipAnimation: true }),
-    );
+    // NO restaurar peekZone ni tokenSearchZone - siempre deben empezar vacíos
+    // para evitar que aparezcan búsquedas 3D antiguas al recargar
     restoreSerializedBattlefieldCards(playArea.battlefieldZone, battlefield, clientId);
     playArea.updatePositions();
     playArea.loadTextures();

@@ -108,6 +108,11 @@ export async function transferCard<AddOptions extends {}>(
     });
   }
 
+  if (fromZone?.zone === 'hand' && toZone?.zone === 'battlefield' && card.mesh) {
+    setCardData(card.mesh, 'isTapped', false);
+    setCardData(card.mesh, 'isFlipped', false);
+  }
+
   if (!toZone) {
     card.mesh!.geometry.dispose();
     cardsById.delete(card.id);

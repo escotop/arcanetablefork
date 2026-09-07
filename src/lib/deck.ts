@@ -32,6 +32,14 @@ import { devLog } from './devLog';
 import { parseImportedCardList } from './deckParser';
 import { getCardCollectorNumber } from './deckListFormat';
 import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
+import {
+  getCachedCardById,
+  getCachedCardDetail,
+  getCachedPrintings,
+  printingsCacheKey,
+  setCachedCardDetail,
+  setCachedPrintings,
+} from './scryfallCache';
 import { cardsById, cardSystem, getProjectionVec, setHoverSignal, zonesById } from './globals';
 import { cleanupMesh, getGlobalRotation, shuffleItems } from './utils';
 import { createRoot } from 'solid-js';
@@ -630,6 +638,30 @@ export async function fetchCardInfo(
     return cache.get(cacheKey)!;
   }
 
+  const persistedDetail = await getCachedCardDetail(entry);
+  if (
+    persistedDetail &&
+    isValidCardDetail(persistedDetail) &&
+    (!hasRequestedPrinting(entry) || printingMatchesRequest(persistedDetail, entry))
+  ) {
+    const requestedSet = entry.set;
+    const requestedCollector = entry.collector_number;
+    const populated = populateCardInfo(persistedDetail, entry);
+    const result: DetailedCardEntry = {
+      ...entry,
+      ...populated,
+      set: requestedSet,
+      collector_number: requestedCollector,
+    };
+    if (cache) {
+      cache.set(cacheKey, result);
+    }
+    if (result.customArtUrl) {
+      return applyCustomArtToEntry(result);
+    }
+    return result;
+  }
+
   let result: DetailedCardEntry | undefined;
 
   try {
@@ -679,6 +711,10 @@ export async function fetchCardInfo(
 
   if (cache && result) {
     cache.set(cacheKey, result);
+  }
+
+  if (result?.detail && isValidCardDetail(result.detail)) {
+    void setCachedCardDetail(result.detail, entry);
   }
 
   if (result?.customArtUrl) {
@@ -968,6 +1004,19 @@ async function fetchPrintingMeta(
   const cached = printingMetaCache.get(id);
   if (cached) return cached;
 
+  const cachedDetail = await getCachedCardById(id);
+  if (cachedDetail) {
+    const result = {
+      set: cachedDetail.set as string | undefined,
+      set_name: (cachedDetail as { set_name?: string }).set_name,
+      collector_number: cachedDetail.collector_number as string | undefined,
+      lang: (cachedDetail as { lang?: string }).lang,
+      released_at: (cachedDetail as { released_at?: string }).released_at,
+    };
+    printingMetaCache.set(id, result);
+    return result;
+  }
+
   const meta = await getCardById(id);
   if (!meta) return {};
   const result = {
@@ -978,6 +1027,7 @@ async function fetchPrintingMeta(
     released_at: (meta as { released_at?: string }).released_at,
   };
   printingMetaCache.set(id, result);
+  void setCachedCardDetail(meta);
   return result;
 }
 
@@ -1006,9 +1056,7 @@ async function enrichPrintingOptions(
 const printingsCache = new Map<string, CardPrintingsResponse>();
 const printingsInflight = new Map<string, Promise<CardPrintingsResponse>>();
 
-function printingsCacheKey(name: string, page: number, query?: string) {
-  return `${name}\0${page}\0${query ?? ''}`;
-}
+export { printingsCacheKey } from './scryfallCache';
 
 export function prefetchCardPrintings(name: string, page = 1, query?: string) {
   void fetchCardPrintings(name, page, query);
@@ -1057,12 +1105,19 @@ export async function fetchCardPrintings(
   const cached = printingsCache.get(key);
   if (cached) return cached;
 
+  const persisted = await getCachedPrintings(key);
+  if (persisted) {
+    printingsCache.set(key, persisted as CardPrintingsResponse);
+    return persisted as CardPrintingsResponse;
+  }
+
   const inflight = printingsInflight.get(key);
   if (inflight) return inflight;
 
   const promise = loadCardPrintings(name, page, query).then(result => {
     printingsCache.set(key, result);
     printingsInflight.delete(key);
+    void setCachedPrintings(key, result);
     return result;
   });
   printingsInflight.set(key, promise);

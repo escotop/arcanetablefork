@@ -12,6 +12,8 @@ import {
 import { Menubar, MenubarItem, MenubarMenu, MenubarSeparator } from '../../components/ui/menubar';
 import {
   cardsById,
+  cardSearchModalData,
+  cardSearchModalOpen,
   dispatchGameEvent,
   focusRenderer,
   getLocalPlayArea,
@@ -26,6 +28,8 @@ import {
   players,
   provider,
   selection,
+  setCardSearchModalData,
+  setCardSearchModalOpen,
   setSettings,
   settings,
   updateFocusPanelSize,
@@ -45,8 +49,11 @@ import TokenSearchMenu from './tokenMenu';
 import { useSearchParams } from '@solidjs/router';
 import SettingsOverlay from './settingsOverlay';
 import { PlayArea } from '../playArea';
+import { getLifeBarPlayersInTurnOrder } from '../playAreaNameTag';
+import { turnOrderState } from '../turnOrder';
 import Announcement from './announcement';
 import ContextMenuHandler from './context-menu/handler';
+import CardSearchModal from './cardSearchModal';
 import {
   isSpanishPreviewUiForCard,
   SPANISH_PREVIEW_NOT_FOUND_MESSAGE,
@@ -57,6 +64,25 @@ import LoaderIcon from 'lucide-solid/icons/loader-circle';
 export default function Overlay() {
   let userData = () => hoverSignal()?.mesh?.userData;
   const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Limpiar modal de búsqueda al montar el componente
+  createEffect(() => {
+    setCardSearchModalOpen(false);
+    setCardSearchModalData(null);
+    
+    // Limpiar activamente cualquier zona de búsqueda 3D que pueda existir
+    const area = playArea();
+    if (area) {
+      // Limpiar peekZone 3D
+      if (area.peekZone?.cards?.length > 0) {
+        void area.dismissFromZone(area.peekZone);
+      }
+      // Limpiar tokenSearchZone 3D
+      if (area.tokenSearchZone?.cards?.length > 0) {
+        void area.dismissFromZone(area.tokenSearchZone);
+      }
+    }
+  });
 
   const isPublic = () => userData()?.isPublic;
   const isOwner = () => userData()?.clientId === getLocalPlayerClientId();
@@ -105,19 +131,26 @@ export default function Overlay() {
       }}>
       <div class={styles.top}>
         <div class='flex flex-wrap justify-start p-2 gap-2 items-start'>
-          <Show when={!isSpectating()}>
-            <LocalPlayer {...currentPlayer()?.entry} />
-          </Show>
-          <For
-            each={players().filter(
-              player => player.id !== provider.awareness.clientID && !player.entry.isSpectating,
-            )}>
+          <For each={getLifeBarPlayersInTurnOrder(turnOrderState())}>
             {player => (
-              <NetworkPlayer
-                {...player?.entry}
-                clientId={player.id}
-                playerSessionId={player.entry?.playerSessionId as string | undefined}
-              />
+              <Show
+                when={player.isLocal && !isSpectating()}
+                fallback={
+                  <NetworkPlayer
+                    clientId={player.clientId}
+                    playerSessionId={player.playerSessionId}
+                    name={player.name}
+                    life={player.life}
+                    commanderLife={player.commanderLife}
+                    counters={player.counters}
+                    isActiveTurn={player.isActiveTurn}
+                  />
+                }>
+                <LocalPlayer
+                  {...currentPlayer()?.entry}
+                  isActiveTurn={player.isActiveTurn}
+                />
+              </Show>
             )}
           </For>
         </div>
@@ -227,6 +260,17 @@ export default function Overlay() {
       <CounterDialog />
       <Announcement />
       <CommandPalette playArea={playArea()!} />
+      <Show when={cardSearchModalData()}>
+        {data => (
+          <CardSearchModal
+            open={cardSearchModalOpen()}
+            onOpenChange={setCardSearchModalOpen}
+            cards={data().cards}
+            zone={data().zone}
+            title={data().title}
+          />
+        )}
+      </Show>
     </div>
   );
 }

@@ -7,12 +7,15 @@ import {
   selection,
   dispatchGameEvent,
   zonesById,
+  cardSearchModalOpen,
 } from '../globals';
 import { transferCard } from '../transferCard';
+import { toggleLocalHandFlip } from '../card';
 import { drawCards, searchDeck } from './commands/deck';
 import { untapAll, adjustBattlefieldCardsPowerToughness, getPowerToughnessDeltaFromKey } from './commands/field';
 import { activateSpanishPreview } from '../spanishCardPreview';
 import { createPassTurnEvent } from '../createEvents';
+import { computeNextTurnState } from '../turnOrder';
 import { Card } from '../constants';
 import { getOrderedPlayAreas } from '../cameraView';
 import { dismissZoomPanel, navigateKeyboardHandHover, setKeyboardHandHover, setCameraViewByPlayerIndex } from '../../main3d';
@@ -123,7 +126,7 @@ export function HotKeys() {
     });
 
     hotkeys('space', function () {
-      dispatchGameEvent(createPassTurnEvent());
+      dispatchGameEvent(createPassTurnEvent(computeNextTurnState()));
     });
 
     hotkeys('d', function () {
@@ -270,6 +273,17 @@ export function HotKeys() {
       e.preventDefault();
       const area = requirePlayArea();
       cards().forEach(card => area.flip(card.mesh));
+    });
+
+    hotkeys('f', 'hand', function (e) {
+      e.preventDefault();
+      if (cardSearchModalOpen()) return;
+
+      const card = cards()[0];
+      if (!card?.mesh?.userData.isDoubleSided) return;
+      if (card.mesh.userData.location !== 'hand') return;
+
+      void toggleLocalHandFlip(card);
     });
 
     return () => {

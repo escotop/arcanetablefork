@@ -49,14 +49,17 @@ import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { CSS3DRenderer } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import GUI from 'lil-gui';
 import { createLocalStore } from './localStore';
-import { clearPlayerSessionRegistry, clearJoinBinding, unregisterPlayerSession } from './playerSession';
+import { clearPlayerSessionRegistry, clearJoinBinding, unregisterPlayerSession, getOrCreatePlayerSessionId, persistJoinBinding, registerPlayerSession, setPlayerSessionId } from './playerSession';
 import { resetMultiplayerSyncState } from './multiplayerSync';
+import { removePlayerFromTurnOrder } from './turnOrder';
 import { clearWaterdrops } from './waterdropEffect';
 import { clearPingSync } from './pingSync';
 import { resetCameraView, captureLocalCameraView } from './cameraView';
 import { setupCameraDebugGui, resetCameraDebugGui } from './cameraDebugGui';
 import { clearSpanishPreview } from './spanishCardPreview';
 import { devLog } from './devLog';
+import { getPlayAreaPlayerEntry } from './playAreaNameTag';
+import { resolvePlayerColor, syncLocalPlayerColor } from './playerColor';
 
 export function expect(test: boolean, message: string, ...supplemental: any) {
   if (!test) {
@@ -82,6 +85,12 @@ export let zonesById = new Map<string, CardZone<unknown>>();
 export let [playAreas, setPlayAreas] = createStore<Record<number, PlayArea>>({});
 export let [peekFilterText, setPeekFilterText] = createSignal('');
 export let [peekTypeFilter, setPeekTypeFilter] = createSignal<string | null>(null);
+export let [cardSearchModalOpen, setCardSearchModalOpen] = createSignal(false);
+export let [cardSearchModalData, setCardSearchModalData] = createSignal<{
+  cards: Card[];
+  zone: 'peek' | 'graveyard' | 'exile' | 'tokenSearch';
+  title?: string;
+} | null>(null);
 export let ydoc = new Doc();
 export let table: Object3D;
 export let gameLog: YArray<any>;
@@ -257,6 +266,67 @@ export function getLocalPlayerClientId() {
 export function getLocalPlayArea(): PlayArea | undefined {
   const clientId = getLocalPlayerClientId();
   return clientId !== undefined ? playAreas[clientId] : undefined;
+}
+
+type LocalPlayAreaChangedHandler = (area: PlayArea) => void;
+const localPlayAreaChangedHandlers = new Set<LocalPlayAreaChangedHandler>();
+
+export function onLocalPlayAreaChanged(handler: LocalPlayAreaChangedHandler) {
+  localPlayAreaChangedHandlers.add(handler);
+  return () => {
+    localPlayAreaChangedHandlers.delete(handler);
+  };
+}
+
+function notifyLocalPlayAreaChanged(area: PlayArea) {
+  localPlayAreaChangedHandlers.forEach(handler => handler(area));
+}
+
+/** Reclaim control of an existing seat after a mistaken new-player assignment. */
+export function playAsPlayer(targetClientId: number, gameId: string): boolean {
+  if (targetClientId === getLocalPlayerClientId()) return false;
+
+  const target = playAreas[targetClientId];
+  if (!target || !provider) return false;
+
+  const previous = getLocalPlayArea();
+  if (previous && previous.clientId !== targetClientId) {
+    previous.unsetAsLocalPlayArea();
+    previous.unsubscribeEvents(sendEvent);
+  }
+
+  target.setAsLocalPlayArea();
+  target.subscribeEvents(sendEvent);
+  setLocalPlayerClientId(targetClientId);
+  setIsIntitialized(true);
+  setIsSpectating(false);
+
+  const targetEntry = getPlayAreaPlayerEntry(target);
+  const adoptedSessionId = target.playerSessionId ?? targetEntry?.playerSessionId;
+  const playerSessionId = adoptedSessionId ?? getOrCreatePlayerSessionId(gameId);
+
+  if (adoptedSessionId) {
+    setPlayerSessionId(gameId, adoptedSessionId);
+  }
+  persistJoinBinding(gameId, { playerSessionId, clientId: targetClientId });
+  registerPlayerSession(playerSessionId, targetClientId);
+
+  provider.awareness.setLocalStateField('playerSessionId', playerSessionId);
+  if (targetEntry?.name) provider.awareness.setLocalStateField('name', targetEntry.name);
+  if (targetEntry?.life !== undefined) provider.awareness.setLocalStateField('life', targetEntry.life);
+  if (targetEntry?.commanderLife !== undefined) {
+    provider.awareness.setLocalStateField('commanderLife', targetEntry.commanderLife);
+  }
+
+  const color = targetEntry?.color ?? resolvePlayerColor({ name: targetEntry?.name });
+  provider.awareness.setLocalStateField('color', color);
+  syncLocalPlayerColor(color);
+
+  setHoverSignal(undefined);
+  setContextMenuSignal(undefined);
+  notifyLocalPlayAreaChanged(target);
+
+  return true;
 }
 
 export function isLocalCardGridSearchOpen() {
@@ -720,6 +790,7 @@ export function onConcede(clientId?: string) {
   const playArea = playAreas[clientId];
   playArea.destroy();
   setPlayAreas(clientId, undefined);
+  removePlayerFromTurnOrder(clientId);
   if (playerCount() < 2) {
     Object.values(playAreas).forEach(playArea => {
       playArea.destroy();
@@ -754,6 +825,7 @@ export function onKickPlayer(
   table.remove(playArea.mesh);
   playArea.destroy();
   setPlayAreas(targetClientId, undefined);
+  removePlayerFromTurnOrder(targetClientId);
 
   const isLocal = targetClientId === getLocalPlayerClientId();
   if (isLocal) {

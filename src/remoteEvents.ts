@@ -55,6 +55,11 @@ import {
   iterateGameLogEvents,
 } from './lib/playerSession';
 import {
+  appendPlayerToTurnOrder,
+  writeTurnOrderState,
+  type TurnOrderState,
+} from './lib/turnOrder';
+import {
   playCounterSoundForModifierChange,
   playDrawSound,
   playPlayCardSound,
@@ -533,6 +538,7 @@ function applyJoinEvent(event: Event) {
   table.add(playArea.mesh);
   setPlayAreas(clientID, playArea);
   setPlayerCount(count => count + 1);
+  appendPlayerToTurnOrder(clientID);
   readjustPlayAreas();
   return true;
 }
@@ -601,20 +607,8 @@ export async function waitForMultiplayerGameState(maxWaitMs = 15000): Promise<bo
 
     const localClientId = getLocalPlayerClientId() ?? provider?.awareness?.clientID;
     const missingBoards = countRemoteJoinsMissingPlayAreas(localClientId);
-    const remotePlayers = players().filter(
-      player => player.id !== provider?.awareness?.clientID && !player.entry?.isSpectating,
-    );
-    const awarenessMissingBoards = remotePlayers.some(player => !playAreas[player.id]);
 
-    if (missingBoards === 0 && !awarenessMissingBoards) {
-      return true;
-    }
-
-    if (
-      missingBoards === 0 &&
-      remotePlayers.length === 0 &&
-      getActiveJoinClientIdsFromLog().size <= 1
-    ) {
+    if (missingBoards === 0) {
       return true;
     }
 
@@ -644,14 +638,9 @@ const EVENTS = {
     readjustPlayAreas();
   },
   passTurn(event: ReturnType<typeof EventCreators.createPassTurnEvent>) {
-    if (event.clientID === provider.awareness.clientID) {
-      createAnnouncement(`You passed turn`);
-    } else {
-      let player = players().find(player => player.id === event.clientID);
-      if (player) {
-        createAnnouncement(`${player.entry.name} passed turn.`);
-      }
-    }
+    const turnOrder = event.payload?.turnOrder as TurnOrderState | undefined;
+    if (!turnOrder || !Array.isArray(turnOrder.order)) return;
+    writeTurnOrderState(turnOrder);
   },
   toggleTokenMenu(event: Event, playArea: PlayArea) {
     return playArea.toggleTokenMenu(event.payload);

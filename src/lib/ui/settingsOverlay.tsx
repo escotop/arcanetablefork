@@ -49,11 +49,15 @@ import {
   parseGameStateSnapshot,
 } from '../gameStateSnapshot';
 import {
+  dispatchGameEvent,
   getLocalPlayerClientId,
   kickPlayer,
+  playAsPlayer,
   playAreas,
 } from '../globals';
+import { createPassTurnEvent } from '../createEvents';
 import { getPlayAreaPlayerName } from '../playAreaNameTag';
+import { computeResetTurnOrderState, getActivePlayAreaClientIds, turnOrderState } from '../turnOrder';
 
 export default function SettingsOverlay(props: {
   isOpen: boolean;
@@ -68,6 +72,11 @@ export default function SettingsOverlay(props: {
   const [pendingKick, setPendingKick] = createSignal<{ clientId: number; name: string } | null>(
     null,
   );
+  const [playAsConfirmOpen, setPlayAsConfirmOpen] = createSignal(false);
+  const [pendingPlayAs, setPendingPlayAs] = createSignal<{ clientId: number; name: string } | null>(
+    null,
+  );
+  const [resetTurnConfirmOpen, setResetTurnConfirmOpen] = createSignal(false);
   const localPlayer = () =>
     players().find(player => player.id === provider?.awareness?.clientID)?.entry;
   const playerColor = () =>
@@ -82,6 +91,8 @@ export default function SettingsOverlay(props: {
         isLocal: playArea.isLocalPlayArea || playArea.clientId === getLocalPlayerClientId(),
       }))
       .sort((a, b) => Number(b.isLocal) - Number(a.isLocal) || a.name.localeCompare(b.name));
+
+  const canResetTurnOrder = () => getActivePlayAreaClientIds().length > 0;
 
   function setPlayerColor(color: string) {
     setSettings('playerColor', color);
@@ -144,6 +155,43 @@ export default function SettingsOverlay(props: {
     setKickConfirmOpen(false);
     setPendingKick(null);
     toast.success(`${target.name} was removed from the game`);
+  }
+
+  function requestPlayAs(clientId: number, name: string) {
+    if (clientId === getLocalPlayerClientId()) return;
+    setPendingPlayAs({ clientId, name });
+    setPlayAsConfirmOpen(true);
+  }
+
+  function confirmPlayAs() {
+    const target = pendingPlayAs();
+    const gameId = params.gameId;
+    if (!target || !gameId) return;
+
+    const switched = playAsPlayer(target.clientId, gameId);
+    setPlayAsConfirmOpen(false);
+    setPendingPlayAs(null);
+
+    if (switched) {
+      toast.success(`Now playing as ${target.name}`);
+      props.onClose();
+    } else {
+      toast.error(`Could not switch to ${target.name}`);
+    }
+  }
+
+  function requestResetTurnOrder() {
+    if (getActivePlayAreaClientIds().length === 0) {
+      toast.error('No players at the table yet');
+      return;
+    }
+    setResetTurnConfirmOpen(true);
+  }
+
+  function confirmResetTurnOrder() {
+    dispatchGameEvent(createPassTurnEvent(computeResetTurnOrderState()));
+    setResetTurnConfirmOpen(false);
+    toast.success('Turn order reset');
   }
 
   return (
@@ -251,18 +299,47 @@ export default function SettingsOverlay(props: {
                           </p>
                         </div>
                         <Show when={!player.isLocal}>
-                          <Button
-                            type='button'
-                            variant='destructive'
-                            size='sm'
-                            onClick={() => requestKickPlayer(player.clientId, player.name)}>
-                            Kick
-                          </Button>
+                          <div class='flex shrink-0 items-center gap-2'>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              onClick={() => requestPlayAs(player.clientId, player.name)}>
+                              Play as
+                            </Button>
+                            <Button
+                              type='button'
+                              variant='destructive'
+                              size='sm'
+                              onClick={() => requestKickPlayer(player.clientId, player.name)}>
+                              Kick
+                            </Button>
+                          </div>
                         </Show>
                       </li>
                     )}
                   </For>
                 </ul>
+              </Show>
+            </div>
+            <div class='mt-4 space-y-2'>
+              <Label>Turn order</Label>
+              <p class='text-sm text-muted-foreground'>
+                Randomize player order and start again from the first seat.
+              </p>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                disabled={!canResetTurnOrder()}
+                onClick={requestResetTurnOrder}>
+                Reset turn order
+              </Button>
+              <Show when={turnOrderState()?.order.length}>
+                <p class='text-sm text-muted-foreground'>
+                  Current order uses {turnOrderState()!.order.length} player
+                  {turnOrderState()!.order.length === 1 ? '' : 's'} at the table.
+                </p>
               </Show>
             </div>
             <div class='mt-4 space-y-2'>
@@ -340,6 +417,47 @@ export default function SettingsOverlay(props: {
             </Button>
             <Button type='button' variant='destructive' onClick={confirmKickPlayer}>
               Kick player
+            </Button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={playAsConfirmOpen()} onOpenChange={setPlayAsConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Play as {pendingPlayAs()?.name}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            You will control this player&apos;s board, deck, and hand on this device. Use this if
+            the game assigned you a new seat by mistake and you need to recover your original
+            table.
+          </AlertDialogDescription>
+          <div class='mt-4 flex justify-end gap-2'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => {
+                setPlayAsConfirmOpen(false);
+                setPendingPlayAs(null);
+              }}>
+              Cancel
+            </Button>
+            <Button type='button' onClick={confirmPlayAs}>
+              Play as this player
+            </Button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={resetTurnConfirmOpen()} onOpenChange={setResetTurnConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Reset turn order?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This shuffles the turn order for everyone at the table and gives the first seat to the
+            new starting player.
+          </AlertDialogDescription>
+          <div class='mt-4 flex justify-end gap-2'>
+            <Button type='button' variant='outline' onClick={() => setResetTurnConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button type='button' onClick={confirmResetTurnOrder}>
+              Reset turn order
             </Button>
           </div>
         </AlertDialogContent>
