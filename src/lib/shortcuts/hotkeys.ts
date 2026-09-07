@@ -5,6 +5,7 @@ import {
   getLocalPlayArea,
   hoverSignal,
   selection,
+  cardSearchModalOpen,
   dispatchGameEvent,
   zonesById,
   cardSearchModalOpen,
@@ -75,6 +76,7 @@ export function HotKeys() {
 
     const onSpanishPreviewKeyDown = (event: KeyboardEvent) => {
       if (event.repeat) return;
+      if (cardSearchModalOpen()) return;
       if (event.key.toLowerCase() !== 't') return;
       if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
 

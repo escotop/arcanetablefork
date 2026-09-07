@@ -30,8 +30,19 @@ import {
 } from '../globals';
 import { transferCard } from '../transferCard';
 import { getCardImage, cloneCard, setCardData } from '../card';
+import { supportsCardPrintings } from '../deck';
 import { playDrawSound } from '../sounds';
+import {
+  fetchSpanishPrintingImageUrl,
+  SPANISH_PREVIEW_NOT_FOUND_MESSAGE,
+} from '../spanishCardPreview';
 import useCardGrouping from './deckEditor/cardGroupings';
+import LoaderIcon from 'lucide-solid/icons/loader-circle';
+
+type ModalSpanishPreviewState =
+  | { phase: 'loading' }
+  | { phase: 'ready'; url: string }
+  | { phase: 'not-found' };
 
 interface CardSearchModalProps {
   open: boolean;
@@ -47,6 +58,9 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
   const [viewMode, setViewMode] = createSignal<'grid' | 'list'>('grid');
   const [hoveredCard, setHoveredCard] = createSignal<Card | null>(null);
   const [flippedCardIds, setFlippedCardIds] = createSignal<Set<string>>(new Set());
+  const [spanishPreviewByCardId, setSpanishPreviewByCardId] = createSignal<
+    Record<string, ModalSpanishPreviewState>
+  >({});
   const [contextMenuCard, setContextMenuCard] = createSignal<Card | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = createSignal<{ x: number; y: number } | null>(null);
   const [cardsPerRow, setCardsPerRow] = createSignal(
@@ -180,6 +194,43 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
       }
       return next;
     });
+  }
+
+  function getSpanishPreviewState(cardId: string) {
+    return spanishPreviewByCardId()[cardId];
+  }
+
+  function clearModalSpanishPreview(cardId: string) {
+    setSpanishPreviewByCardId(prev => {
+      if (!prev[cardId]) return prev;
+      const next = { ...prev };
+      delete next[cardId];
+      return next;
+    });
+  }
+
+  async function toggleModalSpanishPreview(card: Card) {
+    if (!supportsCardPrintings() || !card.detail?.name) return;
+
+    const current = getSpanishPreviewState(card.id);
+    if (current?.phase === 'loading') return;
+
+    if (current?.phase === 'ready' || current?.phase === 'not-found') {
+      clearModalSpanishPreview(card.id);
+      return;
+    }
+
+    setSpanishPreviewByCardId(prev => ({ ...prev, [card.id]: { phase: 'loading' } }));
+
+    const url = await fetchSpanishPrintingImageUrl(card);
+    setSpanishPreviewByCardId(prev => ({
+      ...prev,
+      [card.id]: url ? { phase: 'ready', url } : { phase: 'not-found' },
+    }));
+  }
+
+  function clearModalSpanishPreviews() {
+    setSpanishPreviewByCardId({});
   }
 
   function handleFlipCard(card: Card) {
@@ -369,6 +420,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     if (!props.open) {
       setHoveredCard(null);
       setFlippedCardIds(new Set());
+      clearModalSpanishPreviews();
     }
   });
 
@@ -377,6 +429,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     setPeekTypeFilter(null);
     setHoveredCard(null);
     setFlippedCardIds(new Set());
+    clearModalSpanishPreviews();
   });
 
   const getCurrentCardImage = (card: Card) => {
@@ -385,6 +438,11 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
       if (backFace?.image_uris?.normal || backFace?.image_uris?.large) {
         return backFace.image_uris.large || backFace.image_uris.normal;
       }
+    }
+
+    const spanishPreview = getSpanishPreviewState(card.id);
+    if (spanishPreview?.phase === 'ready') {
+      return spanishPreview.url;
     }
 
     return getCardImage(card);
@@ -436,14 +494,36 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
         } else {
           dismissModal();
         }
+        return;
       }
-      
+
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+
       // Tecla F para voltear la carta en hover
       if (e.key.toLowerCase() === 'f' && hoveredCard()) {
         const card = hoveredCard();
         if (card?.detail?.card_faces && card.detail.card_faces.length >= 2) {
+          e.preventDefault();
+          e.stopPropagation();
           toggleCardFlip(card);
         }
+        return;
+      }
+
+      if (
+        e.key.toLowerCase() === 't' &&
+        !e.shiftKey &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        hoveredCard()
+      ) {
+        const card = hoveredCard();
+        if (!card || !supportsCardPrintings()) return;
+        e.preventDefault();
+        e.stopPropagation();
+        void toggleModalSpanishPreview(card);
       }
     };
     
@@ -642,6 +722,18 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                               class='w-full h-full object-cover'
                               loading='lazy'
                             />
+                            <Show when={getSpanishPreviewState(card.id)?.phase === 'loading'}>
+                              <div class='absolute inset-0 flex items-center justify-center bg-black/50'>
+                                <LoaderIcon class='size-8 animate-spin text-white' />
+                              </div>
+                            </Show>
+                            <Show when={getSpanishPreviewState(card.id)?.phase === 'not-found'}>
+                              <div class='absolute inset-0 flex items-center justify-center bg-black/60 p-2'>
+                                <p class='text-xs text-white text-center'>
+                                  {SPANISH_PREVIEW_NOT_FOUND_MESSAGE}
+                                </p>
+                              </div>
+                            </Show>
                             <div class='absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity'>
                               <p class='text-xs text-white font-semibold truncate'>
                                 {card.detail.name}
@@ -650,6 +742,9 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                                 <p class='text-xs text-white/80 mt-0.5'>
                                   Press F to flip card
                                 </p>
+                              </Show>
+                              <Show when={supportsCardPrintings()}>
+                                <p class='text-xs text-white/80 mt-0.5'>Press T for Spanish</p>
                               </Show>
                             </div>
                           </div>
@@ -677,18 +772,37 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                             onContextMenu={(e) => handleCardContextMenu(card, e)}
                             onMouseEnter={() => setHoveredCard(card)}
                             onMouseLeave={() => setHoveredCard(null)}>
-                            <img
-                              src={getCurrentCardImage(card)}
-                              alt={card.detail.name}
-                              class='w-16 h-22 object-cover rounded'
-                              loading='lazy'
-                            />
+                            <div class='relative shrink-0'>
+                              <img
+                                src={getCurrentCardImage(card)}
+                                alt={card.detail.name}
+                                class='w-16 h-22 object-cover rounded'
+                                loading='lazy'
+                              />
+                              <Show when={getSpanishPreviewState(card.id)?.phase === 'loading'}>
+                                <div class='absolute inset-0 flex items-center justify-center rounded bg-black/50'>
+                                  <LoaderIcon class='size-5 animate-spin text-white' />
+                                </div>
+                              </Show>
+                              <Show when={getSpanishPreviewState(card.id)?.phase === 'not-found'}>
+                                <div class='absolute inset-0 flex items-center justify-center rounded bg-black/60 p-1'>
+                                  <p class='text-[10px] text-white text-center leading-tight'>
+                                    {SPANISH_PREVIEW_NOT_FOUND_MESSAGE}
+                                  </p>
+                                </div>
+                              </Show>
+                            </div>
                             <div class='flex-1 min-w-0'>
                               <div class='flex items-baseline gap-2'>
                                 <p class='font-semibold truncate'>{card.detail.name}</p>
                                 <Show when={hasDoubleFace()}>
                                   <p class='text-xs text-muted-foreground whitespace-nowrap'>
                                     (Press F to flip)
+                                  </p>
+                                </Show>
+                                <Show when={supportsCardPrintings()}>
+                                  <p class='text-xs text-muted-foreground whitespace-nowrap'>
+                                    (Press T for Spanish)
                                   </p>
                                 </Show>
                               </div>
