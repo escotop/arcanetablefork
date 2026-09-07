@@ -70,6 +70,20 @@ export function getBracketTagLabel(bracket: number | undefined) {
   return `Bracket ${bracket}`;
 }
 
+export function compareDecksByBracket(
+  left: { bracketEstimate?: number; name: string },
+  right: { bracketEstimate?: number; name: string },
+) {
+  const leftBracket = left.bracketEstimate;
+  const rightBracket = right.bracketEstimate;
+
+  if (leftBracket == null && rightBracket == null) return left.name.localeCompare(right.name);
+  if (leftBracket == null) return 1;
+  if (rightBracket == null) return -1;
+  if (leftBracket !== rightBracket) return leftBracket - rightBracket;
+  return left.name.localeCompare(right.name);
+}
+
 export function isSuccessfulBracketEstimate(result: CommanderBracketEstimate) {
   if ((result.validation?.errors?.length ?? 0) > 0) return false;
   const bracket = getDisplayBracket(result.bracket_analysis);

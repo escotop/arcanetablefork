@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import {
   buildCommanderBracketPayload,
   buildCommanderBracketShareUrl,
+  compareDecksByBracket,
   formatCommanderBracketDeckListLine,
   getBracketEstimateFromResult,
   getBracketTagLabel,
@@ -77,4 +78,24 @@ test('getBracketEstimateFromResult requires a clean estimate', () => {
 test('getBracketTagLabel uses cEDH for bracket 5', () => {
   expect(getBracketTagLabel(5)).toBe('cEDH');
   expect(getBracketTagLabel(2)).toBe('Bracket 2');
+});
+
+test('compareDecksByBracket sorts by bracket then name', () => {
+  const decks = [
+    { name: 'Zebra', bracketEstimate: 2 },
+    { name: 'Alpha', bracketEstimate: 3 },
+    { name: 'No bracket' },
+    { name: 'Beta', bracketEstimate: 3 },
+    { name: 'Exalted', bracketEstimate: 5 },
+    { name: 'Casual', bracketEstimate: 1 },
+  ].sort(compareDecksByBracket);
+
+  expect(decks.map(deck => deck.name)).toEqual([
+    'Casual',
+    'Zebra',
+    'Alpha',
+    'Beta',
+    'Exalted',
+    'No bracket',
+  ]);
 });

@@ -10,6 +10,7 @@ import { Deck } from '~/lib/constants';
 import { createDeckStore } from '~/lib/deckStore';
 import { getDeckCoverMetadata } from '~/lib/deck';
 import { DeckEditor } from '~/lib/ui/deckEditor';
+import { compareDecksByBracket } from '~/lib/commanderBracket';
 import BracketEstimateTag from '~/lib/ui/bracketEstimateTag';
 import { ManageDecksDropdown } from '~/lib/ui/manageDecksButton';
 import PencilIcon from 'lucide-solid/icons/pencil';
@@ -31,7 +32,7 @@ function listDeckIds(store: { decks: Record<string, Deck>; systems: Record<strin
   return [...ids]
     .map(id => store.decks[id])
     .filter(Boolean)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort(compareDecksByBracket);
 }
 
 const LandingPage: Component = () => {
