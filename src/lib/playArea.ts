@@ -42,6 +42,7 @@ import { Deck as DeckData, DetailedCardEntry } from './constants';
 import { profileAsync } from './loadProfile';
 import { collectTokenPartIds, mergeTokenPrintings, resolveTokensByIds } from './deckTokens';
 import {
+  createCreateCardEvent,
   createDismissZoneEvent,
   createFlipEvent,
   createTapEvent,
@@ -60,6 +61,25 @@ const BATTLEFIELD_TAG_SURFACE_Z = CARD_THICKNESS / 4 + 0.1;
 const BATTLEFIELD_TAG_Z_LIFT = 2;
 /** CSS3DRenderer centers elements on the pivot; keep scale modest on top of px sizing. */
 const BATTLEFIELD_TAG_SCALE = 0.17 * 1.3;
+
+export function spawnTokenOnBattlefield(
+  playArea: PlayArea,
+  referenceCard: Card,
+  options?: { positionFromZone?: CardZone<any> },
+) {
+  const card = cloneCard(referenceCard, nanoid());
+  setCardData(card.mesh, 'isPublic', true);
+  setCardData(card.mesh, 'isToken', true);
+
+  if (options?.positionFromZone) {
+    options.positionFromZone.mesh.localToWorld(card.mesh.position);
+  }
+
+  playArea.battlefieldZone.addCard(card);
+  updateModifiers(card);
+  sendEvent(createCreateCardEvent(card, playArea.battlefieldZone.id));
+  return card;
+}
 
 interface RemoteZoneState {
   id: string;

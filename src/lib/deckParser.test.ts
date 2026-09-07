@@ -398,6 +398,20 @@ test('card with paren set and collector number', () => {
   });
 });
 
+test('card with promo collector suffix and foil marker', () => {
+  expect(card.run('1 Bringer of the Last Gift (PLCI) 94p').result).toMatchObject({
+    name: 'Bringer of the Last Gift',
+    set: 'plci',
+    collector_number: '94p',
+  });
+
+  expect(card.run('1 Blood Crypt (ECL) 349 *F*').result).toMatchObject({
+    name: 'Blood Crypt',
+    set: 'ecl',
+    collector_number: '349',
+  });
+});
+
 test('arena format deck with paren set and bare collector number', () => {
   const result = deck.run(`1 Swiftfoot Boots (FDN) 258
 1 The Scarab God (DRC) 120

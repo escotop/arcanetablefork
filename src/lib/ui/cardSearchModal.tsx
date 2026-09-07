@@ -9,7 +9,6 @@ import {
   Show,
   Switch,
 } from 'solid-js';
-import { nanoid } from 'nanoid';
 import { Command, CommandInput } from '~/components/ui/command';
 import { Dialog, DialogContent } from '~/components/ui/dialog';
 import { cn } from '~/lib/utils';
@@ -29,7 +28,8 @@ import {
   setPeekTypeFilter,
 } from '../globals';
 import { transferCard } from '../transferCard';
-import { getCardImage, cloneCard, setCardData } from '../card';
+import { getCardImage } from '../card';
+import { spawnTokenOnBattlefield } from '../playArea';
 import { supportsCardPrintings } from '../deck';
 import { playDrawSound } from '../sounds';
 import {
@@ -296,6 +296,14 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     const area = playArea();
     if (!area) return;
 
+    if (props.zone === 'tokenSearch' && zoneName === 'battlefield') {
+      spawnTokenOnBattlefield(area, card);
+      playDrawSound();
+      setLocalCards(prev => prev.filter(c => c.id !== card.id));
+      closeContextMenu();
+      return;
+    }
+
     // Determinar la zona de origen
     let fromZone = getZone();
     if (!fromZone) return;
@@ -343,10 +351,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     
     // Si es un token, lo clonamos al campo de batalla en lugar de moverlo a la mano
     if (props.zone === 'tokenSearch') {
-      const clonedCard = cloneCard(card, nanoid());
-      setCardData(clonedCard.mesh, 'isPublic', true);
-      setCardData(clonedCard.mesh, 'isToken', true);
-      area.battlefieldZone.addCard(clonedCard);
+      spawnTokenOnBattlefield(area, card);
       playDrawSound();
       return;
     }

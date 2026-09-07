@@ -275,15 +275,27 @@ function findResolvedImportCard(
   entry: CardEntry,
   cards: Record<string, DetailedCardEntry>,
 ) {
-  return (
-    cards[getCardKey(entry)] ??
-    Object.values(cards).find(
-      card =>
-        card.name === entry.name &&
-        (!entry.set ||
-          normalizePrintingSetCode(card.set) === normalizePrintingSetCode(entry.set)),
-    )
-  );
+  const direct = cards[getCardKey(entry)];
+  if (direct) return direct;
+
+  return Object.values(cards).find(card => {
+    if (!cardNamesMatch(card.name, entry.name)) return false;
+
+    if (
+      entry.set &&
+      normalizePrintingSetCode(card.set) !== normalizePrintingSetCode(entry.set)
+    ) {
+      return false;
+    }
+
+    const requestedCollector = normalizePrintingCollectorNumber(entry.collector_number);
+    const resolvedCollector = normalizePrintingCollectorNumber(card.collector_number);
+    if (requestedCollector && resolvedCollector && requestedCollector !== resolvedCollector) {
+      return false;
+    }
+
+    return true;
+  });
 }
 
 export function buildImportedInPlay(
@@ -359,5 +371,13 @@ export async function fetchCardInfoForImport(
     }
   }
 
-  return cards;
+  const orderedCards: Record<string, DetailedCardEntry> = {};
+  for (const entry of entries) {
+    const resolved = findResolvedImportCard(entry, cards);
+    if (resolved) {
+      orderedCards[getCardKey(resolved)] = resolved;
+    }
+  }
+
+  return orderedCards;
 }

@@ -4,7 +4,7 @@ import { Button } from '~/components/ui/button';
 import { Command, CommandInput } from '~/components/ui/command';
 import { Menubar, MenubarContent, MenubarMenu, MenubarTrigger } from '~/components/ui/menubar';
 import NumberFieldMenuItem from '~/components/ui/number-field-menu-item';
-import { cleanupCard, cloneCard, setCardData, updateModifiers } from '../card';
+import { cleanupCard } from '../card';
 import { Card } from '../constants';
 import {
   cardsById,
@@ -12,9 +12,9 @@ import {
   getLocalPlayArea,
   hoverSignal,
   peekFilterText,
-  sendEvent,
   setPeekFilterText,
 } from '../globals';
+import { spawnTokenOnBattlefield } from '../playArea';
 import styles from './peekMenu.module.css';
 
 const TokenSearchMenu: Component = props => {
@@ -53,22 +53,7 @@ const TokenSearchMenu: Component = props => {
   function addToBattlefield(referenceCard: Card) {
     const area = playArea();
     if (!area) return;
-    let card = cloneCard(referenceCard, nanoid());
-    setCardData(card.mesh, 'isToken', true);
-
-    let battlefield = area.battlefieldZone;
-    let tokenZone = area.tokenSearchZone;
-    tokenZone.mesh.localToWorld(card.mesh.position);
-    battlefield.addCard(card);
-    updateModifiers(card);
-
-    sendEvent({
-      type: 'createCard',
-      payload: {
-        userData: card.mesh.userData,
-        zoneId: battlefield.id,
-      },
-    });
+    spawnTokenOnBattlefield(area, referenceCard, { positionFromZone: area.tokenSearchZone });
   }
 
   return (

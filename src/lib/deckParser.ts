@@ -21,14 +21,16 @@ const collectorNumber = a
   .sequenceOf([
     inlineWhitespace,
     a.possibly(a.char('#')),
-    a.regex(/^[0-9]+/),
+    a.regex(/^[0-9]+[a-z]*/i),
   ])
-  .map(r => r?.[2] || undefined);
+  .map(r => r?.[2]?.toLowerCase() || undefined);
 
 function extractCollectorNumber(segment?: string | null) {
   if (!segment) return undefined;
-  const match = segment.match(/(?:^|\))\s*#?\s*([0-9]+)(?=\s|$)/);
-  return match?.[1];
+  const match = segment.match(
+    /(?:^|\))\s*#?\s*([0-9]+[a-z]*)(?:\s*\*[A-Za-z]+\*)?(?=\s*$)/i,
+  );
+  return match?.[1]?.toLowerCase();
 }
 
 function normalizeSetCode(set?: string) {

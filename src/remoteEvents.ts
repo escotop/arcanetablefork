@@ -771,13 +771,22 @@ const EVENTS = {
     }
   },
   createCard(event: Event, playArea: PlayArea) {
-    let card = cloneCard({ detail: event.payload.userData.card.detail }, event.payload.userData.id);
-    if (event.payload.userData.isToken) {
+    const userData = event.payload.userData as Record<string, unknown> & {
+      id?: string;
+      isToken?: boolean;
+      card?: Card;
+    };
+    const cardPayload = userData.card;
+    if (!cardPayload?.detail) return;
+
+    let card = cloneCard(cardPayload, String(userData.id));
+    card.clientId = playArea.clientId;
+    if (userData.isToken) {
       setCardData(card.mesh, 'isToken', true);
       updateModifiers(card);
     }
 
-    let zone = zonesById.get(event.payload.zoneId);
+    let zone = resolveZoneFromEvent(event.payload.zoneId as string, playArea);
     let options = {};
 
     let p = event.payload?.addOptions?.position;

@@ -164,3 +164,20 @@ export function createWaterdropEvent(
     },
   } as const;
 }
+
+export function createCreateCardEvent(card: Card, zoneId: string) {
+  expect(!!card, 'card is undefined');
+  if (!card.mesh) {
+    const ownerId = card.clientId ?? getLocalPlayerClientId();
+    if (ownerId !== undefined) ensureCardMesh(card, ownerId);
+  }
+  expect(!!card.mesh, 'card mesh is undefined');
+
+  return {
+    type: 'createCard',
+    payload: {
+      userData: serializeCardUserDataForLog(card.mesh.userData),
+      zoneId,
+    },
+  } as const;
+}
