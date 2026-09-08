@@ -51,21 +51,20 @@ import CardList from './deckEditor/cardList';
 import DeckGridCard from './deckEditor/deckGridCard';
 import PrintingPickerModal from './deckEditor/printingPickerModal';
 import { CustomCardArtOption, applyCustomArtToEntry, normalizeTextureUrl } from '~/lib/customCardArt';
-import random from 'lodash-es/random';
 import { Command, CommandInput } from '~/components/ui/command';
-import { ToggleGroup, ToggleGroupItem } from '~/components/ui/toggle-group';
 import { capitalize, debounce } from 'lodash-es';
-import { createStore, reconcile, SetStoreFunction, unwrap } from 'solid-js/store';
-import { getCardKey, hydrateDeck, serializeDeck } from '../deckStore';
-import { useCardSystemContext } from '../cardSystemContext';
-import { MTG_CARD_SYSTEM } from '../mtgCardSystem';
+import random from 'lodash-es/random';
 import AddIcon from 'lucide-solid/icons/plus';
 import SubIcon from 'lucide-solid/icons/minus';
 import SearchIcon from 'lucide-solid/icons/search';
 import ImagesIcon from 'lucide-solid/icons/images';
+import { createStore, reconcile, SetStoreFunction, unwrap } from 'solid-js/store';
+import { getCardKey, hydrateDeck, serializeDeck } from '../deckStore';
+import { useCardSystemContext } from '../cardSystemContext';
+import { MTG_CARD_SYSTEM } from '../mtgCardSystem';
 import { useSearchParams } from '@solidjs/router';
 import { trackDeep } from '@solid-primitives/deep';
-import DownloadIcon from 'lucide-solid/icons/download';
+import CopyIcon from 'lucide-solid/icons/copy';
 import PrinterIcon from 'lucide-solid/icons/printer';
 import {
   Select,
@@ -90,6 +89,7 @@ import { Alert, AlertDescription, AlertTitle } from '~/components/ui/alert';
 import intersectionObserver from '../intersectionObserver';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import DeckImportDialog from './deckEditor/deckImportDialog';
+import ExportDeckModal from './deckEditor/exportDeckModal';
 import PrintDeckModal from './deckEditor/printDeckModal';
 import useCardGrouping, { getCardTypeCategory } from './deckEditor/cardGroupings';
 import CommanderBracketModal from './deckEditor/commanderBracketModal';
@@ -134,13 +134,17 @@ const NEW_DECK_PRINTING_TIP_KEY = 'mtgplayer-deck-editor-printing-tip-seen';
 
 export const DeckEditor: Component<Props> = props => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [searchResults, setSearchResults] = createSignal();
+  const [searchResults, setSearchResults] = createSignal<DetailedCardEntry[]>();
   const [cardSystemStore, { setCardSystem }] = useCardSystemContext();
   const [isDirty, setIsDirty] = createSignal(false);
   const [printingPickerKey, setPrintingPickerKey] = createSignal<string>();
+  const [printingPickerSection, setPrintingPickerSection] = createSignal<'cards' | 'sideboard'>(
+    'cards',
+  );
   const [tokenPrintingPickerKey, setTokenPrintingPickerKey] = createSignal<string>();
   const [importDialogOpen, setImportDialogOpen] = createSignal(false);
   const [printDialogOpen, setPrintDialogOpen] = createSignal(false);
+  const [exportDialogOpen, setExportDialogOpen] = createSignal(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
   const [closeConfirmDialogOpen, setCloseConfirmDialogOpen] = createSignal(false);
   const [bracketModalOpen, setBracketModalOpen] = createSignal(false);
@@ -149,13 +153,13 @@ export const DeckEditor: Component<Props> = props => {
   const [bracketResult, setBracketResult] = createSignal<CommanderBracketEstimate>();
   const [bracketShareUrl, setBracketShareUrl] = createSignal<string>();
   const [newDeckTipOpen, setNewDeckTipOpen] = createSignal(false);
-  const [typeFilter, setTypeFilter] = createSignal<string | null>(null);
+  const [typeFilter, setTypeFilter] = createSignal('deck');
   let formRef: HTMLFormElement;
 
   const [deck, setDeck] = createStore<Deck>(
     props.deck?.id
       ? structuredClone(unwrap(props.deck))
-      : { cards: {}, inPlay: {}, tokens: {}, system: MTG_CARD_SYSTEM.id },
+      : { cards: {}, inPlay: {}, sideboard: {}, tokens: {}, system: MTG_CARD_SYSTEM.id },
   );
 
   const getDeckList = createMemo(() => {
@@ -169,6 +173,25 @@ export const DeckEditor: Component<Props> = props => {
     trackDeep(deck.inPlay);
     return Object.values(deck?.inPlay || {});
   });
+
+  const getSideboardList = createMemo(() => {
+    trackDeep(deck.sideboard);
+    return sortCommandersFirst(Object.values(deck?.sideboard || {}));
+  });
+
+  const sideboardCardKeys = createMemo(() =>
+    Object.keys(deck.sideboard ?? {}).sort((left, right) =>
+      (deck.sideboard?.[left]?.name ?? '').localeCompare(deck.sideboard?.[right]?.name ?? ''),
+    ),
+  );
+
+  const deckQtyCount = createMemo(() =>
+    getDeckList().reduce((sum, card) => sum + (card.qty ?? 0), 0),
+  );
+
+  const sideboardQtyCount = createMemo(() =>
+    getSideboardList().reduce((sum, card) => sum + (card.qty ?? 0), 0),
+  );
 
   onMount(async () => {
     if (!props.deck?.id && !localStorage.getItem(NEW_DECK_PRINTING_TIP_KEY)) {
@@ -190,8 +213,11 @@ export const DeckEditor: Component<Props> = props => {
       () => deck.system,
       () => {
         rehydrateDeck(unwrap(deck));
-        setTypeFilter(null);
-        setSearchParams({ q: undefined, type: undefined }, { replace: true });
+        setTypeFilter('deck');
+        setSearchParams(
+          { q: undefined, page: undefined, totalPages: undefined, catalogType: undefined },
+          { replace: true },
+        );
       },
     ),
   );
@@ -224,6 +250,15 @@ export const DeckEditor: Component<Props> = props => {
 
   function closePrintDialog() {
     setPrintDialogOpen(false);
+  }
+
+  function openExportDialog() {
+    if (!deckExportContent().trim()) return;
+    setExportDialogOpen(true);
+  }
+
+  function closeExportDialog() {
+    setExportDialogOpen(false);
   }
 
   function getDeckName() {
@@ -266,6 +301,65 @@ export const DeckEditor: Component<Props> = props => {
     (updateDeck as any)(...params);
   };
 
+  const updateSideboardCards: SetStoreFunction<Deck> = (...params: any[]) => {
+    invalidateBracketEstimate();
+    (updateDeck as any)(...params);
+  };
+
+  function removeFromInPlay(entry: DetailedCardEntry) {
+    const inPlay = deck.inPlay ?? {};
+    const matchKey = Object.keys(inPlay).find(
+      key =>
+        key === getCardKey(entry) ||
+        key === entry.name ||
+        inPlay[key].id === entry.id,
+    );
+    if (matchKey) updateDeck('inPlay', matchKey, undefined);
+  }
+
+  function sendCardToSideboard(storageKey: string) {
+    const entry = deck.cards[storageKey];
+    if (!entry?.qty) return;
+
+    invalidateBracketEstimate();
+
+    const remaining = entry.qty - 1;
+    if (remaining <= 0) {
+      updateDeck('cards', storageKey, undefined);
+      removeFromInPlay(entry);
+    } else {
+      updateDeck('cards', storageKey, 'qty', remaining);
+    }
+
+    const sideboardEntry = deck.sideboard?.[storageKey];
+    if (sideboardEntry?.qty) {
+      updateDeck('sideboard', storageKey, 'qty', (qty = 0) => qty + 1);
+    } else {
+      updateDeck('sideboard', storageKey, { ...entry, qty: 1 });
+    }
+  }
+
+  function sendCardToDeck(storageKey: string) {
+    const entry = deck.sideboard?.[storageKey];
+    if (!entry?.qty) return;
+
+    invalidateBracketEstimate();
+
+    const remaining = entry.qty - 1;
+    if (remaining <= 0) {
+      updateDeck('sideboard', storageKey, undefined);
+    } else {
+      updateDeck('sideboard', storageKey, 'qty', remaining);
+    }
+
+    const deckEntry = deck.cards[storageKey];
+    if (deckEntry?.qty) {
+      updateDeckCards('cards', storageKey, 'qty', (qty = 0) => qty + 1);
+    } else {
+      updateDeckCards('cards', storageKey, { ...entry, qty: 1 });
+    }
+  }
+
   function withPrintingImages(
     entry: DetailedCardEntry,
     printing: CardPrintingOption,
@@ -300,8 +394,12 @@ export const DeckEditor: Component<Props> = props => {
     updateDeck('inPlay', nextKey, { ...nextEntry, qty });
   }
 
-  function changeCardCustomArt(storageKey: string, option: CustomCardArtOption) {
-    const previous = deck.cards[storageKey];
+  function changeCardCustomArt(
+    storageKey: string,
+    option: CustomCardArtOption,
+    section: 'cards' | 'sideboard' = 'cards',
+  ) {
+    const previous = deck[section]?.[storageKey];
     if (!previous) return;
 
     const nextEntry: DetailedCardEntry = applyCustomArtToEntry({
@@ -310,8 +408,10 @@ export const DeckEditor: Component<Props> = props => {
       detail: previous.detail,
     });
 
-    updateDeck('cards', storageKey, nextEntry);
-    updateInPlayMirror(previous, nextEntry);
+    updateDeck(section, storageKey, nextEntry);
+    if (section === 'cards') {
+      updateInPlayMirror(previous, nextEntry);
+    }
   }
 
   function changeTokenCustomArt(tokenKey: string, option: CustomCardArtOption) {
@@ -432,8 +532,12 @@ export const DeckEditor: Component<Props> = props => {
     setBracketShareUrl(undefined);
   }
 
-  async function changeCardPrinting(storageKey: string, printing: CardPrintingOption) {
-    const previous = deck.cards[storageKey];
+  async function changeCardPrinting(
+    storageKey: string,
+    printing: CardPrintingOption,
+    section: 'cards' | 'sideboard' = 'cards',
+  ) {
+    const previous = deck[section]?.[storageKey];
     if (!previous) return;
 
     const qty = previous.qty;
@@ -466,14 +570,20 @@ export const DeckEditor: Component<Props> = props => {
       qty,
       categories: previous.categories ?? updated.categories ?? [],
     };
-    updateDeck('cards', storageKey, nextEntry);
-    updateInPlayMirror(previous, nextEntry);
+    updateDeck(section, storageKey, nextEntry);
+    if (section === 'cards') {
+      updateInPlayMirror(previous, nextEntry);
+    }
   }
 
-  function openPrintingPicker(storageKey: string) {
-    if (!supportsCardPrintings() || !(deck.cards[storageKey]?.qty > 0)) return;
-    const entry = deck.cards[storageKey];
+  function openPrintingPicker(
+    storageKey: string,
+    section: 'cards' | 'sideboard' = 'cards',
+  ) {
+    if (!supportsCardPrintings() || !(deck[section]?.[storageKey]?.qty > 0)) return;
+    const entry = deck[section]?.[storageKey];
     if (entry?.name) prefetchCardPrintings(entry.name);
+    setPrintingPickerSection(section);
     setPrintingPickerKey(storageKey);
   }
 
@@ -530,49 +640,111 @@ export const DeckEditor: Component<Props> = props => {
         dialog: undefined,
         src: undefined,
         q: undefined,
-        type: undefined,
+        catalogType: undefined,
       },
       { replace: true },
     );
   });
 
-  function getSearchString(systemId: string, params: URLSearchParams) {
-    return [systemId, params.get('q'), params.getAll('type').sort()].join(':');
+  function tabButtonClass(active: boolean) {
+    return cn(styles.tabButton, active && styles.tabButtonActive);
   }
 
-  async function loadMoreResults(entry: IntersectionObserverEntry) {
+  const searchQuery = () => (searchParams.q ?? '').trim().toLowerCase();
+
+  function entryMatchesSearch(entry: DetailedCardEntry | undefined) {
+    const query = searchQuery();
+    if (!query) return true;
+    if (!entry?.qty) return false;
+
+    const haystack = [entry.name, entry.detail?.type_line, entry.detail?.oracle_text, entry.set]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return haystack.includes(query);
+  }
+
+  const CATALOG_TYPE_ALL = 'all';
+
+  const isCatalogTab = () => typeFilter() === 'all';
+  const isSideboardTab = () => typeFilter() === 'sideboard';
+  const showSearchTypeFilter = () => isCatalogTab() || isSideboardTab();
+  const catalogTypeFilter = () => {
+    const raw = searchParams.catalogType as string | undefined;
+    if (!raw || raw === CATALOG_TYPE_ALL) return CATALOG_TYPE_ALL;
+    return raw;
+  };
+  const hasCatalogTypeFilter = () => catalogTypeFilter() !== CATALOG_TYPE_ALL;
+  const isSearching = () => {
+    const hasTextSearch = searchQuery().length > 0;
+    const hasTypeFilter = hasCatalogTypeFilter();
+    if (isCatalogTab() || isSideboardTab()) {
+      return hasTextSearch || hasTypeFilter;
+    }
+    return hasTextSearch;
+  };
+  const searchPlaceholder = () =>
+    isCatalogTab() ? 'Search all MTG cards...' : 'Search in this tab...';
+
+  type CatalogTypeOption = { value: string; label: string };
+
+  const catalogTypeOptions = createMemo((): CatalogTypeOption[] => [
+    { value: CATALOG_TYPE_ALL, label: 'All types' },
+    ...(cardSystem.types ?? []).map(type => ({
+      value: type,
+      label: capitalize(type),
+    })),
+  ]);
+
+  const selectedCatalogType = createMemo(
+    () =>
+      catalogTypeOptions().find(option => option.value === catalogTypeFilter()) ??
+      catalogTypeOptions()[0],
+  );
+
+  function getSearchString(systemId: string, params: URLSearchParams) {
+    return [systemId, params.get('q'), params.get('catalogType')].join(':');
+  }
+
+  async function loadMoreResults() {
+    if (!isCatalogTab()) return;
+
     const q = (unwrap(searchParams.q) ?? '') as string;
-    const t = unwrap(searchParams.type);
+    const catalogType = unwrap(searchParams.catalogType) as string | undefined;
     const page = unwrap(searchParams.page) as string;
     const totalPages = unwrap(searchParams.totalPages) as string;
-    if (!q?.length && !t?.length) return;
+    if (!q?.length && (!catalogType || catalogType === CATALOG_TYPE_ALL)) return;
     if (!page?.length) return;
 
     if (totalPages && parseInt(page) >= parseInt(totalPages)) {
       return;
     }
 
-    debouncedOnSearch(q, t, parseInt(page) + 1);
+    debouncedOnSearch(q, parseInt(page) + 1, catalogType);
   }
 
   let lastSearchString: string | undefined;
   let cancelSearch = false;
 
-  function onSearch(q?: string, t?: string | string[], page?: number) {
-    if (cancelSearch) return;
+  function onSearch(q?: string, page?: number, catalogType?: string) {
+    if (cancelSearch || !isCatalogTab()) return;
 
-    const types = Array.isArray(t) ? t : t ? [t] : [];
     const searchPage = page ?? 1;
-
-    let searchString = getSearchString(cardSystem.id, new URLSearchParams({
-      q: q ?? '',
-      ...(types.length ? Object.fromEntries(types.map(type => ['type', type])) : {}),
-    }));
+    const types =
+      catalogType && catalogType !== CATALOG_TYPE_ALL ? [catalogType] : [];
+    const searchString = getSearchString(
+      cardSystem.id,
+      new URLSearchParams({
+        q: q ?? '',
+        ...(catalogType ? { catalogType } : {}),
+      }),
+    );
 
     const isSearchSame = searchString === lastSearchString;
     lastSearchString = searchString;
 
-    let outdatedSearch = page
+    const outdatedSearch = page
       ? page <= parseInt(searchParams.page ?? '')
       : searchParams.page && !page;
 
@@ -590,7 +762,6 @@ export const DeckEditor: Component<Props> = props => {
           }
 
           const newResults = result.data.map(detail => populateCardInfo(detail));
-
           const isSearchSame =
             getSearchString(cardSystem.id, new URLSearchParams(location.search)) === searchString;
 
@@ -606,49 +777,52 @@ export const DeckEditor: Component<Props> = props => {
         })
         .catch(() => toast('failed to load search results. Try again later'));
     }
+
     fetchPage(isSearchSame);
   }
-  let debouncedOnSearch = debounce(onSearch, 750, { trailing: true });
 
-  const isSearching = () => (searchParams.q || searchParams.type)?.length > 0;
+  const debouncedOnSearch = debounce(onSearch, 750, { trailing: true });
 
   createEffect(() => {
-    cardSystem.uri;
-    const q = unwrap(searchParams.q) ?? '';
-    const t = unwrap(searchParams.type);
-    if (!q?.length && !t?.length) {
+    if (typeFilter() !== 'all') {
       cancelSearch = true;
       lastSearchString = '';
-      return setSearchResults();
+      setSearchResults(undefined);
+      return;
     }
+
+    cardSystem.uri;
+    const q = unwrap(searchParams.q) ?? '';
+    const catalogType = unwrap(searchParams.catalogType) as string | undefined;
+    if (!q?.length && (!catalogType || catalogType === CATALOG_TYPE_ALL)) {
+      cancelSearch = true;
+      lastSearchString = '';
+      setSearchResults(undefined);
+      return;
+    }
+
     cancelSearch = false;
-    debouncedOnSearch(q, t);
+    debouncedOnSearch(q, undefined, catalogType);
   });
 
-  function onDownloadDeckList() {
-    let params = {
-      name: 'unnamed deck',
-    };
-    if (formRef) {
-      params.name = formRef.elements['name'].value;
-    }
+  const deckExportContent = createMemo(() => {
+    trackDeep(deck.cards);
+    trackDeep(deck.sideboard);
 
-    let cards = Object.values(deck.cards)
+    let mainLines = Object.values(deck.cards)
       .filter(card => card.qty)
       .map(card => formatDeckListLine(card));
 
-    let content = [cards].flat().join('\n');
+    const sideboardLines = Object.values(deck.sideboard ?? {})
+      .filter(card => card.qty)
+      .map(card => formatDeckListLine(card));
 
-    if (!cards.length) return;
+    if (sideboardLines.length > 0) {
+      mainLines = [...mainLines, '', 'SIDEBOARD:', ...sideboardLines];
+    }
 
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${params.name}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+    return mainLines.join('\n');
+  });
   const cardGrouping = useCardGrouping(cardSystem.types ?? [], getDeckList);
 
   const deckTokenPartIds = createMemo(() => {
@@ -670,21 +844,21 @@ export const DeckEditor: Component<Props> = props => {
     return defaultEntry ? [entryToPrintingOption(defaultEntry)] : undefined;
   }
 
-  const filteredDeckCardKeys = createMemo(() => {
+  const filteredMainDeckKeys = createMemo(() => {
     trackDeep(deck.cards);
     const filter = typeFilter();
-    const keys = deckCardKeys();
-    if (filter === 'tokens') return keys;
+    if (filter === 'all' || filter === 'sideboard' || filter === 'tokens') return [];
+
+    let keys = deckCardKeys().filter(key => deck.cards[key]?.qty);
 
     const sortKeys = (list: string[]) =>
       [...list].sort((a, b) => compareCommanderFirst(deck.cards[a], deck.cards[b]));
 
-    if (!filter) return sortKeys(keys);
+    const isFullDeckView = filter === 'deck';
+    if (!isFullDeckView) {
+      const lowerTypes = (cardSystem.types ?? []).map(type => type.toLowerCase());
 
-    const lowerTypes = (cardSystem.types ?? []).map(type => type.toLowerCase());
-
-    return sortKeys(
-      keys.filter(key => {
+      keys = keys.filter(key => {
         const entry = deck.cards[key];
         if (!entry?.qty) return false;
 
@@ -692,9 +866,37 @@ export const DeckEditor: Component<Props> = props => {
 
         if (filter === 'unsorted') return !type;
         return type === filter;
-      }),
-    );
+      });
+    }
+
+    return sortKeys(keys);
   });
+
+  const filteredDeckCardKeys = createMemo(() =>
+    filteredMainDeckKeys().filter(key => entryMatchesSearch(deck.cards[key])),
+  );
+
+  const filteredSideboardCardKeys = createMemo(() => {
+    trackDeep(deck.sideboard);
+    const lowerTypes = (cardSystem.types ?? []).map(type => type.toLowerCase());
+    const activeTypeFilter = catalogTypeFilter();
+
+    return sideboardCardKeys().filter(key => {
+      const entry = deck.sideboard?.[key];
+      if (!entry?.qty || !entryMatchesSearch(entry)) return false;
+
+      if (activeTypeFilter !== CATALOG_TYPE_ALL) {
+        const category = getCardTypeCategory(entry, lowerTypes);
+        if (category !== activeTypeFilter) return false;
+      }
+
+      return true;
+    });
+  });
+
+  const filteredTokenEntries = createMemo(() =>
+    deckTokenEntryList().filter(entry => entryMatchesSearch(entry)),
+  );
 
   return (
     <>
@@ -703,26 +905,28 @@ export const DeckEditor: Component<Props> = props => {
           <div
             style='grid-area: header;'
             class='pr-7 pl-4 p-4  flex flex-row gap-2 items-center bg-background'>
-            <div class='flex flex-wrap gap-2 items-center'>
+            <div class={styles.tabBar}>
               <button
                 type='button'
-                class={cn(
-                  'rounded px-1 transition-colors hover:bg-muted',
-                  !typeFilter() && 'font-semibold',
-                )}
-                onClick={() => setTypeFilter(null)}>
-                {cardGrouping().totalCount} Cards Added
+                class={tabButtonClass(typeFilter() === 'all')}
+                onClick={() => setTypeFilter('all')}>
+                All cards
+              </button>
+              <span class={styles.tabDivider} aria-hidden='true' />
+              <button
+                type='button'
+                class={tabButtonClass(typeFilter() === 'deck')}
+                onClick={() => setTypeFilter('deck')}>
+                <span>Deck</span>
+                <span>{deckQtyCount()}</span>
               </button>
               <For each={Object.entries(cardGrouping().types)}>
                 {([type, grouping]) => (
                   <Show when={grouping.count > 0}>
                     <button
                       type='button'
-                      class={cn(
-                        'flex gap-1 border-l-2 px-2 py-1 transition-colors hover:bg-muted',
-                        typeFilter() === type && 'bg-muted font-semibold',
-                      )}
-                      onClick={() => setTypeFilter(current => (current === type ? null : type))}>
+                      class={tabButtonClass(typeFilter() === type)}
+                      onClick={() => setTypeFilter(current => (current === type ? 'deck' : type))}>
                       <span>{grouping.name}</span>
                       <span>{grouping.count}</span>
                     </button>
@@ -732,26 +936,31 @@ export const DeckEditor: Component<Props> = props => {
               <Show when={cardGrouping().unsorted.count > 0}>
                 <button
                   type='button'
-                  class={cn(
-                    'flex gap-1 border-l-2 px-2 py-1 transition-colors hover:bg-muted',
-                    typeFilter() === 'unsorted' && 'bg-muted font-semibold',
-                  )}
+                  class={tabButtonClass(typeFilter() === 'unsorted')}
                   onClick={() =>
-                    setTypeFilter(current => (current === 'unsorted' ? null : 'unsorted'))
+                    setTypeFilter(current => (current === 'unsorted' ? 'deck' : 'unsorted'))
                   }>
                   <span>Unsorted</span>
                   <span>{cardGrouping().unsorted.count}</span>
                 </button>
               </Show>
+              <Show when={sideboardQtyCount() > 0}>
+                <button
+                  type='button'
+                  class={tabButtonClass(typeFilter() === 'sideboard')}
+                  onClick={() =>
+                    setTypeFilter(current => (current === 'sideboard' ? 'deck' : 'sideboard'))
+                  }>
+                  <span>Sideboard</span>
+                  <span>{sideboardQtyCount()}</span>
+                </button>
+              </Show>
               <Show when={deckTokenPartIds().length > 0}>
                 <button
                   type='button'
-                  class={cn(
-                    'flex gap-1 border-l-2 px-2 py-1 transition-colors hover:bg-muted',
-                    typeFilter() === 'tokens' && 'bg-muted font-semibold',
-                  )}
+                  class={tabButtonClass(typeFilter() === 'tokens')}
                   onClick={() =>
-                    setTypeFilter(current => (current === 'tokens' ? null : 'tokens'))
+                    setTypeFilter(current => (current === 'tokens' ? 'deck' : 'tokens'))
                   }>
                   <span>Tokens</span>
                 </button>
@@ -949,10 +1158,10 @@ export const DeckEditor: Component<Props> = props => {
                 <DropdownMenuContent class='w-48'>
                   <DropdownMenuItem
                     disabled={Object.values(deck.cards).filter(card => card.qty).length < 1}
-                    onClick={onDownloadDeckList}>
+                    onClick={openExportDialog}>
                     <div class='flex gap-2'>
-                      <DownloadIcon class='text-muted-foreground' />
-                      <span>Download Deck</span>
+                      <CopyIcon class='text-muted-foreground' />
+                      <span>Export deck</span>
                     </div>
                   </DropdownMenuItem>
                   <DropdownMenuItem
@@ -980,174 +1189,248 @@ export const DeckEditor: Component<Props> = props => {
             <div
               class='top-0 sticky z-10 backdrop-blur-xl px-2 pt-2 pb-1'
               style='background: hsla(var(--background) / .7);'>
-              <Command
-                class='h-auto w-full flex-none rounded-none border-0 bg-transparent shadow-none'
-                style='background: transparent;'
-                value={searchParams.q || ''}>
-                <CommandInput
-                  wrapperStyle='border-bottom: none; padding-inline: 0;'
-                  class='h-9 py-1'
+              <div class={styles.searchBarRow}>
+                <Command
+                  class='h-auto min-w-0 flex-1 rounded-none border-0 bg-transparent shadow-none'
                   style='background: transparent;'
-                  placeholder='Search'
-                  value={searchParams.q ?? ''}
-                  onValueChange={q => setSearchParams({ q })}
-                />
-              </Command>
-              <ToggleGroup
-                class='inline-flex gap-1 pb-1'
-                multiple
-                value={
-                  Array.isArray(searchParams.type)
-                    ? searchParams.type
-                    : [searchParams.type].filter(Boolean)
-                }
-                onChange={type => setSearchParams({ type })}>
-                <For each={cardSystem.types}>
-                  {cardType => (
-                    <ToggleGroupItem
-                      class='data-[pressed]:bg-muted-foreground/20 hover:bg-muted-foreground/10'
-                      value={cardType}>
-                      {capitalize(cardType)}
-                    </ToggleGroupItem>
-                  )}
-                </For>
-              </ToggleGroup>
+                  value={searchParams.q || ''}>
+                  <CommandInput
+                    wrapperStyle='border-bottom: none; padding-inline: 0;'
+                    class='h-9 py-1'
+                    style='background: transparent;'
+                    placeholder={searchPlaceholder()}
+                    value={searchParams.q ?? ''}
+                    onValueChange={q =>
+                      setSearchParams({ q, page: undefined, totalPages: undefined })
+                    }
+                  />
+                </Command>
+                <Show when={showSearchTypeFilter()}>
+                  <Select
+                    placeholder='All types'
+                    options={catalogTypeOptions()}
+                    optionValue='value'
+                    optionTextValue='label'
+                    value={selectedCatalogType()}
+                    onChange={option =>
+                      setSearchParams({
+                        catalogType:
+                          !option?.value || option.value === CATALOG_TYPE_ALL
+                            ? undefined
+                            : option.value,
+                        page: undefined,
+                        totalPages: undefined,
+                      })
+                    }
+                    itemComponent={props => (
+                      <SelectItem item={props.item}>{props.item.rawValue.label}</SelectItem>
+                    )}>
+                    <SelectHiddenSelect />
+                    <SelectTrigger aria-label='Card type' class={styles.catalogTypeSelect}>
+                      <SelectValue<CatalogTypeOption> placeholder='All types'>
+                        {state => state.selectedOption()?.label ?? 'All types'}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent />
+                  </Select>
+                </Show>
+              </div>
             </div>
             <div class={`p-4 ${styles.cardList}`}>
               <Show
-                when={searchResults()}
+                when={typeFilter() === 'all'}
                 fallback={
                   <Show
-                    when={typeFilter() === 'tokens'}
+                    when={typeFilter() === 'sideboard'}
                     fallback={
-                      <For
-                        each={filteredDeckCardKeys()}
-                        keyed
+                      <Show
+                        when={typeFilter() === 'tokens'}
                         fallback={
-                          typeFilter() ? (
-                            <div class='p-8 text-center text-muted-foreground'>
-                              <p>
-                                No{' '}
-                                {typeFilter() === 'unsorted'
-                                  ? 'unsorted'
-                                  : capitalize(typeFilter()!)}{' '}
-                                cards in this deck.
-                              </p>
-                              <Button
-                                class='mt-3'
-                                type='button'
-                                variant='secondary'
-                                onClick={() => setTypeFilter(null)}>
-                                Show all cards
-                              </Button>
-                            </div>
-                          ) : (
-                            <EmptyGridContainer
-                              hasSearchResults={searchParams.totalPages > 0}
-                              isSearching={isSearching()}
-                              importCardList={openImportDialog}
-                            />
-                          )
+                          <For
+                            each={filteredDeckCardKeys()}
+                            keyed
+                            fallback={
+                              isSearching() ? (
+                                <EmptyGridContainer
+                                  isSearching
+                                  importCardList={openImportDialog}
+                                />
+                              ) : typeFilter() !== 'deck' ? (
+                                <div class='p-8 text-center text-muted-foreground'>
+                                  <p>
+                                    No{' '}
+                                    {typeFilter() === 'unsorted'
+                                      ? 'unsorted'
+                                      : capitalize(typeFilter())}{' '}
+                                    cards in this deck.
+                                  </p>
+                                  <Button
+                                    class='mt-3'
+                                    type='button'
+                                    variant='secondary'
+                                    onClick={() => setTypeFilter('deck')}>
+                                    Show deck
+                                  </Button>
+                                </div>
+                              ) : (
+                                <EmptyGridContainer
+                                  isSearching={false}
+                                  importCardList={openImportDialog}
+                                />
+                              )
+                            }>
+                            {(storageKey, index) => (
+                              <DeckGridCard
+                                storageKey={storageKey}
+                                index={index()}
+                                section='cards'
+                                card={() => deck.cards[storageKey]}
+                                updateDeck={updateDeckCards}
+                                onChangePrinting={changeCardPrinting}
+                                onToggleCommander={toggleCommander}
+                                onSendToSideboard={sendCardToSideboard}
+                                onPreview={src => setSearchParams({ dialog: 'card-preview', src })}
+                                onOpenPrintings={() => openPrintingPicker(storageKey)}
+                              />
+                            )}
+                          </For>
                         }>
-                        {(storageKey, index) => (
-                          <DeckGridCard
-                            storageKey={storageKey}
-                            index={index()}
-                            card={() => deck.cards[storageKey]}
-                            updateDeck={updateDeckCards}
-                            onChangePrinting={changeCardPrinting}
-                            onToggleCommander={toggleCommander}
-                            onPreview={src => setSearchParams({ dialog: 'card-preview', src })}
-                            onOpenPrintings={() => openPrintingPicker(storageKey)}
-                          />
-                        )}
-                      </For>
+                        <Show
+                          when={!deckTokens.loading}
+                          fallback={
+                            <div class='col-span-full flex flex-col items-center gap-3 p-8 text-muted-foreground'>
+                              <LoaderIcon class='size-6 animate-spin' />
+                              <p>Loading tokens...</p>
+                            </div>
+                          }>
+                          <For
+                            each={filteredTokenEntries()}
+                            keyed={entry => getTokenKey(entry.detail)}
+                            fallback={
+                              isSearching() ? (
+                                <EmptyGridContainer
+                                  isSearching
+                                  importCardList={openImportDialog}
+                                />
+                              ) : (
+                                <div class='p-8 text-center text-muted-foreground'>
+                                  <p>No tokens created by cards in this deck.</p>
+                                  <Button
+                                    class='mt-3'
+                                    type='button'
+                                    variant='secondary'
+                                    onClick={() => setTypeFilter('deck')}>
+                                    Show deck
+                                  </Button>
+                                </div>
+                              )
+                            }>
+                            {(entry, index) => {
+                              const tokenKey = () => getTokenKey(entry.detail);
+                              return (
+                                <DeckGridCard
+                                  variant='token'
+                                  storageKey={tokenKey()}
+                                  index={index()}
+                                  card={() => entry}
+                                  pinnedPrintings={getTokenPinnedPrintings(tokenKey())}
+                                  updateDeck={updateDeck}
+                                  onChangePrinting={changeTokenPrinting}
+                                  onPreview={src => setSearchParams({ dialog: 'card-preview', src })}
+                                  onOpenPrintings={() => openTokenPrintingPicker(tokenKey())}
+                                />
+                              );
+                            }}
+                          </For>
+                        </Show>
+                      </Show>
                     }>
-                    <Show
-                      when={!deckTokens.loading}
+                    <For
+                      each={filteredSideboardCardKeys()}
+                      keyed
                       fallback={
-                        <div class='col-span-full flex flex-col items-center gap-3 p-8 text-muted-foreground'>
-                          <LoaderIcon class='size-6 animate-spin' />
-                          <p>Loading tokens...</p>
-                        </div>
-                      }>
-                      <For
-                        each={deckTokenEntryList()}
-                        keyed={entry => getTokenKey(entry.detail)}
-                        fallback={
+                        isSearching() ? (
+                          <EmptyGridContainer isSearching importCardList={openImportDialog} />
+                        ) : (
                           <div class='p-8 text-center text-muted-foreground'>
-                            <p>No tokens created by cards in this deck.</p>
+                            <p>No sideboard cards in this deck.</p>
                             <Button
                               class='mt-3'
                               type='button'
                               variant='secondary'
-                              onClick={() => setTypeFilter(null)}>
-                              Show all cards
+                              onClick={() => setTypeFilter('deck')}>
+                              Show deck
                             </Button>
                           </div>
-                        }>
-                        {(entry, index) => {
-                          const tokenKey = () => getTokenKey(entry.detail);
-                          return (
-                            <DeckGridCard
-                              variant='token'
-                              storageKey={tokenKey()}
-                              index={index()}
-                              card={() => deckTokenEntryList()[index()]}
-                              pinnedPrintings={getTokenPinnedPrintings(tokenKey())}
-                              updateDeck={updateDeck}
-                              onChangePrinting={changeTokenPrinting}
-                              onPreview={src => setSearchParams({ dialog: 'card-preview', src })}
-                              onOpenPrintings={() => openTokenPrintingPicker(tokenKey())}
-                            />
-                          );
-                        }}
-                      </For>
-                    </Show>
+                        )
+                      }>
+                      {(storageKey, index) => (
+                        <DeckGridCard
+                          storageKey={storageKey}
+                          index={index()}
+                          section='sideboard'
+                          card={() => deck.sideboard![storageKey]}
+                          updateDeck={updateSideboardCards}
+                          onChangePrinting={(storageKey, printing) =>
+                            void changeCardPrinting(storageKey, printing, 'sideboard')
+                          }
+                          onSendToDeck={sendCardToDeck}
+                          onPreview={src => setSearchParams({ dialog: 'card-preview', src })}
+                          onOpenPrintings={() => openPrintingPicker(storageKey, 'sideboard')}
+                        />
+                      )}
+                    </For>
                   </Show>
                 }>
-                <For
-                  each={searchResults()}
-                  fallback={
-                    <EmptyGridContainer
-                      hasSearchResults={searchParams.totalPages > 0}
-                      isSearching={isSearching()}
-                      importCardList={openImportDialog}
-                    />
-                  }>
-                  {(card, i) => {
-                    const cardKey = () => getCardKey(card);
-                    const deckCard = () => deck.cards?.[cardKey()];
-                    return (
-                      <div
-                        data-index={i()}
-                        id={card.id}
-                        style={`
+                <Switch>
+                  <Match when={!isSearching()}>
+                    <CatalogEmptyState mode='browse' />
+                  </Match>
+                  <Match when={isSearching() && searchResults() === undefined}>
+                    <CatalogEmptyState mode='loading' />
+                  </Match>
+                  <Match when={isSearching() && searchResults()?.length === 0}>
+                    <CatalogEmptyState mode='empty' />
+                  </Match>
+                  <Match when={searchResults()?.length}>
+                    <For each={searchResults()!}>
+                    {(card, i) => {
+                      const cardKey = () => getCardKey(card);
+                      const deckCard = () => deck.cards?.[cardKey()];
+                      return (
+                        <div
+                          data-index={i()}
+                          id={card.id}
+                          style={`
                         position: relative;
                         --timing: ${random(400, 600)}ms;
                         --delay: ${random(250, 500)}ms;
                         --distance: ${random(20, 100)}px;
                         content-visibility: auto;
                       `}
-                        class='fade-in-from-below'
-                        onContextMenu={e => handlePrintingContextMenu(e, cardKey())}
-                        onMouseDown={e => {
-                          if (e.button !== 2 || !supportsCardPrintings() || !(deckCard()?.qty > 0)) {
-                            return;
-                          }
-                          if (card.name) prefetchCardPrintings(card.name);
-                        }}>
-                        <img
-                          src={
-                            getCardImage(card) ??
-                            cardSystem.fallbackImage ??
-                            '/unknown-card-image.webp'
-                          }
-                          style={`anchor-name: --card-${i()}; height: 100%;`}
-                        />
-                        <div
-                          class='absolute inset-0 fade-in'
-                          style={`
+                          class='fade-in-from-below'
+                          onContextMenu={e => handlePrintingContextMenu(e, cardKey())}
+                          onMouseDown={e => {
+                            if (
+                              e.button !== 2 ||
+                              !supportsCardPrintings() ||
+                              !(deckCard()?.qty > 0)
+                            ) {
+                              return;
+                            }
+                            if (card.name) prefetchCardPrintings(card.name);
+                          }}>
+                          <img
+                            src={
+                              getCardImage(card) ??
+                              cardSystem.fallbackImage ??
+                              '/unknown-card-image.webp'
+                            }
+                            style={`anchor-name: --card-${i()}; height: 100%;`}
+                          />
+                          <div
+                            class='absolute inset-0 fade-in'
+                            style={`
                       position-anchor: --card-${i()};
                       right: anchor(right);
                       height: anchor-size(height);
@@ -1155,110 +1438,114 @@ export const DeckEditor: Component<Props> = props => {
                       --delay: ${random(1000, 1250)}ms;
                       --timing: ${random(500, 1250)}ms;
                     `}>
-                          <div
-                            class='grid place-items-center justify-end'
-                            style={`
+                            <div
+                              class='grid place-items-center justify-end'
+                              style={`
                         height: 100%;
                         padding-inline: 10cqw;
                         padding-bottom: 10cqh;
                       `}>
-                            <div
-                              class='dark gap-2 font-bold text-white flex items-center rounded'
-                              style={`background: hsla(var(--background) / .4);`}>
-                              <Show
-                                when={!card.detail?.name || !getCardImage(card)}
-                                fallback={
-                                  <>
-                                    <Show when={deckCard()?.qty > 0 && supportsCardPrintings()}>
+                              <div
+                                class='dark gap-2 font-bold text-white flex items-center rounded'
+                                style={`background: hsla(var(--background) / .4);`}>
+                                <Show
+                                  when={!card.detail?.name || !getCardImage(card)}
+                                  fallback={
+                                    <>
+                                      <Show when={deckCard()?.qty > 0 && supportsCardPrintings()}>
+                                        <Button
+                                          type='button'
+                                          variant='ghost'
+                                          size='icon'
+                                          title='Choose printing'
+                                          onClick={e => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            openPrintingPicker(cardKey());
+                                          }}>
+                                          <ImagesIcon />
+                                        </Button>
+                                      </Show>
                                       <Button
                                         type='button'
                                         variant='ghost'
                                         size='icon'
-                                        title='Choose printing'
+                                        title='Preview card'
                                         onClick={e => {
                                           e.preventDefault();
                                           e.stopPropagation();
-                                          openPrintingPicker(cardKey());
+                                          const src = getCardImage(card);
+                                          if (src) {
+                                            setSearchParams({ dialog: 'card-preview', src });
+                                          }
                                         }}>
-                                        <ImagesIcon />
+                                        <SearchIcon />
                                       </Button>
-                                    </Show>
-                                    <Button
-                                      type='button'
-                                      variant='ghost'
-                                      size='icon'
-                                      title='Preview card'
-                                      onClick={e => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        const src = getCardImage(card);
-                                        if (src) {
-                                          setSearchParams({ dialog: 'card-preview', src });
-                                        }
-                                      }}>
-                                      <SearchIcon />
-                                    </Button>
-                                  </>
-                                }>
-                                <div class='pl-2'>{card.name}</div>
-                              </Show>
-                              <Show when={deckCard()?.qty > 0}>
+                                    </>
+                                  }>
+                                  <div class='pl-2'>{card.name}</div>
+                                </Show>
+                                <Show when={deckCard()?.qty > 0}>
+                                  <Button
+                                    size='icon'
+                                    variant='ghost'
+                                    type='button'
+                                    onClick={() => {
+                                      const id = getCardKey(unwrap(card));
+                                      if (deck.cards[id]) {
+                                        return updateDeckCards('cards', id, 'qty', (qty = 1) =>
+                                          Math.max(qty - 1, 0),
+                                        );
+                                      }
+                                    }}>
+                                    <SubIcon
+                                      class='text-white'
+                                      style='filter: drop-shadow(2px 4px 6px black);'
+                                    />
+                                  </Button>
+                                </Show>
+                                <Show when={deckCard()?.qty > 0}>{deckCard()?.qty}</Show>
+
                                 <Button
                                   size='icon'
                                   variant='ghost'
                                   type='button'
                                   onClick={() => {
-                                    let id = getCardKey(unwrap(card));
+                                    const id = getCardKey(unwrap(card));
                                     if (deck.cards[id]) {
-                                      return updateDeckCards('cards', id, 'qty', (qty = 1) =>
-                                        Math.max(qty - 1, 0),
-                                      );
+                                      return updateDeckCards('cards', id, 'qty', (qty = 1) => qty + 1);
                                     }
+                                    updateDeckCards('cards', id, { ...unwrap(card), qty: 1 });
                                   }}>
-                                  <SubIcon
+                                  <AddIcon
                                     class='text-white'
                                     style='filter: drop-shadow(2px 4px 6px black);'
                                   />
                                 </Button>
-                              </Show>
-                              <Show when={deckCard()?.qty > 0}>{deckCard()?.qty}</Show>
-
-                              <Button
-                                size='icon'
-                                variant='ghost'
-                                type='button'
-                                onClick={() => {
-                                  let id = getCardKey(unwrap(card));
-                                  if (deck.cards[id]) {
-                                    return updateDeckCards('cards', id, 'qty', (qty = 1) => qty + 1);
-                                  }
-                                  updateDeckCards('cards', id, { ...unwrap(card), qty: 1 });
-                                }}>
-                                <AddIcon
-                                  class='text-white'
-                                  style='filter: drop-shadow(2px 4px 6px black);'
-                                />
-                              </Button>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  }}
-                </For>
+                      );
+                    }}
+                  </For>
+                  </Match>
+                </Switch>
               </Show>
             </div>
-            <div use:intersectionObserver={{ onIntersect: loadMoreResults }}>
-              <Show
-                when={
-                  (searchParams.q || searchParams.type) &&
-                  searchParams.page < searchParams.totalPages
-                }>
-                <div class='flex gap-2 justify-center p-6'>
-                  <LoaderIcon class='animate-spin' /> Loading more results
-                </div>
-              </Show>
-            </div>
+            <Show when={isCatalogTab()}>
+              <div use:intersectionObserver={{ onIntersect: loadMoreResults }}>
+                <Show
+                  when={
+                    isSearching() &&
+                    Number(searchParams.page) < Number(searchParams.totalPages)
+                  }>
+                  <div class='flex gap-2 justify-center p-6'>
+                    <LoaderIcon class='animate-spin' /> Loading more results
+                  </div>
+                </Show>
+              </div>
+            </Show>
           </div>
         </form>
       </div>
@@ -1272,16 +1559,16 @@ export const DeckEditor: Component<Props> = props => {
           shareUrl={bracketShareUrl()}
           onClose={closeBracketModal}
         />
-        <Show when={printingPickerKey() && deck.cards[printingPickerKey()!]}>
+        <Show when={printingPickerKey() && deck[printingPickerSection()]?.[printingPickerKey()!]}>
           <PrintingPickerModal
-            entry={deck.cards[printingPickerKey()!]}
+            entry={deck[printingPickerSection()]![printingPickerKey()!]}
             onClose={() => setPrintingPickerKey(undefined)}
             onSelect={printing => {
-              void changeCardPrinting(printingPickerKey()!, printing);
+              void changeCardPrinting(printingPickerKey()!, printing, printingPickerSection());
               setPrintingPickerKey(undefined);
             }}
             onSelectCustomArt={option => {
-              changeCardCustomArt(printingPickerKey()!, option);
+              changeCardCustomArt(printingPickerKey()!, option, printingPickerSection());
               setPrintingPickerKey(undefined);
             }}
           />
@@ -1316,6 +1603,7 @@ export const DeckEditor: Component<Props> = props => {
               invalidateBracketEstimate();
               setDeck('cards', reconcile(importedDeck.cards ?? {}, { merge: false }));
               setDeck('inPlay', reconcile(importedDeck.inPlay ?? {}, { merge: false }));
+              setDeck('sideboard', reconcile(importedDeck.sideboard ?? {}, { merge: false }));
               if (importedDeck.name) setDeck('name', importedDeck.name);
               if (importedDeck.system && importedDeck.system !== deck.system) {
                 setDeck('system', importedDeck.system);
@@ -1331,6 +1619,13 @@ export const DeckEditor: Component<Props> = props => {
             deckName={getDeckName()}
             cards={getDeckList()}
             onClose={closePrintDialog}
+          />
+        </Show>
+        <Show when={exportDialogOpen()}>
+          <ExportDeckModal
+            open={exportDialogOpen()}
+            content={deckExportContent()}
+            onClose={closeExportDialog}
           />
         </Show>
         <Show when={newDeckTipOpen()}>
@@ -1397,27 +1692,51 @@ export const DeckEditor: Component<Props> = props => {
   );
 };
 
+function CatalogEmptyState(props: { mode: 'browse' | 'loading' | 'empty' }) {
+  return (
+    <div class='p-8 flex-col flex gap-4'>
+      <Switch>
+        <Match when={props.mode === 'loading'}>
+          <Alert class='inline-block'>
+            <AlertTitle>Searching</AlertTitle>
+            <AlertDescription>
+              <p>Loading search results...</p>
+            </AlertDescription>
+          </Alert>
+        </Match>
+        <Match when={props.mode === 'empty'}>
+          <Alert class='inline-block'>
+            <AlertTitle>No Results Found</AlertTitle>
+            <AlertDescription>
+              <p>Sorry, we couldn't find any MTG cards matching that search.</p>
+            </AlertDescription>
+          </Alert>
+        </Match>
+        <Match when>
+          <Alert class='inline-block'>
+            <AlertTitle>Browse all MTG cards</AlertTitle>
+            <AlertDescription>
+              <p>Search above to find and add cards from the full card catalog.</p>
+            </AlertDescription>
+          </Alert>
+        </Match>
+      </Switch>
+    </div>
+  );
+}
+
 function EmptyGridContainer(props: {
   isSearching: boolean;
-  hasSearchResults: boolean;
   importCardList(): void;
 }) {
   return (
     <div class='p-8 flex-col flex gap-4'>
       <Switch>
-        <Match when={props.hasSearchResults}>
-          <Alert class='inline-block'>
-            <AlertTitle>Searching</AlertTitle>
-            <AlertDescription>
-              <p>Loading Search Results</p>
-            </AlertDescription>
-          </Alert>
-        </Match>
         <Match when={props.isSearching}>
           <Alert class='inline-block'>
             <AlertTitle>No Results Found</AlertTitle>
             <AlertDescription>
-              <p>Sorry, we couldn't find any results for that search</p>
+              <p>Sorry, we couldn't find any cards matching that search in this tab.</p>
             </AlertDescription>
           </Alert>
         </Match>
@@ -1425,7 +1744,7 @@ function EmptyGridContainer(props: {
           <Alert class='inline-block'>
             <AlertTitle>Your deck doesn't have any cards</AlertTitle>
             <AlertDescription>
-              <p>Add cards by searching above or import a card list</p>
+              <p>Add cards from All cards, or import a card list</p>
               <Button class='mt-4' onClick={props.importCardList}>
                 Import Card List
               </Button>

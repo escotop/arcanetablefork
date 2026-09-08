@@ -29,7 +29,12 @@ import { TextField, TextFieldTextArea } from '~/components/ui/text-field';
 import { CardSystem, Deck, DetailedCardEntry } from '~/lib/constants';
 
 import { parseImportedCardList } from '~/lib/deck';
-import { buildImportedInPlay, fetchCardInfoForImport } from '~/lib/deckImportLookup';
+import {
+  buildImportedInPlay,
+  buildImportedSection,
+  buildImportedSideboard,
+  fetchCardInfoForImport,
+} from '~/lib/deckImportLookup';
 
 import useCardGrouping from './cardGroupings';
 
@@ -73,7 +78,10 @@ const DECK_LIST_PLACEHOLDER = `Deck
 4 Lightning Bolt
 Commander
 1x Alela, Artful Provocateur (brc) 119
-1 Orcish Bowmasters [ltr] #433`;
+1 Orcish Bowmasters [ltr] #433
+
+SIDEBOARD:
+1 Rest in Peace (MB2) 13`;
 
 export default function DeckImportDialog(props: DeckImportDialogProps) {
 
@@ -81,7 +89,7 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
 
   const [textContent, setTextContent] = createSignal('');
 
-  const [deck, updateDeck] = createStore<Deck>({ name: '', cards: {}, inPlay: {} } as Deck);
+  const [deck, updateDeck] = createStore<Deck>({ name: '', cards: {}, inPlay: {}, sideboard: {} } as Deck);
 
   const [loading, setLoading] = createSignal(false);
 
@@ -92,11 +100,17 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
   const foundCards = () => Object.values(deck?.cards || {}).filter(card => card.found !== false);
 
   const importStats = createMemo(() => {
-    const entries = Object.values(deck?.cards || {});
-    const found = entries.filter(card => card.found !== false);
-    const foundQty = found.reduce((sum, card) => sum + (card.qty ?? 1), 0);
-    const totalQty = entries.reduce((sum, card) => sum + (card.qty ?? 1), 0);
-    return { foundQty, totalQty };
+    const mainEntries = Object.values(deck?.cards || {});
+    const sideboardEntries = Object.values(deck?.sideboard || {});
+    const foundMain = mainEntries.filter(card => card.found !== false);
+    const foundSideboard = sideboardEntries.filter(card => card.found !== false);
+    const deckQty = foundMain.reduce((sum, card) => sum + (card.qty ?? 1), 0);
+    const deckTotalQty = mainEntries.reduce((sum, card) => sum + (card.qty ?? 1), 0);
+    const sideboardQty = foundSideboard.reduce((sum, card) => sum + (card.qty ?? 1), 0);
+    const sideboardTotalQty = sideboardEntries.reduce((sum, card) => sum + (card.qty ?? 1), 0);
+    const foundQty = deckQty + sideboardQty;
+    const totalQty = deckTotalQty + sideboardTotalQty;
+    return { deckQty, deckTotalQty, sideboardQty, sideboardTotalQty, foundQty, totalQty };
   });
 
   const cardGrouping = useCardGrouping(cardSystem.types ?? [], foundCards);
@@ -180,24 +194,33 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
       setProgress({ current: 0, total: 0, name: '' });
       updateDeck('cards', reconcile({}));
       updateDeck('inPlay', reconcile({}));
+      updateDeck('sideboard', reconcile({}));
       return;
     }
 
-    const { cards: newCardEntries, inPlayIndices } = parseImportedCardList(cardListText);
+    const { cards: newCardEntries, sideboard: sideboardEntries, inPlayIndices } =
+      parseImportedCardList(cardListText);
     cache.clear();
     setLoading(true);
-    setProgress({ current: 0, total: newCardEntries.length, name: '' });
+    setProgress({ current: 0, total: newCardEntries.length + sideboardEntries.length, name: '' });
 
     try {
-      const cards = await fetchCardInfoForImport(newCardEntries, cache, (current, total, name) => {
+      const importEntries = [...newCardEntries, ...sideboardEntries];
+      const resolvedCards = await fetchCardInfoForImport(importEntries, cache, (current, total, name) => {
         if (generation !== parseGeneration) return;
         setProgress({ current, total, name });
       });
 
       if (generation !== parseGeneration) return;
 
-      updateDeck('cards', reconcile(cards));
-      updateDeck('inPlay', reconcile(buildImportedInPlay(newCardEntries, inPlayIndices, cards)));
+      updateDeck('cards', reconcile(buildImportedSection(newCardEntries, resolvedCards)));
+      updateDeck('inPlay', reconcile(buildImportedInPlay(newCardEntries, inPlayIndices, resolvedCards)));
+      updateDeck(
+        'sideboard',
+        reconcile(
+          sideboardEntries.length ? buildImportedSideboard(sideboardEntries, resolvedCards) : {},
+        ),
+      );
     } finally {
       if (generation === parseGeneration) {
         setLoading(false);
@@ -373,7 +396,13 @@ export default function DeckImportDialog(props: DeckImportDialogProps) {
 
 
                 <label>
-                  {importStats().foundQty} of {importStats().totalQty} cards found
+                  {importStats().deckQty} Deck
+                  <Show when={importStats().sideboardTotalQty > 0}>
+                    {' '}
+                    · {importStats().sideboardQty} Sideboard
+                  </Show>
+                  {' '}
+                  ({importStats().foundQty} of {importStats().totalQty} cards found)
                   <Show when={printingMismatchList().length > 0}>
                     {' '}
                     · {printingMismatchList().length} exact printing

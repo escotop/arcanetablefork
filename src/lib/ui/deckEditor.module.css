@@ -81,3 +81,61 @@
     padding: 0;
   }
 }
+
+.tabBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.tabButton {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: hsl(var(--muted-foreground));
+  background: transparent;
+  border: 1px solid transparent;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.tabButton:hover {
+  background: hsl(var(--muted) / 0.55);
+  color: hsl(var(--foreground));
+}
+
+.tabButtonActive {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  font-weight: 600;
+  border-color: hsl(var(--border));
+  box-shadow: 0 1px 2px hsl(var(--foreground) / 0.06);
+}
+
+.tabDivider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 1.5rem;
+  margin-inline: 0.125rem;
+  background: hsl(var(--border));
+}
+
+.searchBarRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.catalogTypeSelect {
+  width: 10rem;
+  flex-shrink: 0;
+  height: 2.25rem;
+}

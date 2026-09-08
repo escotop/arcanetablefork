@@ -22,3 +22,21 @@ test('getCardTypeCategory classifies game card types', () => {
     getCardTypeCategory({ detail: { type_line: 'Basic Land — Forest' } }, types),
   ).toBe('land');
 });
+
+test('getCardTypeCategory uses front face on modal DFCs', () => {
+  expect(getSimpleType({ detail: { type_line: 'Instant // Land' } })).toBe('instant');
+  expect(
+    getCardTypeCategory({ detail: { type_line: 'Instant // Land' } }, types),
+  ).toBe('instant');
+  expect(
+    getCardTypeCategory(
+      {
+        detail: {
+          type_line: 'Instant // Land',
+          card_faces: [{ type_line: 'Instant' }, { type_line: 'Land' }],
+        },
+      },
+      types,
+    ),
+  ).toBe('instant');
+});

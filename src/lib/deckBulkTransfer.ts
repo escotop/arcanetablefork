@@ -30,6 +30,7 @@ function exportDeckForArchive(deck: Deck): Deck {
     ...deck,
     cards: stripCards(deck.cards),
     inPlay: stripCards(deck.inPlay),
+    sideboard: stripCards(deck.sideboard),
     tokens: stripCards(deck.tokens),
   };
 }
@@ -79,6 +80,7 @@ function normalizeImportedDeck(raw: unknown): Deck | undefined {
     startingLife: deck.startingLife ?? 40,
     cards: deck.cards,
     inPlay: deck.inPlay ?? {},
+    sideboard: deck.sideboard ?? {},
     tokens: deck.tokens ?? {},
   } as Deck;
 }

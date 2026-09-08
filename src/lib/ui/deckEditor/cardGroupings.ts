@@ -18,16 +18,27 @@ interface GroupableEntry {
   qty?: number;
 }
 
+function normalizeTypeSegment(typeLine: string) {
+  return typeLine.toLowerCase().split(/\s[-—–]\s/)[0]?.trim();
+}
+
 export function getSimpleType(entry: GroupableEntry) {
+  const faces = entry?.detail?.card_faces;
+  if (faces?.[0]?.type_line) {
+    return normalizeTypeSegment(faces[0].type_line);
+  }
+
   const typeText = entry?.detail?.type ?? entry?.detail?.type_line;
   if (!typeText) return undefined;
-  return typeText.toLowerCase().split(/\s[-—–]\s/)[0]?.trim();
+
+  const frontFace = typeText.split(/\s*\/\/\s*/)[0]?.trim() ?? typeText;
+  return normalizeTypeSegment(frontFace);
 }
 
 export function matchesCardType(simpleType: string | undefined, candidate: string) {
   if (!simpleType) return false;
   const type = candidate.toLowerCase();
-  if (type === 'land') return simpleType.includes('land');
+  if (type === 'land') return /\bland\b/.test(simpleType);
   return simpleType.endsWith(type) || simpleType.split(/\s+/).includes(type);
 }
 

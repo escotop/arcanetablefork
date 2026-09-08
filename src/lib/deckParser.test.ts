@@ -471,4 +471,21 @@ Commander
   expect(result.cards[1].name).toBe('Alela, Artful Provocateur');
   expect(result.cards[2].name).toBe('Sol Ring');
   expect(result.inPlayIndices).toEqual([1]);
+  expect(result.sideboard).toEqual([]);
+});
+
+test('parseImportedCardList parses sideboard until blank line', () => {
+  const result = parseImportedCardList(`1 Sol Ring (cmr) 472
+1 Lightning Bolt (4ED) 162
+
+SIDEBOARD:
+1 Rest in Peace (MB2) 13
+1 Soul-Guide Lantern (ELD) 237
+
+1 Should Not Import (ABC) 1`);
+
+  expect(result.cards).toHaveLength(2);
+  expect(result.sideboard).toHaveLength(2);
+  expect(result.sideboard[0].name).toBe('Rest in Peace');
+  expect(result.sideboard[1].name).toBe('Soul-Guide Lantern');
 });

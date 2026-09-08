@@ -298,24 +298,39 @@ function findResolvedImportCard(
   });
 }
 
+export function buildImportedSection(
+  entries: CardEntry[],
+  cards: Record<string, DetailedCardEntry>,
+) {
+  const section: Record<string, DetailedCardEntry> = {};
+
+  for (const entry of entries) {
+    const resolved = findResolvedImportCard(entry, cards);
+    if (resolved) {
+      section[getCardKey(resolved)] = resolved;
+    }
+  }
+
+  return section;
+}
+
 export function buildImportedInPlay(
   entries: CardEntry[],
   inPlayIndices: number[],
   cards: Record<string, DetailedCardEntry>,
 ) {
-  const inPlay: Record<string, DetailedCardEntry> = {};
+  const inPlayEntries = inPlayIndices
+    .map(index => entries[index])
+    .filter((entry): entry is CardEntry => !!entry);
 
-  for (const index of inPlayIndices) {
-    const entry = entries[index];
-    if (!entry) continue;
+  return buildImportedSection(inPlayEntries, cards);
+}
 
-    const resolved = findResolvedImportCard(entry, cards);
-    if (resolved) {
-      inPlay[getCardKey(resolved)] = resolved;
-    }
-  }
-
-  return inPlay;
+export function buildImportedSideboard(
+  entries: CardEntry[],
+  cards: Record<string, DetailedCardEntry>,
+) {
+  return buildImportedSection(entries, cards);
 }
 
 export async function fetchCardInfoForImport(

@@ -3,6 +3,7 @@ import type { CardEntry } from './constants';
 
 const SECTION_COMMANDER = /^commander$/i;
 const SECTION_DECK = /^deck$/i;
+const SECTION_SIDEBOARD = /^sideboard:?$/i;
 
 const cardCategory = (open, close) =>
   a
@@ -113,27 +114,52 @@ function isCommentLine(trimmed: string) {
 
 export interface ParsedImportedCardList {
   cards: CardEntry[];
+  sideboard: CardEntry[];
   inPlayIndices: number[];
 }
 
 export function parseImportedCardList(cardList: string): ParsedImportedCardList {
   const cards: CardEntry[] = [];
+  const sideboard: CardEntry[] = [];
   const inPlayIndices: number[] = [];
   let markNextInPlay = false;
+  let section: 'deck' | 'sideboard' | 'done' = 'deck';
 
   for (const rawLine of cardList.split(/\r?\n/)) {
     const trimmed = rawLine.trim();
-    if (!trimmed || isCommentLine(trimmed)) continue;
-
-    if (SECTION_DECK.test(trimmed)) continue;
-
-    if (SECTION_COMMANDER.test(trimmed)) {
-      markNextInPlay = true;
+    if (!trimmed) {
+      if (section === 'sideboard') {
+        section = 'done';
+      }
       continue;
+    }
+
+    if (section === 'done') continue;
+
+    if (isCommentLine(trimmed)) continue;
+
+    if (SECTION_SIDEBOARD.test(trimmed)) {
+      section = 'sideboard';
+      markNextInPlay = false;
+      continue;
+    }
+
+    if (section === 'deck') {
+      if (SECTION_DECK.test(trimmed)) continue;
+
+      if (SECTION_COMMANDER.test(trimmed)) {
+        markNextInPlay = true;
+        continue;
+      }
     }
 
     const parsed = card.run(rawLine).result;
     if (!parsed?.name?.length) continue;
+
+    if (section === 'sideboard') {
+      sideboard.push(parsed as CardEntry);
+      continue;
+    }
 
     if (markNextInPlay) {
       inPlayIndices.push(cards.length);
@@ -143,5 +169,5 @@ export function parseImportedCardList(cardList: string): ParsedImportedCardList 
     cards.push(parsed as CardEntry);
   }
 
-  return { cards, inPlayIndices };
+  return { cards, sideboard, inPlayIndices };
 }

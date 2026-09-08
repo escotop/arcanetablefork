@@ -39,6 +39,7 @@ export function computeDeckContentHash(deck: Deck): string {
     cardList: deck.cardList,
     cards: normalizeEntries(deck.cards),
     inPlay: normalizeEntries(deck.inPlay),
+    sideboard: normalizeEntries(deck.sideboard),
     tokens: normalizeEntries(deck.tokens),
   });
 }

@@ -141,6 +141,7 @@ export interface Deck {
   system: string;
   cards: Record<string, DetailedCardEntry>;
   inPlay: Record<string, DetailedCardEntry>;
+  sideboard?: Record<string, DetailedCardEntry>;
   tokens?: Record<string, DetailedCardEntry>;
   tags?: { name: string }[];
   bracketEstimate?: number;

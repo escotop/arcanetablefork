@@ -3,7 +3,12 @@ import { nanoid } from 'nanoid';
 import { createContext, onMount, ParentProps, useContext } from 'solid-js';
 import { CardEntry, Deck, DetailedCardEntry, CardSystem } from './constants';
 import { fetchCardInfo, getDeckCoverMetadata, parseImportedCardList } from './deck';
-import { buildImportedInPlay, fetchCardInfoForImport } from './deckImportLookup';
+import {
+  buildImportedInPlay,
+  buildImportedSection,
+  buildImportedSideboard,
+  fetchCardInfoForImport,
+} from './deckImportLookup';
 import { applyCustomArtToEntry } from './customCardArt';
 import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
 import {
@@ -115,6 +120,7 @@ export function getDeckStore(): DeckStore {
 const DEFAULT_DECK = {
   cards: {},
   inPlay: {},
+  sideboard: {},
   tokens: {},
 };
 
@@ -204,14 +210,19 @@ export async function hydrateDeck(originalDeck: Deck) {
   let deck = structuredClone(originalDeck);
 
   if (deck.cardList) {
-    const { cards: cardList, inPlayIndices } = parseImportedCardList(deck.cardList);
+    const { cards: cardList, inPlayIndices, sideboard: sideboardList } = parseImportedCardList(deck.cardList);
     deck.cardList = undefined;
     deck.deck = undefined;
 
-    deck.cards = await fetchCardInfoForImport(cardList, cache);
+    const importEntries = [...cardList, ...sideboardList];
+    const resolvedCards = await fetchCardInfoForImport(importEntries, cache);
+    deck.cards = buildImportedSection(cardList, resolvedCards);
+    if (sideboardList.length) {
+      deck.sideboard = buildImportedSideboard(sideboardList, resolvedCards);
+    }
 
     if (!Object.keys(deck.inPlay ?? {}).length && inPlayIndices.length) {
-      deck.inPlay = buildImportedInPlay(cardList, inPlayIndices, deck.cards);
+      deck.inPlay = buildImportedInPlay(cardList, inPlayIndices, resolvedCards);
     } else if (deck.inPlay && Array.isArray(deck.inPlay)) {
       deck.inPlay = await fetchCardInfoForImport(deck.inPlay, cache);
     }
@@ -220,15 +231,18 @@ export async function hydrateDeck(originalDeck: Deck) {
 
   let deckCards = Object.values(deck.cards);
   let inPlayCards = Object.values(deck.inPlay ?? {});
+  let sideboardCards = Object.values(deck.sideboard ?? {});
   const tokenEntries = deck.tokens ?? {};
   deck.cards = {};
   deck.inPlay = {};
+  deck.sideboard = {};
   deck.tokens = {};
 
   await hydrateCardEntries(deckCards, cache, deck.cards);
 
   const syncedInPlay = syncInPlayEntries(inPlayCards, deck.cards);
   await hydrateCardEntries(syncedInPlay, cache, deck.inPlay);
+  await hydrateCardEntries(sideboardCards, cache, deck.sideboard);
   await hydrateTokenEntries(tokenEntries, cache, deck.tokens);
 
   deck = Object.assign({}, structuredClone(DEFAULT_DECK), deck);
@@ -249,13 +263,14 @@ async function applyCustomArtToHydratedDeck(deck: Deck) {
 
   await refreshEntries(deck.cards);
   if (deck.inPlay) await refreshEntries(deck.inPlay);
+  if (deck.sideboard) await refreshEntries(deck.sideboard);
   if (deck.tokens) await refreshEntries(deck.tokens);
 
   return deck;
 }
 
 export function serializeDeck(deck: Deck) {
-  const serializedDeck = { ...deck, cards: {}, inPlay: {}, tokens: {} };
+  const serializedDeck = { ...deck, cards: {}, inPlay: {}, sideboard: {}, tokens: {} };
 
   for (const [name, card] of Object.entries(deck.cards)) {
     if (card.qty < 1) continue;
@@ -265,6 +280,11 @@ export function serializeDeck(deck: Deck) {
   for (const [name, card] of Object.entries(deck.inPlay ?? {})) {
     if (card.qty < 1) continue;
     serializedDeck.inPlay[name] = { ...card, detail: undefined };
+  }
+
+  for (const [name, card] of Object.entries(deck.sideboard ?? {})) {
+    if (card.qty < 1) continue;
+    serializedDeck.sideboard[name] = { ...card, detail: undefined };
   }
 
   for (const [name, card] of Object.entries(deck.tokens ?? {})) {
