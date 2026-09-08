@@ -64,6 +64,7 @@ const PrintingPickerModal: Component<Props> = props => {
   const [galleryCards, setGalleryCards] = createSignal<CustomCardArtOption[]>([]);
   const [galleryPage, setGalleryPage] = createSignal(0);
   const [galleryTotalPages, setGalleryTotalPages] = createSignal(0);
+  const [galleryLoadedFor, setGalleryLoadedFor] = createSignal<string | null>(null);
   const [customLoading, setCustomLoading] = createSignal(false);
 
   const selectedId = () => props.entry.id;
@@ -111,6 +112,14 @@ const PrintingPickerModal: Component<Props> = props => {
   async function openCustomArtPanel() {
     setPanelMode('custom-art');
     setSavedUrls(getSavedCustomArtUrls(props.entry.name));
+    if (galleryLoadedFor() !== props.entry.name) {
+      setGalleryCards([]);
+      setGalleryPage(0);
+      setGalleryTotalPages(0);
+      setGalleryLoadedFor(props.entry.name);
+      await loadGalleryPage(1);
+      return;
+    }
     if (galleryCards().length === 0) {
       await loadGalleryPage(1);
     }

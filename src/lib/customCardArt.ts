@@ -10,6 +10,7 @@ export interface CustomCardArtOption {
   label: string;
   source: 'custom' | 'gallery';
   creator?: string;
+  searchCardName?: string;
 }
 
 export interface CustomCardArtResponse {
@@ -59,14 +60,54 @@ export function addSavedCustomArtUrl(cardName: string, url: string): string[] {
   return next;
 }
 
+function normalizeGalleryName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s/]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function getGallerySearchName(cardName: string): string {
+  return cardName.split('//')[0]?.trim() || cardName.trim();
+}
+
+function getGalleryNameCandidates(cardName: string): string[] {
+  const names = new Set<string>();
+  const add = (value?: string) => {
+    const normalized = normalizeGalleryName(value ?? '');
+    if (normalized) names.add(normalized);
+  };
+
+  add(getGallerySearchName(cardName));
+  for (const part of cardName.split('//')) {
+    add(part);
+  }
+
+  return [...names];
+}
+
+export function galleryEntryMatchesCardName(
+  cardName: string,
+  searchCardName?: string | null,
+): boolean {
+  const normalizedSearchName = normalizeGalleryName(searchCardName ?? '');
+  if (!normalizedSearchName) return false;
+
+  return getGalleryNameCandidates(cardName).some(candidate => candidate === normalizedSearchName);
+}
+
 export async function fetchGalleryCustomArt(
   cardName: string,
   page = 1,
 ): Promise<CustomCardArtResponse> {
+  const searchName = getGallerySearchName(cardName);
   const formData = new FormData();
   formData.append('action', 'builder_ajax');
   formData.append('method', 'search_gallery_cards');
-  formData.append('search', cardName);
+  formData.append('search', searchName);
   formData.append('order', 'newest');
   formData.append('nsfw', '0');
   formData.append('other', '0');
@@ -93,14 +134,19 @@ export async function fetchGalleryCustomArt(
 
     return {
       data: (body.data ?? [])
-        .filter(entry => entry.image_url)
+        .filter(
+          entry =>
+            entry.image_url &&
+            galleryEntryMatchesCardName(cardName, entry.search_card_name),
+        )
         .map(entry => ({
           id: `gallery-${entry.id ?? entry.image_url}`,
           imageUrl: entry.image_url!,
           thumbUrl: entry.thumb_url || entry.image_url!,
-          label: entry.card_edition || cardName,
+          label: entry.card_edition || entry.search_card_name || searchName,
           source: 'gallery' as const,
           creator: entry.user_name,
+          searchCardName: entry.search_card_name ?? undefined,
         })),
       page: body.current ?? page,
       total_pages: body.total ?? 0,
