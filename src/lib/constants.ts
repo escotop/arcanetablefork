@@ -11,8 +11,16 @@ export const TABLE_COLOR = 0x2c1b4e;
 
 // camera
 export const LOOK_STRENGTH_X = 0.35;
-export const LOOK_STRENGTH_Y = 0.125 / 2;
+export const LOOK_STRENGTH_Y = 0.15;
 export const LOOK_EASE = 0.15;
+/** Fraction of screen width/height where camera tilt activates (left, right, and top edges). */
+export const CAMERA_TILT_EDGE_FRACTION = 0.15;
+/** Narrow center strip (per axis) where latched tilt resets on that axis. */
+export const CAMERA_TILT_CENTER_FRACTION = 0.03;
+/** Downward shift of the vertical untilt strip (fraction of screen height). */
+export const CAMERA_TILT_VERTICAL_UNTILT_FRACTION = 0.3;
+/** Bottom fraction of lateral edge zones where horizontal tilt does not activate. */
+export const CAMERA_TILT_LATERAL_BOTTOM_EXCLUDE_FRACTION = 0.25;
 
 export const SCROLL_SPEED = 0.5;
 

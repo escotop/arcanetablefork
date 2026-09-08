@@ -194,7 +194,7 @@ export const SOUND_VOLUME_MAX = 1;
 export const SOUND_VOLUME_STEP = 0.05;
 
 export const [settings, setSettings] = createLocalStore('settings', {
-  enableCameraTilt: false,
+  enableCameraTilt: true,
   focusPanelScale: 1,
   playerColor: undefined as string | undefined,
   localSoundVolume: 0.65,
@@ -337,6 +337,12 @@ export function isLocalCardGridSearchOpen() {
     area.revealZone.cards.length > 0 ||
     area.tokenSearchZone.cards.length > 0
   );
+}
+
+export function isCameraTiltBlocked() {
+  if (cardSearchModalOpen()) return true;
+  const area = getLocalPlayArea();
+  return (area?.tokenSearchZone.cards.length ?? 0) > 0;
 }
 
 export const DEFAULT_CARD_BACK = DEFAULT_CARD_BACK_URL;

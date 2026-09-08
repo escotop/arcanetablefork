@@ -40,7 +40,7 @@ import { getCardKey, hydrateDeck } from './deckStore';
 import { cardFromDeckEntry, preloadStackTextures } from './cardLoading';
 import { Deck as DeckData, DetailedCardEntry } from './constants';
 import { profileAsync } from './loadProfile';
-import { collectTokenPartIds, mergeTokenPrintings, resolveTokensByIds } from './deckTokens';
+import { collectTokenPartIds, appendSavedTokenPrintings, mergeTokenPrintings, resolveTokensByIds } from './deckTokens';
 import {
   createCreateCardEvent,
   createDismissZoneEvent,
@@ -524,9 +524,16 @@ export class PlayArea {
       this.availableTokens = payload.availableTokens;
     }
 
+    const resolveAvailableTokens = async () => {
+      const tokenDetails = await resolveTokensByIds(collectTokenPartIds(this.getTokenSources()));
+      return appendSavedTokenPrintings(
+        mergeTokenPrintings(tokenDetails, this.tokenPrintings),
+        this.tokenPrintings,
+      );
+    };
+
     if (!this.availableTokens?.length) {
-      const tokenDetails = await resolveTokensByIds(collectTokenPartIds(this.cards));
-      const merged = mergeTokenPrintings(tokenDetails, this.tokenPrintings);
+      const merged = await resolveAvailableTokens();
       this.availableTokens = merged.map(entry => ({ ...entry.detail, clientId: this.clientId }));
 
       // Para el jugador local, usar el modal 2D
@@ -541,6 +548,8 @@ export class PlayArea {
           };
         });
 
+        setPeekFilterText('');
+        setPeekTypeFilter(null);
         const { setCardSearchModalOpen, setCardSearchModalData } = await import('./globals');
         setCardSearchModalData({
           cards: availableCards,
@@ -594,6 +603,8 @@ export class PlayArea {
         };
       });
 
+      setPeekFilterText('');
+      setPeekTypeFilter(null);
       const { setCardSearchModalOpen, setCardSearchModalData } = await import('./globals');
       setCardSearchModalData({
         cards: availableCards,
@@ -631,6 +642,17 @@ export class PlayArea {
         this.tokenSearchZone.addCard(availableCards[i]);
       }, i * 50);
     }
+  }
+
+  private getTokenSources() {
+    return [
+      ...this.cards,
+      ...this.deck.cards,
+      ...this.hand.cards,
+      ...this.battlefieldZone.cards,
+      ...this.graveyardZone.cards,
+      ...this.exileZone.cards,
+    ];
   }
 
   modifyCard(card: Card, update = x => x) {

@@ -94,6 +94,11 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
   createEffect(() => {
     if (props.open) {
       setHoverSignal();
+
+      if (props.zone === 'tokenSearch') {
+        setPeekFilterText('');
+        setPeekTypeFilter(null);
+      }
       
       // Limpiar cualquier búsqueda 3D antigua
       const area = playArea();

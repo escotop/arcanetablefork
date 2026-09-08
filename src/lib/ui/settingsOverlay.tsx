@@ -210,7 +210,7 @@ export default function SettingsOverlay(props: {
               checked={settings.enableCameraTilt}
               onChange={checked => setSettings('enableCameraTilt', checked)}
             />
-            <span>Enable Camera Tilt </span>
+            <span>Enable Camera Tilt (screen edges)</span>
           </Label>
           <Slider
             class='mt-4'

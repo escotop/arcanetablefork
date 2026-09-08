@@ -91,3 +91,30 @@ export function mergeTokenPrintings(
     };
   });
 }
+
+export function appendSavedTokenPrintings(
+  tokens: DetailedCardEntry[],
+  saved: Record<string, DetailedCardEntry> | undefined,
+): DetailedCardEntry[] {
+  if (!saved) return tokens;
+
+  const merged = [...tokens];
+  const mergedKeys = new Set(merged.map(token => getTokenKey(token.detail as TokenDetail)));
+
+  for (const savedEntry of Object.values(saved)) {
+    const key = getTokenKey(savedEntry.detail as TokenDetail);
+    if (mergedKeys.has(key)) continue;
+    merged.push(
+      applyCustomArtToEntry({
+        ...savedEntry,
+        qty: 1,
+        name: savedEntry.name ?? savedEntry.detail.name,
+        categories: savedEntry.categories ?? [],
+        detail: savedEntry.detail,
+      }),
+    );
+    mergedKeys.add(key);
+  }
+
+  return merged.sort((a, b) => a.name.localeCompare(b.name));
+}

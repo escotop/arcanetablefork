@@ -14,6 +14,10 @@ import {
   GameOptions,
   isMagicCardSystem,
   LoadSettings,
+  CAMERA_TILT_CENTER_FRACTION,
+  CAMERA_TILT_EDGE_FRACTION,
+  CAMERA_TILT_LATERAL_BOTTOM_EXCLUDE_FRACTION,
+  CAMERA_TILT_VERTICAL_UNTILT_FRACTION,
   LOOK_EASE,
   LOOK_STRENGTH_X,
   LOOK_STRENGTH_Y,
@@ -39,6 +43,7 @@ import {
   hoverSignal,
   init,
   initClock,
+  isCameraTiltBlocked,
   isSpectating,
   isGameplayBlocked,
   playAreas,
@@ -133,6 +138,12 @@ let hand: Hand;
 let time = 0;
 let playArea: PlayArea;
 let currentGameId: string;
+let currentYaw = 0;
+let currentPitch = 0;
+let latchedTiltX = 0;
+let latchedTiltY = 0;
+let cameraTiltDisarmed = false;
+let cameraTiltWasBlocked = false;
 
 interface StoredGameMeta {
   name: string;
@@ -500,6 +511,7 @@ export async function localInit(gameOptions: GameOptions) {
   renderer.domElement.addEventListener('contextmenu', onContextMenu, false);
   renderer.domElement.addEventListener('auxclick', onAuxClick, false);
   document.addEventListener('mousemove', onDocumentMouseMove, false);
+  document.documentElement.addEventListener('mouseleave', onDocumentMouseLeave, false);
   document.addEventListener('click', onDocumentClick, false);
   document.addEventListener('dragstart', onDocumentDragStart, false);
   document.addEventListener('mouseup', onDocumentDrop, false);
@@ -1320,6 +1332,50 @@ function onDocumentMouseMove(event) {
   }
 }
 
+function onDocumentMouseLeave() {
+  releaseCameraTiltLatch();
+  cameraTiltDisarmed = true;
+}
+
+function releaseCameraTiltLatch() {
+  latchedTiltX = 0;
+  latchedTiltY = 0;
+}
+
+function resetCameraTiltInstant() {
+  releaseCameraTiltLatch();
+  currentYaw = 0;
+  currentPitch = 0;
+  camera?.quaternion.copy(baseCameraQuaternion);
+}
+
+function isCameraTiltAnimatingToRest() {
+  return (
+    latchedTiltX !== 0 ||
+    latchedTiltY !== 0 ||
+    Math.abs(currentYaw) > 1e-4 ||
+    Math.abs(currentPitch) > 1e-4
+  );
+}
+
+function applyCameraTiltAnimation() {
+  const targetYaw = -latchedTiltX * LOOK_STRENGTH_X;
+  const targetPitch = latchedTiltY * LOOK_STRENGTH_Y;
+
+  currentYaw += (targetYaw - currentYaw) * LOOK_EASE;
+  currentPitch += (targetPitch - currentPitch) * LOOK_EASE;
+
+  if (latchedTiltX === 0 && latchedTiltY === 0) {
+    if (Math.abs(currentYaw) < 1e-4) currentYaw = 0;
+    if (Math.abs(currentPitch) < 1e-4) currentPitch = 0;
+  }
+
+  const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), currentYaw);
+  const pitchQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), currentPitch);
+
+  camera.quaternion.copy(baseCameraQuaternion).multiply(yawQ).multiply(pitchQ);
+}
+
 function updateMouse(event) {
   mouse.set(
     (event.clientX / window.innerWidth) * 2 - 1,
@@ -1640,8 +1696,21 @@ function render3d(delta: number) {
   updateWaterdrops(delta);
   updateFocusPanelScaleSmoothing();
 
-  if (settings.enableCameraTilt && !isSpectating()) {
+  const tiltBlocked = isCameraTiltBlocked();
+  if (cameraTiltWasBlocked && !tiltBlocked) {
+    cameraTiltDisarmed = true;
+  }
+  cameraTiltWasBlocked = tiltBlocked;
+
+  if (settings.enableCameraTilt && !isSpectating() && !tiltBlocked) {
     animateCameraLook();
+  } else {
+    if (latchedTiltX !== 0 || latchedTiltY !== 0) {
+      releaseCameraTiltLatch();
+    }
+    if (isCameraTiltAnimatingToRest()) {
+      applyCameraTiltAnimation();
+    }
   }
 
   Object.values(playAreas).forEach(playArea => {
@@ -1700,15 +1769,10 @@ function render3d(delta: number) {
   }
 }
 
-let currentYaw = 0;
-let currentPitch = 0;
-
 setAfterCameraViewChange(() => {
-  currentYaw = 0;
-  currentPitch = 0;
-  if (camera) {
-    camera.quaternion.copy(baseCameraQuaternion);
-  }
+  resetCameraTiltInstant();
+  cameraTiltDisarmed = false;
+  cameraTiltWasBlocked = isCameraTiltBlocked();
   syncCameraDebugGuiFromActiveView();
 });
 
@@ -1720,16 +1784,49 @@ export function setCameraViewMode(mode: 'local' | 'opponent') {
   applyCameraViewMode(mode);
 }
 
+function getLateralTiltEdgeMinY() {
+  return -1 + CAMERA_TILT_LATERAL_BOTTOM_EXCLUDE_FRACTION * 2;
+}
+
+function isInCameraTiltEdgeZone(ndcX: number, ndcY: number) {
+  const edgeBound = 1 - CAMERA_TILT_EDGE_FRACTION * 2;
+  const inTopEdge = ndcY > edgeBound;
+  const inLateralEdge =
+    ndcY > getLateralTiltEdgeMinY() && (ndcX < -edgeBound || ndcX > edgeBound);
+  return inLateralEdge || inTopEdge;
+}
+
+function updateCameraTiltLatch(ndcX: number, ndcY: number) {
+  if (cameraTiltDisarmed) {
+    if (!isInCameraTiltEdgeZone(ndcX, ndcY)) {
+      cameraTiltDisarmed = false;
+    } else {
+      return;
+    }
+  }
+
+  const edgeBound = 1 - CAMERA_TILT_EDGE_FRACTION * 2;
+  const centerBound = CAMERA_TILT_CENTER_FRACTION * 2;
+  const lateralEdgeMinY = getLateralTiltEdgeMinY();
+  const inLeftEdge = ndcX < -edgeBound && ndcY > lateralEdgeMinY;
+  const inRightEdge = ndcX > edgeBound && ndcY > lateralEdgeMinY;
+  const inTopEdge = ndcY > edgeBound;
+  const inHorizontalCenter = Math.abs(ndcX) <= centerBound;
+  const verticalUntiltCenter = -CAMERA_TILT_VERTICAL_UNTILT_FRACTION * 2;
+  const inVerticalCenter = Math.abs(ndcY - verticalUntiltCenter) <= centerBound;
+
+  if (inHorizontalCenter) latchedTiltX = 0;
+  if (inVerticalCenter) latchedTiltY = 0;
+
+  if (latchedTiltY === 0 && (inLeftEdge || inRightEdge)) {
+    latchedTiltX = inLeftEdge ? -1 : 1;
+  }
+  if (latchedTiltX === 0 && inTopEdge) {
+    latchedTiltY = 1;
+  }
+}
+
 function animateCameraLook() {
-  const targetYaw = -cameraMouse.x * LOOK_STRENGTH_X;
-  const targetPitch = cameraMouse.y * LOOK_STRENGTH_Y;
-
-  currentYaw += (targetYaw - currentYaw) * LOOK_EASE;
-  currentPitch += (targetPitch - currentPitch) * LOOK_EASE;
-
-  // Apply on top of base rotation
-  const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), currentYaw);
-  const pitchQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), currentPitch);
-
-  camera.quaternion.copy(baseCameraQuaternion).multiply(yawQ).multiply(pitchQ);
+  updateCameraTiltLatch(cameraMouse.x, cameraMouse.y);
+  applyCameraTiltAnimation();
 }
