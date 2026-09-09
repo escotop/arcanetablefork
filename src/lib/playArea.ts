@@ -68,6 +68,14 @@ export function spawnTokenOnBattlefield(
   options?: { positionFromZone?: CardZone<any> },
 ) {
   const card = cloneCard(referenceCard, nanoid());
+  const clientId =
+    referenceCard.clientId ??
+    referenceCard.mesh?.userData?.clientId ??
+    playArea.clientId;
+  if (clientId != null) {
+    card.clientId = Number(clientId);
+    setCardData(card.mesh, 'clientId', clientId);
+  }
   setCardData(card.mesh, 'isPublic', true);
   setCardData(card.mesh, 'isToken', true);
 

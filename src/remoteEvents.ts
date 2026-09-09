@@ -781,6 +781,7 @@ const EVENTS = {
 
     let card = cloneCard(cardPayload, String(userData.id));
     card.clientId = playArea.clientId;
+    setCardData(card.mesh, 'clientId', playArea.clientId);
     if (userData.isToken) {
       setCardData(card.mesh, 'isToken', true);
       updateModifiers(card);

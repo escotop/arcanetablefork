@@ -295,6 +295,22 @@ export function getSearchLine(cardDetail: CardEntryDetail) {
   return buildSearchLine(cardDetail, cardSystem.searchField);
 }
 
+export function resolveInteractiveCard(object?: Object3D | null): Card | undefined {
+  if (!object) return undefined;
+
+  const directId = object.userData?.id;
+  if (directId && cardsById.has(directId)) {
+    return cardsById.get(directId);
+  }
+
+  const parentId = object.parent?.userData?.id;
+  if (parentId && cardsById.has(parentId)) {
+    return cardsById.get(parentId);
+  }
+
+  return undefined;
+}
+
 export function cloneCard(card: Card, newId: string): Card {
   let { mesh, modifiers, ...shared } = card;
   let newCard = structuredClone(shared) as Card;
@@ -312,6 +328,9 @@ export function cloneCard(card: Card, newId: string): Card {
     newCard.mesh.rotation.copy(card.mesh.rotation);
   }
   setCardData(newCard.mesh, 'id', newCard.id);
+  if (newCard.clientId != null && newCard.mesh.userData.clientId == null) {
+    setCardData(newCard.mesh, 'clientId', newCard.clientId);
+  }
   updateModifiers(newCard);
   newCard.detail.search = card.detail.search ?? getSearchLine(newCard.detail);
   cardsById.set(newCard.id, newCard);

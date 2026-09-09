@@ -11,6 +11,16 @@ export function untapAll(playArea: PlayArea) {
   tappedCardMeshes.forEach(cardMesh => playArea.tap(cardMesh));
 }
 
+function getCardOwnerClientId(card: Card) {
+  return card.clientId ?? card.mesh?.userData?.clientId;
+}
+
+function isLocalBattlefieldCard(card: Card, localClientId: number | undefined) {
+  if (localClientId === undefined) return false;
+  if (card.mesh.userData.location !== 'battlefield') return false;
+  return Number(getCardOwnerClientId(card)) === Number(localClientId);
+}
+
 function defaultCardModifiers(modifiers?: Card['mesh']['userData']['modifiers']) {
   return {
     power: modifiers?.power ?? 0,
@@ -38,11 +48,7 @@ export function adjustBattlefieldCardsPowerToughness(
   if (!playArea) return false;
 
   const localClientId = getLocalPlayerClientId();
-  const targets = cardList.filter(
-    card =>
-      card.mesh.userData.location === 'battlefield' &&
-      Number(card.mesh.userData.clientId) === Number(localClientId),
-  );
+  const targets = cardList.filter(card => isLocalBattlefieldCard(card, localClientId));
 
   if (!targets.length) return false;
 

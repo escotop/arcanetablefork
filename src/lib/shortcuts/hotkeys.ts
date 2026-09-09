@@ -11,7 +11,7 @@ import {
   cardSearchModalOpen,
 } from '../globals';
 import { transferCard } from '../transferCard';
-import { toggleLocalHandFlip } from '../card';
+import { resolveInteractiveCard, toggleLocalHandFlip } from '../card';
 import { drawCards, searchDeck } from './commands/deck';
 import { untapAll, adjustBattlefieldCardsPowerToughness, getPowerToughnessDeltaFromKey } from './commands/field';
 import { activateSpanishPreview } from '../spanishCardPreview';
@@ -28,11 +28,18 @@ export function HotKeys() {
   const cards = () => {
     let items = selection.selectedItems;
     if (items.length) {
-      return items.map(item => cardsById.get(item.userData.id)).filter(Boolean) as Card[];
+      return items.map(item => resolveInteractiveCard(item)).filter(Boolean) as Card[];
     }
-    if (!cardMesh()) return [];
+    const hovered = resolveInteractiveCard(cardMesh());
+    return hovered ? [hovered] : [];
+  };
 
-    return [cardsById.get(cardMesh().userData.id)].filter(Boolean) as Card[];
+  const battlefieldTargetMesh = () => {
+    const selected = selection.selectedItems[0];
+    if (selected) {
+      return resolveInteractiveCard(selected)?.mesh ?? selected;
+    }
+    return resolveInteractiveCard(hoverSignal()?.mesh)?.mesh ?? hoverSignal()?.mesh;
   };
   createEffect(() => {
     const selected = selection.selectedItems[0];
@@ -60,9 +67,7 @@ export function HotKeys() {
       const target = event.target as HTMLElement | null;
       if (target?.closest('input, textarea, [contenteditable="true"]')) return;
 
-      const location =
-        selection.selectedItems[0]?.userData?.location ??
-        hoverSignal()?.mesh?.userData?.location;
+      const location = battlefieldTargetMesh()?.userData?.location;
       if (location !== 'battlefield') return;
 
       const delta = getPowerToughnessDeltaFromKey(event);
