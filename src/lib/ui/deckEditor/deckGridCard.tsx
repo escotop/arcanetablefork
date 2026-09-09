@@ -1,4 +1,4 @@
-import { Accessor, Component, onMount, Show } from 'solid-js';
+import { Accessor, Component, createEffect, createSignal, onMount, Show } from 'solid-js';
 import { SetStoreFunction } from 'solid-js/store';
 import { Button } from '~/components/ui/button';
 import AddIcon from 'lucide-solid/icons/plus';
@@ -8,6 +8,7 @@ import ImagesIcon from 'lucide-solid/icons/images';
 import StarIcon from 'lucide-solid/icons/star';
 import ArrowRightIcon from 'lucide-solid/icons/arrow-right';
 import ArrowLeftIcon from 'lucide-solid/icons/arrow-left';
+import RotateCwIcon from 'lucide-solid/icons/rotate-cw';
 import random from 'lodash-es/random';
 import { getCardImage } from '~/lib/card';
 import { DetailedCardEntry, Deck } from '~/lib/constants';
@@ -33,11 +34,32 @@ interface Props {
   pinnedPrintings?: CardPrintingOption[];
 }
 
+function hasDoubleFace(card: DetailedCardEntry | undefined) {
+  const faces = card?.detail?.card_faces;
+  return Boolean(faces && faces.length > 1 && faces[1]?.image_uris);
+}
+
 const DeckGridCard: Component<Props> = props => {
   const isToken = () => props.variant === 'token';
   const isCommander = () => isCommanderCard(props.card());
   const section = () => props.section ?? 'cards';
+  const [showBackFace, setShowBackFace] = createSignal(false);
   let rootRef: HTMLDivElement | undefined;
+
+  createEffect(() => {
+    props.storageKey;
+    props.card()?.id;
+    setShowBackFace(false);
+  });
+
+  const displayedImage = () => {
+    const card = props.card();
+    if (!card) return undefined;
+    if (showBackFace() && hasDoubleFace(card)) {
+      return getCardImage(card, 1);
+    }
+    return getCardImage(card);
+  };
 
   onMount(() => {
     if (!rootRef) return;
@@ -66,7 +88,7 @@ const DeckGridCard: Component<Props> = props => {
       }}>
       <img
         src={
-          getCardImage(props.card()) ??
+          displayedImage() ??
           cardSystem.fallbackImage ??
           '/unknown-card-image.webp'
         }
@@ -126,7 +148,7 @@ const DeckGridCard: Component<Props> = props => {
             class='dark font-bold text-white flex w-fit flex-col items-center gap-1 rounded px-1 py-1'
             style='background: hsla(var(--background) / .4);'
             onPointerDown={e => e.stopPropagation()}>
-            <Show when={!props.card()?.detail?.name || !getCardImage(props.card())}>
+            <Show when={!props.card()?.detail?.name || !displayedImage()}>
               <div class='px-2 text-center text-sm'>{props.card()?.name}</div>
             </Show>
             <Show when={!isToken()}>
@@ -210,7 +232,7 @@ const DeckGridCard: Component<Props> = props => {
                   />
                 </Button>
               </Show>
-              <Show when={props.card()?.detail?.name && getCardImage(props.card())}>
+              <Show when={props.card()?.detail?.name && displayedImage()}>
                 <Button
                   type='button'
                   variant='ghost'
@@ -219,13 +241,27 @@ const DeckGridCard: Component<Props> = props => {
                   onClick={e => {
                     e.preventDefault();
                     e.stopPropagation();
-                    const src = getCardImage(props.card());
+                    const src = displayedImage();
                     if (src) props.onPreview(src);
                   }}>
                   <SearchIcon class='text-white' style='filter: drop-shadow(2px 4px 6px black);' />
                 </Button>
               </Show>
             </div>
+            <Show when={hasDoubleFace(props.card())}>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon'
+                title='Flip card'
+                onClick={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowBackFace(current => !current);
+                }}>
+                <RotateCwIcon class='text-white' style='filter: drop-shadow(2px 4px 6px black);' />
+              </Button>
+            </Show>
           </div>
       </div>
     </div>
