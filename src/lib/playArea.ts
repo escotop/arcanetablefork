@@ -29,6 +29,7 @@ import {
   flushDispatchEventQueue,
   getLocalPlayerClientId,
   isEventCatchUpComplete,
+  notifyHowItPlaysMulligan,
   setPeekFilterText,
   setPeekTypeFilter,
   sendEvent,
@@ -727,6 +728,9 @@ export class PlayArea {
   async mulligan(drawCount: number, existingOrder?: number[]) {
     const order = await this.executeMulligan(drawCount, existingOrder);
     this.emitEvent({ type: 'mulligan', skipReplay: SKIP_REPLAY, payload: { order, drawCount } });
+    if (this.isLocalPlayArea) {
+      notifyHowItPlaysMulligan();
+    }
   }
 
   reveal(card: Card) {

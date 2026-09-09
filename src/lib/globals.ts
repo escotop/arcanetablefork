@@ -37,6 +37,7 @@ import {
   HoverSignal,
   TABLE_COLOR,
 } from './constants';
+import type { CommanderBracketHowItPlaysSection } from './commanderBracket';
 import type { PlayArea } from './playArea';
 import { DEFAULT_CARD_BACK_URL } from './mtgCardSystem';
 import TextureLoaderWorker from './textureLoaderWorker?worker';
@@ -49,7 +50,16 @@ import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { CSS3DRenderer } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import GUI from 'lil-gui';
 import { createLocalStore } from './localStore';
-import { clearPlayerSessionRegistry, clearJoinBinding, unregisterPlayerSession, getOrCreatePlayerSessionId, persistJoinBinding, registerPlayerSession, setPlayerSessionId } from './playerSession';
+import {
+  clearPlayerSessionRegistry,
+  clearJoinBinding,
+  unregisterPlayerSession,
+  getOrCreatePlayerSessionId,
+  persistJoinBinding,
+  registerPlayerSession,
+  setPlayerSessionId,
+  iterateGameLogEvents,
+} from './playerSession';
 import { resetMultiplayerSyncState } from './multiplayerSync';
 import { removePlayerFromTurnOrder } from './turnOrder';
 import { clearWaterdrops } from './waterdropEffect';
@@ -86,6 +96,70 @@ export let [playAreas, setPlayAreas] = createStore<Record<number, PlayArea>>({})
 export let [peekFilterText, setPeekFilterText] = createSignal('');
 export let [peekTypeFilter, setPeekTypeFilter] = createSignal<string | null>(null);
 export let [cardSearchModalOpen, setCardSearchModalOpen] = createSignal(false);
+export let [howItPlaysAdvice, setHowItPlaysAdvice] = createSignal<
+  CommanderBracketHowItPlaysSection | undefined
+>();
+export let [howItPlaysHelpVisible, setHowItPlaysHelpVisible] = createSignal(false);
+export let [howItPlaysModalOpen, setHowItPlaysModalOpen] = createSignal(false);
+export let [howItPlaysHandTick, setHowItPlaysHandTick] = createSignal(0);
+
+export function bumpHowItPlaysHandTick() {
+  setHowItPlaysHandTick(value => value + 1);
+}
+
+export let [howItPlaysMulliganTick, setHowItPlaysMulliganTick] = createSignal(0);
+
+export function notifyHowItPlaysMulligan() {
+  setHowItPlaysMulliganTick(value => value + 1);
+}
+
+export function hasLocalPlayerPlayedFromHand(
+  log: YArray<unknown>,
+  playerSessionId: string,
+): boolean {
+  let handId: string | undefined;
+  let battlefieldId: string | undefined;
+
+  for (const event of iterateGameLogEvents(log)) {
+    if (event?.type === 'kick' && event.payload?.playerSessionId === playerSessionId) {
+      handId = undefined;
+      battlefieldId = undefined;
+    }
+    if (event?.type === 'join' && event.payload?.playerSessionId === playerSessionId) {
+      handId = event.payload?.hand?.id as string | undefined;
+      battlefieldId = event.payload?.battlefield?.id as string | undefined;
+    }
+    if (
+      event?.type === 'transferCard' &&
+      handId &&
+      battlefieldId &&
+      event.payload?.fromZoneId === handId &&
+      event.payload?.toZoneId === battlefieldId
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function initHowItPlaysAdvice(
+  section?: CommanderBracketHowItPlaysSection,
+  playerSessionId?: string,
+) {
+  setHowItPlaysAdvice(section);
+  setHowItPlaysHandTick(0);
+  const playedFromHand =
+    !!playerSessionId && hasLocalPlayerPlayedFromHand(gameLog, playerSessionId);
+  setHowItPlaysHelpVisible(!!section && !playedFromHand);
+  setHowItPlaysModalOpen(false);
+}
+
+export function dismissHowItPlaysHelp() {
+  setHowItPlaysHelpVisible(false);
+  setHowItPlaysModalOpen(false);
+}
+
 export let [cardSearchModalData, setCardSearchModalData] = createSignal<{
   cards: Card[];
   zone: 'peek' | 'graveyard' | 'exile' | 'tokenSearch';
@@ -757,6 +831,7 @@ export function cleanup() {
   setIsSpectating(false);
   setIsIntitialized(false);
   setEventCatchUpComplete(false);
+  initHowItPlaysAdvice();
   clearWaterdrops();
   clearPingSync();
   resetCameraView();

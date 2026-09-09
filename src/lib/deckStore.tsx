@@ -200,7 +200,11 @@ export async function hydrateDeck(originalDeck: Deck) {
   if (originalDeck.id && contentHash) {
     const cachedDeck = await getHydratedDeck(originalDeck.id, contentHash);
     if (cachedDeck) {
-      return applyCustomArtToHydratedDeck(cachedDeck);
+      return applyCustomArtToHydratedDeck({
+        ...cachedDeck,
+        bracketEstimate: originalDeck.bracketEstimate ?? cachedDeck.bracketEstimate,
+        howItPlaysAdvice: originalDeck.howItPlaysAdvice ?? cachedDeck.howItPlaysAdvice,
+      });
     }
   }
 

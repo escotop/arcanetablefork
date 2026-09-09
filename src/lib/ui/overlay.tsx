@@ -54,6 +54,7 @@ import { turnOrderState } from '../turnOrder';
 import Announcement from './announcement';
 import ContextMenuHandler from './context-menu/handler';
 import CameraTiltHints from './cameraTiltHints';
+import HowItPlaysGameHelp from './howItPlaysGameHelp';
 import CardSearchModal from './cardSearchModal';
 import {
   isSpanishPreviewUiForCard,
@@ -245,6 +246,9 @@ export default function Overlay() {
       </Show>
 
       <MainMenu playArea={playArea()!} />
+      <Show when={!isSpectating() && playArea()}>
+        <HowItPlaysGameHelp playArea={playArea()} />
+      </Show>
       <Show when={!isSpectating()}>
         <div class={styles.bottomRightHud}>
           <Show when={playArea()}>

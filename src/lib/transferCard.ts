@@ -1,6 +1,14 @@
 import { ensureCardMesh, loadCardTextures, setCardData, updateModifiers } from './card';
 import { Card, CardZone } from './constants';
-import { cardsById, getLocalPlayerClientId, isEventCatchUpComplete, isLocalHandZone, sendEvent } from './globals';
+import {
+  cardsById,
+  dismissHowItPlaysHelp,
+  getLocalPlayerClientId,
+  isEventCatchUpComplete,
+  isHistoricalLogReplayInProgress,
+  isLocalHandZone,
+  sendEvent,
+} from './globals';
 import { Deck } from './deck';
 import { Hand } from './hand';
 import { serializeCardUserDataForLog } from './gameLogEvents';
@@ -145,6 +153,14 @@ export async function transferCard<AddOptions extends {}>(
     if (toZone.zone === 'graveyard' || toZone.zone === 'exile') {
       onStackCardAdded(toZone as CardStack);
     }
+  }
+
+  if (
+    isLocalHandZone(fromZone) &&
+    toZone?.zone === 'battlefield' &&
+    !isHistoricalLogReplayInProgress()
+  ) {
+    dismissHowItPlaysHelp();
   }
 
   if (!preventTransmit) {

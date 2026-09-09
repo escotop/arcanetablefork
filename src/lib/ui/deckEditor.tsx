@@ -111,6 +111,7 @@ import {
   buildCommanderBracketShareUrl,
   estimateCommanderBracket,
   getBracketEstimateFromResult,
+  getHowItPlaysSection,
 } from '../commanderBracket';
 import {
   canBeCommander,
@@ -301,8 +302,8 @@ export const DeckEditor: Component<Props> = props => {
   };
 
   function invalidateBracketEstimate() {
-    if (deck.bracketEstimate != null) {
-      setDeck('bracketEstimate', undefined);
+    if (deck.bracketEstimate != null || deck.howItPlaysAdvice != null) {
+      setDeck({ bracketEstimate: undefined, howItPlaysAdvice: undefined });
       setIsDirty(true);
     }
   }
@@ -518,11 +519,18 @@ export const DeckEditor: Component<Props> = props => {
       const result = await estimateCommanderBracket(cards);
       setBracketResult(result);
       const bracket = getBracketEstimateFromResult(result);
-      if (bracket != null) {
-        updateDeck('bracketEstimate', bracket);
-      } else {
-        invalidateBracketEstimate();
-      }
+      const advice = getHowItPlaysSection(result);
+      const persistedDeck = serializeDeck({
+        ...unwrap(deck),
+        bracketEstimate: bracket ?? undefined,
+        howItPlaysAdvice: advice ?? undefined,
+      });
+      setDeck({
+        bracketEstimate: persistedDeck.bracketEstimate,
+        howItPlaysAdvice: persistedDeck.howItPlaysAdvice,
+      });
+      setIsDirty(true);
+      props.onChange(persistedDeck);
     } catch (error) {
       const message =
         error instanceof CommanderBracketApiError

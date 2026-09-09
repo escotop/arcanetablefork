@@ -3,7 +3,7 @@ import { CatmullRomCurve3, Euler, Group, Intersection, Mesh, Object3D, Plane, Ra
 import { animateObject, cancelAnimation } from './animations';
 import { cleanupCard, getSerializableCard, setCardData } from './card';
 import { Card, CARD_HEIGHT, CardZone } from './constants';
-import { cardsById, getProjectionVec, isEventCatchUpComplete, setHoverSignal, settings, zonesById } from './globals';
+import { cardsById, bumpHowItPlaysHandTick, isEventCatchUpComplete, setHoverSignal, settings, zonesById } from './globals';
 import { getGlobalRotation } from './utils';
 import { devLog } from './devLog';
 import { removeHandManaOverlay, syncHandManaOverlayRenderOrder, updateHandManaOverlay } from './handManaOverlay';
@@ -107,7 +107,10 @@ export class Hand implements CardZone {
 
     createRoot(destroy => {
       this.destroyReactivity = destroy;
-      [this.observable, this.setObservable] = createStore({ cardCount: this.cards.length });
+      [this.observable, this.setObservable] = createStore({
+        cardCount: this.cards.length,
+        revision: 0,
+      });
     });
 
     zonesById.set(this.id, this);
@@ -268,8 +271,16 @@ export class Hand implements CardZone {
     this.syncManaOverlays();
   }
 
-  updatePositions() {
-    this.updateUiTether();
+  updatePositions() {}
+
+  private bumpObservable() {
+    this.setObservable(prev => ({
+      cardCount: this.cards.length,
+      revision: (prev.revision ?? 0) + 1,
+    }));
+    if (this.isLocalHand) {
+      bumpHowItPlaysHandTick();
+    }
   }
 
   private get cardSpacing() {
@@ -277,19 +288,6 @@ export class Hand implements CardZone {
     let min = 1;
     let value = Math.min(this.cards.length / 100, 1);
     return lerp(max, min, value);
-  }
-
-  private updateUiTether() {
-    const point = new Vector3(0, CARD_HEIGHT/2, 0);
-    this.mesh.localToWorld(point);
-    const projection = getProjectionVec(point);
-    if (!projection) return;
-
-    this.setObservable('uiTether', {
-      x: projection.x,
-      y: projection.y,
-      offset: { y: '-100%'}
-    });
   }
 
   adjustHandPosition() {
@@ -436,7 +434,7 @@ export class Hand implements CardZone {
         : clampInsertIndex(insertIndex, this.cards.length);
     this.cards.splice(index, 0, card);
     this.cardMap.set(card.id, card);
-    this.setObservable('cardCount', this.cards.length);
+    this.bumpObservable();
 
     if (this.focusedIndex !== undefined && index <= this.focusedIndex) {
       this.focusedIndex++;
@@ -555,7 +553,7 @@ export class Hand implements CardZone {
     this.mesh.remove(cardMesh);
     this.cards.splice(cardIndex, 1);
     this.cardMap.delete(cardMesh.userData.id);
-    this.setObservable('cardCount', this.cards.length);
+    this.bumpObservable();
 
     this.adjustHandPosition();
     this.relayoutCards({ animate: true, skipIndex: this.focusedIndex });

@@ -1,4 +1,5 @@
 import { EulerTuple, Mesh, Object3D, Vector2, Vector3, Vector3Tuple } from 'three';
+import type { CommanderBracketHowItPlaysSection } from './commanderBracket';
 
 export const CARD_WIDTH = 63 / 4;
 export const CARD_HEIGHT = 88 / 4;
@@ -132,7 +133,7 @@ export interface CardZone<AddOptions = {} & { skipAnimation?: boolean; destroy?:
   removeCard(cardMesh: Mesh): void;
   addCard(card: Card, opts?: AddOptions): void;
   getSerializable(): { id: string };
-  observable: { cardCount: number, uiTether?: Tether };
+  observable: { cardCount: number; revision?: number; uiTether?: Tether };
   cards: Card[];
   updatePositions(): void;
 }
@@ -153,6 +154,7 @@ export interface Deck {
   tokens?: Record<string, DetailedCardEntry>;
   tags?: { name: string }[];
   bracketEstimate?: number;
+  howItPlaysAdvice?: CommanderBracketHowItPlaysSection;
   startingLife: number;
   name: string;
   cardList?: string;

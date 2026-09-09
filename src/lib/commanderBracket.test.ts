@@ -6,6 +6,7 @@ import {
   formatCommanderBracketDeckListLine,
   getBracketEstimateFromResult,
   getBracketTagLabel,
+  getHowItPlaysSection,
 } from './commanderBracket';
 import type { DetailedCardEntry } from './constants';
 
@@ -73,6 +74,57 @@ test('getBracketEstimateFromResult requires a clean estimate', () => {
       bracket_analysis: { final_bracket: 3, deck_bracket: 2 },
     }),
   ).toBe(3);
+});
+
+test('getHowItPlaysSection builds opening hand advice from deck_stats', () => {
+  expect(
+    getHowItPlaysSection({
+      deck_stats: {
+        report: {
+          consistency: { p_keepable_opener: 0.88 },
+          advice: {
+            mulligan: {
+              land_range: { min: 2, max: 4 },
+              p_keepable: 0.88,
+              commander_castable_by: 6,
+            },
+            hold_priority: [
+              {
+                name: 'Swords to Plowshares',
+                reason_code: 'instant_interaction',
+                timing_code: 'open_mana',
+              },
+              {
+                name: 'Boros Charm',
+                reason_code: 'instant_interaction',
+                timing_code: 'before_committing_board',
+              },
+            ],
+          },
+        },
+      },
+    }),
+  ).toEqual({
+    summary: '88% keepable openers, 2 cards worth holding',
+    bullets: ['Keep 2-4 lands', 'Commander online by turn 6'],
+    landRange: { min: 2, max: 4 },
+    openerDetail:
+      '88% of openers are keepable (2-4 lands and a castable early play, across your first two draws)',
+    worthHolding: [
+      {
+        name: 'Swords to Plowshares',
+        reasonLabel: 'Instant speed',
+        timingLabel: 'generally worth leaving mana open for',
+      },
+      {
+        name: 'Boros Charm',
+        reasonLabel: 'Instant speed',
+        timingLabel: 'generally worth holding before committing your board to a big turn',
+      },
+    ],
+  });
+
+  expect(getHowItPlaysSection(undefined)).toBeUndefined();
 });
 
 test('getBracketTagLabel uses cEDH for bracket 5', () => {

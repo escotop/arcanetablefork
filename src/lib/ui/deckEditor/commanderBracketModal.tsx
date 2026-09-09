@@ -4,7 +4,9 @@ import {
   CommanderBracketEstimate,
   getBracketColor,
   getDisplayBracket,
+  getHowItPlaysSection,
 } from '~/lib/commanderBracket';
+import HowItPlaysContent from '../howItPlaysContent';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import ExternalLinkIcon from 'lucide-solid/icons/external-link';
 
@@ -21,6 +23,7 @@ const CommanderBracketModal: Component<Props> = props => {
   const analysis = () => props.result?.bracket_analysis;
   const bracket = () => getDisplayBracket(analysis());
   const bracketColor = () => getBracketColor(bracket());
+  const howItPlays = () => getHowItPlaysSection(props.result);
   const validationIssues = () => [
     ...(props.result?.validation?.errors ?? []),
     ...(props.result?.validation?.warnings ?? []),
@@ -161,6 +164,13 @@ const CommanderBracketModal: Component<Props> = props => {
                             {item => <li>{item}</li>}
                           </For>
                         </ul>
+                      </div>
+                    </Show>
+
+                    <Show when={howItPlays()}>
+                      <div class='rounded-lg border bg-card p-4'>
+                        <h3 class='text-sm font-semibold'>How it plays</h3>
+                        <HowItPlaysContent section={howItPlays()!} class='mt-1' />
                       </div>
                     </Show>
                   </div>

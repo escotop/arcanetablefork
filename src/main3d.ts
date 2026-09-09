@@ -5,6 +5,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer';
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { cancelAnimation, renderAnimations, serializeAnimation } from './lib/animations';
+import { resolveHowItPlaysAdviceForDeck } from './lib/commanderBracket';
+import { getDeckStore } from './lib/deckStore';
 import { cloneCard, getCardMeshTetherPoint, setCardData, setCounterLabelHoverTarget, updateTextureAnimation } from './lib/card';
 import { clearSpanishPreview, clearSpanishPreviewForCard } from './lib/spanishCardPreview';
 import {
@@ -42,6 +44,7 @@ import {
   hasPersistedGameState,
   hoverSignal,
   init,
+  initHowItPlaysAdvice,
   initClock,
   isCameraTiltBlocked,
   isLocalHandZone,
@@ -286,6 +289,13 @@ async function finalizeReconnectedPlayArea(
   ensurePlayAreaOnTable(area);
   readjustPlayAreas();
   scheduleBattlefieldOrientationSync();
+
+  const storedDeck = meta?.deckId ? getDeckStore().decks[meta.deckId] : undefined;
+  const advice = await profileAsync('how it plays advice (reconnect)', () =>
+    resolveHowItPlaysAdviceForDeck(storedDeck),
+  );
+  initHowItPlaysAdvice(advice, playerSessionId);
+
   markLoadProfile('reclaim play area ready', { joinClientId: area.clientId, cardCount: area.deck.cards.length });
   void area.loadTextures();
   renderer?.compile(scene, camera);
@@ -333,6 +343,13 @@ async function reclaimLocalPlayArea(
   ensurePlayAreaOnTable(area);
   readjustPlayAreas();
   scheduleBattlefieldOrientationSync();
+
+  const storedDeck = meta?.deckId ? getDeckStore().decks[meta.deckId] : undefined;
+  const advice = await profileAsync('how it plays advice (reconnect)', () =>
+    resolveHowItPlaysAdviceForDeck(storedDeck),
+  );
+  initHowItPlaysAdvice(advice, playerSessionId);
+
   markLoadProfile('reclaim play area ready', { joinClientId, cardCount: area.deck.cards.length });
   void area.loadTextures();
   renderer?.compile(scene, camera);
@@ -616,8 +633,15 @@ export async function loadDeckAndJoin(
   playArea.playerSessionId = playerSessionId;
 
   setPlayAreas(provider.awareness.clientID, playArea);
+  playArea.setAsLocalPlayArea();
   setLocalPlayerClientId(playArea.clientId);
   registerPlayerSession(playerSessionId, playArea.clientId);
+
+  const advice = await profileAsync('how it plays advice', () =>
+    resolveHowItPlaysAdviceForDeck(deck),
+  );
+  initHowItPlaysAdvice(advice, playerSessionId);
+
   setIsIntitialized(true);
   setCounters(existing => uniqBy([...counters, ...existing], 'id'));
 
@@ -665,6 +689,7 @@ export async function loadDeckAndJoin(
   ensurePlayAreaOnTable(playArea);
 
   readjustPlayAreas();
+  playArea.hand.updatePositions?.();
   finishHistoricalLogReplay();
   setEventCatchUpComplete(true);
   refreshMultiplayerSyncState();
