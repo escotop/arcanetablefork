@@ -53,6 +53,7 @@ import { getLifeBarPlayersInTurnOrder } from '../playAreaNameTag';
 import { turnOrderState } from '../turnOrder';
 import Announcement from './announcement';
 import ContextMenuHandler from './context-menu/handler';
+import CameraTiltHints from './cameraTiltHints';
 import CardSearchModal from './cardSearchModal';
 import {
   isSpanishPreviewUiForCard,
@@ -129,6 +130,7 @@ export default function Overlay() {
       onClick={e => {
         e.stopImmediatePropagation();
       }}>
+      <CameraTiltHints />
       <div class={styles.top}>
         <div class='flex flex-wrap justify-start p-2 gap-2 items-start'>
           <For each={getLifeBarPlayersInTurnOrder(turnOrderState())}>
