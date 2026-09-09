@@ -2,6 +2,7 @@ import { createStore, SetStoreFunction, unwrap } from 'solid-js/store';
 import { nanoid } from 'nanoid';
 import { createContext, onMount, ParentProps, useContext } from 'solid-js';
 import { CardEntry, Deck, DetailedCardEntry, CardSystem } from './constants';
+import { findDeckEntryMatch, getCardKey } from './deckEntryMatch';
 import { fetchCardInfo, getDeckCoverMetadata, parseImportedCardList } from './deck';
 import {
   buildImportedInPlay,
@@ -124,9 +125,7 @@ const DEFAULT_DECK = {
   tokens: {},
 };
 
-export function getCardKey(entry: CardEntry) {
-  return entry?.id ?? [entry.name, entry.set].join(':');
-}
+export { findDeckEntryMatch, getCardKey } from './deckEntryMatch';
 
 function needsCardHydration(card: DetailedCardEntry) {
   if (!card.detail?.name) return true;

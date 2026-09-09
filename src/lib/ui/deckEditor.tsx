@@ -59,7 +59,8 @@ import SubIcon from 'lucide-solid/icons/minus';
 import SearchIcon from 'lucide-solid/icons/search';
 import ImagesIcon from 'lucide-solid/icons/images';
 import { createStore, reconcile, SetStoreFunction, unwrap } from 'solid-js/store';
-import { getCardKey, hydrateDeck, serializeDeck } from '../deckStore';
+import { findDeckEntryMatch, getCardKey } from '../deckEntryMatch';
+import { hydrateDeck, serializeDeck } from '../deckStore';
 import { useCardSystemContext } from '../cardSystemContext';
 import { MTG_CARD_SYSTEM } from '../mtgCardSystem';
 import { useSearchParams } from '@solidjs/router';
@@ -1396,7 +1397,9 @@ export const DeckEditor: Component<Props> = props => {
                     <For each={searchResults()!}>
                     {(card, i) => {
                       const cardKey = () => getCardKey(card);
-                      const deckCard = () => deck.cards?.[cardKey()];
+                      const deckMatch = () => findDeckEntryMatch(card, deck.cards ?? {});
+                      const deckCard = () => deckMatch()?.entry;
+                      const deckStorageKey = () => deckMatch()?.key ?? cardKey();
                       return (
                         <div
                           data-index={i()}
@@ -1409,7 +1412,7 @@ export const DeckEditor: Component<Props> = props => {
                         content-visibility: auto;
                       `}
                           class='fade-in-from-below'
-                          onContextMenu={e => handlePrintingContextMenu(e, cardKey())}
+                          onContextMenu={e => handlePrintingContextMenu(e, deckStorageKey())}
                           onMouseDown={e => {
                             if (
                               e.button !== 2 ||
@@ -1418,7 +1421,8 @@ export const DeckEditor: Component<Props> = props => {
                             ) {
                               return;
                             }
-                            if (card.name) prefetchCardPrintings(card.name);
+                            const name = deckCard()?.name ?? card.name;
+                            if (name) prefetchCardPrintings(name);
                           }}>
                           <img
                             src={
@@ -1461,7 +1465,7 @@ export const DeckEditor: Component<Props> = props => {
                                           onClick={e => {
                                             e.preventDefault();
                                             e.stopPropagation();
-                                            openPrintingPicker(cardKey());
+                                            openPrintingPicker(deckStorageKey());
                                           }}>
                                           <ImagesIcon />
                                         </Button>
@@ -1491,9 +1495,9 @@ export const DeckEditor: Component<Props> = props => {
                                     variant='ghost'
                                     type='button'
                                     onClick={() => {
-                                      const id = getCardKey(unwrap(card));
-                                      if (deck.cards[id]) {
-                                        return updateDeckCards('cards', id, 'qty', (qty = 1) =>
+                                      const match = findDeckEntryMatch(unwrap(card), deck.cards);
+                                      if (match) {
+                                        return updateDeckCards('cards', match.key, 'qty', (qty = 1) =>
                                           Math.max(qty - 1, 0),
                                         );
                                       }
@@ -1511,10 +1515,11 @@ export const DeckEditor: Component<Props> = props => {
                                   variant='ghost'
                                   type='button'
                                   onClick={() => {
-                                    const id = getCardKey(unwrap(card));
-                                    if (deck.cards[id]) {
-                                      return updateDeckCards('cards', id, 'qty', (qty = 1) => qty + 1);
+                                    const match = findDeckEntryMatch(unwrap(card), deck.cards);
+                                    if (match) {
+                                      return updateDeckCards('cards', match.key, 'qty', (qty = 1) => qty + 1);
                                     }
+                                    const id = getCardKey(unwrap(card));
                                     updateDeckCards('cards', id, { ...unwrap(card), qty: 1 });
                                   }}>
                                   <AddIcon
