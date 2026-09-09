@@ -715,8 +715,18 @@ export const DeckEditor: Component<Props> = props => {
       catalogTypeOptions()[0],
   );
 
-  function getSearchString(systemId: string, params: URLSearchParams) {
-    return [systemId, params.get('q'), params.get('catalogType')].join(':');
+  function getSearchString(systemId: string, params: URLSearchParams, subtypes: string[] = []) {
+    return [systemId, params.get('q'), params.get('catalogType'), subtypes.join('|')].join(':');
+  }
+
+  function hasCatalogSearchCriteria(
+    q?: string,
+    catalogType?: string,
+    subtypes: string[] = activeSubtypes(),
+  ) {
+    const hasTextSearch = (q ?? '').trim().length > 0;
+    const hasTypeFilter = Boolean(catalogType && catalogType !== CATALOG_TYPE_ALL);
+    return hasTextSearch || hasTypeFilter || subtypes.length > 0;
   }
 
   async function loadMoreResults() {
@@ -724,25 +734,27 @@ export const DeckEditor: Component<Props> = props => {
 
     const q = (unwrap(searchParams.q) ?? '') as string;
     const catalogType = unwrap(searchParams.catalogType) as string | undefined;
+    const subtypes = activeSubtypes();
     const page = unwrap(searchParams.page) as string;
     const totalPages = unwrap(searchParams.totalPages) as string;
-    if (!q?.length && (!catalogType || catalogType === CATALOG_TYPE_ALL)) return;
+    if (!hasCatalogSearchCriteria(q, catalogType, subtypes)) return;
     if (!page?.length) return;
 
     if (totalPages && parseInt(page) >= parseInt(totalPages)) {
       return;
     }
 
-    debouncedOnSearch(q, parseInt(page) + 1, catalogType);
+    debouncedOnSearch(q, parseInt(page) + 1, catalogType, subtypes);
   }
 
   let lastSearchString: string | undefined;
   let cancelSearch = false;
 
-  function onSearch(q?: string, page?: number, catalogType?: string) {
+  function onSearch(q?: string, page?: number, catalogType?: string, subtypes?: string[]) {
     if (cancelSearch || !isCatalogTab()) return;
 
     const searchPage = page ?? 1;
+    const subtypeFilters = subtypes ?? activeSubtypes();
     const types =
       catalogType && catalogType !== CATALOG_TYPE_ALL ? [catalogType] : [];
     const searchString = getSearchString(
@@ -751,6 +763,7 @@ export const DeckEditor: Component<Props> = props => {
         q: q ?? '',
         ...(catalogType ? { catalogType } : {}),
       }),
+      subtypeFilters,
     );
 
     const isSearchSame = searchString === lastSearchString;
@@ -766,7 +779,7 @@ export const DeckEditor: Component<Props> = props => {
     }
 
     function fetchPage(append?: true) {
-      searchCards(q ?? '', { types, page: searchPage })
+      searchCards(q ?? '', { types, subtypes: subtypeFilters, page: searchPage })
         .then(result => {
           if ((result as { code?: string }).code === 'error') {
             toast(`failed to load search results. Try again later`);
@@ -775,7 +788,11 @@ export const DeckEditor: Component<Props> = props => {
 
           const newResults = result.data.map(detail => populateCardInfo(detail));
           const isSearchSame =
-            getSearchString(cardSystem.id, new URLSearchParams(location.search)) === searchString;
+            getSearchString(
+              cardSystem.id,
+              new URLSearchParams(location.search),
+              subtypeFilters,
+            ) === searchString;
 
           if (append && !isSearchSame) return;
 
@@ -806,7 +823,8 @@ export const DeckEditor: Component<Props> = props => {
     cardSystem.uri;
     const q = unwrap(searchParams.q) ?? '';
     const catalogType = unwrap(searchParams.catalogType) as string | undefined;
-    if (!q?.length && (!catalogType || catalogType === CATALOG_TYPE_ALL)) {
+    const subtypes = activeSubtypes();
+    if (!hasCatalogSearchCriteria(q, catalogType, subtypes)) {
       cancelSearch = true;
       lastSearchString = '';
       setSearchResults(undefined);
@@ -814,7 +832,7 @@ export const DeckEditor: Component<Props> = props => {
     }
 
     cancelSearch = false;
-    debouncedOnSearch(q, undefined, catalogType);
+    debouncedOnSearch(q, undefined, catalogType, subtypes);
   });
 
   const deckExportContent = createMemo(() => {

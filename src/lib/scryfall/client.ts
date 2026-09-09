@@ -124,23 +124,35 @@ export interface ScryfallSearchResult {
   data: CardEntryDetail[];
 }
 
-function buildSearchQuery(q: string, types: string[] = []) {
-  let sfQuery = q ?? '';
+function formatSubtypeQuery(subtype: string) {
+  const trimmed = subtype.trim();
+  if (/^[a-z0-9]+$/i.test(trimmed)) {
+    return `t:${trimmed}`;
+  }
+  return `t:"${trimmed.replace(/"/g, '\\"')}"`;
+}
+
+function buildSearchQuery(q: string, types: string[] = [], subtypes: string[] = []) {
+  const parts: string[] = [];
+  if (q?.trim()) parts.push(q.trim());
   if (types.length) {
     let typeQuery = types.map(t => TYPE_ALIASES[t.toLowerCase()] ?? `t:${t}`).join(' or ');
     if (types.length > 1) typeQuery = `(${typeQuery})`;
-    sfQuery = `${sfQuery} ${typeQuery}`.trim();
+    parts.push(typeQuery);
   }
-  return sfQuery.trim() || '*';
+  for (const subtype of subtypes) {
+    if (subtype.trim()) parts.push(formatSubtypeQuery(subtype));
+  }
+  return parts.join(' ').trim() || '*';
 }
 
 export async function searchCards(
   q: string,
-  options: { types?: string[]; page?: number } = {},
+  options: { types?: string[]; subtypes?: string[]; page?: number } = {},
 ): Promise<ScryfallSearchResult> {
   const page = options.page ?? 1;
   const params = new URLSearchParams({
-    q: buildSearchQuery(q, options.types),
+    q: buildSearchQuery(q, options.types, options.subtypes),
     order: 'name',
     page: String(page),
   });
