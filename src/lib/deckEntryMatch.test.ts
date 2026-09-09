@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { DetailedCardEntry } from './constants';
-import { findDeckEntryMatch } from './deckEntryMatch';
+import { findDeckEntryMatch, getCardKey } from './deckEntryMatch';
 
 const deckBolt: DetailedCardEntry = {
   id: 'mh2-bolt-id',
@@ -66,4 +66,17 @@ test('findDeckEntryMatch falls back to name when oracle_id is missing', () => {
 
   const match = findDeckEntryMatch(catalogBolt, { [deckEntry.id]: deckEntry });
   expect(match?.key).toBe(deckEntry.id);
+});
+
+test('getCardKey distinguishes printings with the same name and set', () => {
+  const nazgul336 = { name: 'Nazgûl', set: 'ltr', collector_number: '336', qty: 1 };
+  const nazgul339 = { name: 'Nazgûl', set: 'ltr', collector_number: '339', qty: 1 };
+
+  expect(getCardKey(nazgul336)).toBe('Nazgûl:ltr:336');
+  expect(getCardKey(nazgul339)).toBe('Nazgûl:ltr:339');
+  expect(getCardKey(nazgul336)).not.toBe(getCardKey(nazgul339));
+});
+
+test('getCardKey keeps set-only keys when collector number is missing', () => {
+  expect(getCardKey({ name: 'Island', set: 'ltr', qty: 1 })).toBe('Island:ltr');
 });

@@ -1,9 +1,25 @@
 import { CardEntry, CardEntryDetail, DetailedCardEntry } from './constants';
+import {
+  normalizePrintingCollectorNumber,
+  normalizePrintingSetCode,
+} from './deckPrinting';
 
 type CardDetailWithOracle = CardEntryDetail & { oracle_id?: string; id?: string };
 
 export function getCardKey(entry: CardEntry) {
-  return entry?.id ?? [entry.name, entry.set].join(':');
+  if (entry?.id) return entry.id;
+
+  const name = entry.name ?? '';
+  const set = normalizePrintingSetCode(entry.set);
+  const collector = normalizePrintingCollectorNumber(entry.collector_number);
+
+  if (set && collector) {
+    return [name, set, collector].join(':');
+  }
+  if (set) {
+    return [name, set].join(':');
+  }
+  return name;
 }
 
 function getEntryOracleId(entry: CardEntry | DetailedCardEntry) {
