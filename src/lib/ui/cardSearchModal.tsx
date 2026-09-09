@@ -36,7 +36,12 @@ import {
   fetchSpanishPrintingImageUrl,
   SPANISH_PREVIEW_NOT_FOUND_MESSAGE,
 } from '../spanishCardPreview';
-import useCardGrouping from './deckEditor/cardGroupings';
+import useCardGrouping, { getCardTypeCategory } from './deckEditor/cardGroupings';
+import {
+  entryMatchesSubtypeFilter,
+  getSubtypeOptionsForPeek,
+} from './deckEditor/cardSubtypes';
+import SubtypeFilter from './deckEditor/subtypeFilter';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
 
 type ModalSpanishPreviewState =
@@ -63,6 +68,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
   >({});
   const [contextMenuCard, setContextMenuCard] = createSignal<Card | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = createSignal<{ x: number; y: number } | null>(null);
+  const [activeSubtypes, setActiveSubtypes] = createSignal<string[]>([]);
   const [cardsPerRow, setCardsPerRow] = createSignal(
     parseInt(localStorage.getItem('cardSearchModal_cardsPerRow') || '5', 10)
   );
@@ -115,6 +121,16 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     }
   });
 
+  createEffect(() => {
+    peekTypeFilter();
+    setActiveSubtypes([]);
+  });
+
+  const subtypeOptions = createMemo(() => {
+    if (props.zone !== 'peek') return [];
+    return getSubtypeOptionsForPeek(peekTypeFilter(), localCards());
+  });
+
   const filteredCards = createMemo(() => {
     let candidates = localCards();
 
@@ -123,12 +139,14 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
       const lowerTypes = (cardSystem.types ?? []).map(type => type.toLowerCase());
       candidates = candidates.filter(card => {
         if (typeFilter === 'unsorted') {
-          const type = card.detail.type_line?.toLowerCase() || '';
-          return !lowerTypes.some(t => type.includes(t));
+          return !getCardTypeCategory(card, lowerTypes);
         }
-        const type = card.detail.type_line?.toLowerCase() || '';
-        return type.includes(typeFilter.toLowerCase());
+        return getCardTypeCategory(card, lowerTypes) === typeFilter;
       });
+    }
+
+    if (props.zone === 'peek' && activeSubtypes().length) {
+      candidates = candidates.filter(card => entryMatchesSubtypeFilter(card, activeSubtypes()));
     }
 
     const filterText = peekFilterText().toLowerCase();
@@ -431,12 +449,14 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
       setHoveredCard(null);
       setFlippedCardIds(new Set());
       clearModalSpanishPreviews();
+      setActiveSubtypes([]);
     }
   });
 
   onCleanup(() => {
     setPeekFilterText('');
     setPeekTypeFilter(null);
+    setActiveSubtypes([]);
     setHoveredCard(null);
     setFlippedCardIds(new Set());
     clearModalSpanishPreviews();
@@ -558,7 +578,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
         }}>
         <div ref={modalContentRef} class='relative flex flex-col h-full'>
           {/* Header con búsqueda y filtros */}
-          <div class='sticky top-0 z-10 bg-background border-b p-4 space-y-3'>
+            <div class='sticky top-0 z-20 overflow-visible bg-background border-b p-4 space-y-3'>
             {/* Título */}
             <div class='flex items-center justify-between'>
               <h2 class='text-lg font-semibold'>
@@ -618,7 +638,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
             </div>
 
             {/* Barra de búsqueda con botones de vista */}
-            <div class='flex items-center gap-2'>
+            <div class='flex items-center gap-2 overflow-visible'>
               <Command
                 class='flex-1'
                 onKeyDown={e => {
@@ -650,6 +670,14 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                   }}
                 />
               </Command>
+              <Show when={props.zone === 'peek' && subtypeOptions().length > 0}>
+                <SubtypeFilter
+                  options={subtypeOptions()}
+                  value={activeSubtypes()}
+                  onChange={setActiveSubtypes}
+                  inlineMenu
+                />
+              </Show>
               <div class='flex items-center gap-2'>
                 <input
                   type='number'

@@ -139,6 +139,14 @@ export function getSubtypeOptionsForTab(
   return [...getOfficialSubtypeList(tab)];
 }
 
+export function getSubtypeOptionsForPeek(typeFilter: string | null, entries: GroupableEntry[]) {
+  if (!typeFilter || typeFilter === 'unsorted') {
+    return uniqueSortedSubtypes(entries);
+  }
+
+  return [...getOfficialSubtypeList(typeFilter)];
+}
+
 function uniqueSortedSubtypes(entries: GroupableEntry[]) {
   const subtypes = new Set<string>();
   for (const entry of entries) {

@@ -3,6 +3,7 @@ import {
   entryMatchesSubtypeFilter,
   getCardSubtypeHaystack,
   getSpecialDeckType,
+  getSubtypeOptionsForPeek,
   subtypeMatchesHaystack,
   tabSupportsSubtypeFilter,
 } from './cardSubtypes';
@@ -27,6 +28,11 @@ test('entryMatchesSubtypeFilter uses AND logic', () => {
 test('tabSupportsSubtypeFilter hides deck and shows all cards', () => {
   expect(tabSupportsSubtypeFilter('deck')).toBe(false);
   expect(tabSupportsSubtypeFilter('all')).toBe(true);
+});
+
+test('getSubtypeOptionsForPeek uses official list for type tabs', () => {
+  expect(getSubtypeOptionsForPeek('creature', []).includes('Human')).toBe(true);
+  expect(getSubtypeOptionsForPeek(null, [{ qty: 1, detail: { type_line: 'Instant' } }])).toEqual([]);
 });
 
 test('subtypeMatchesHaystack supports multi-word subtypes', () => {
