@@ -12,6 +12,7 @@ import {
   updateModifiers,
 } from './lib/card';
 import { Card } from './lib/constants';
+import { removeOpponentCommanderTracking } from './lib/commanderTracking';
 import * as Sentry from '@sentry/solidstart';
 import {
   applyPlayerTransform,
@@ -100,6 +101,16 @@ function isSilentTransferEvent(event: { type?: string; payload?: Record<string, 
   return fromZone?.zone === 'peek' || fromZone?.zone === 'tokenSearch';
 }
 
+function isDeckToHandDrawTransfer(event: { type?: string; payload?: Record<string, unknown> }) {
+  if (event.type !== 'transferCard') return false;
+
+  const fromZoneId = event.payload?.fromZoneId as string | undefined;
+  const toZoneId = event.payload?.toZoneId as string | undefined;
+  const fromZone = fromZoneId ? zonesById.get(fromZoneId) : undefined;
+  const toZone = toZoneId ? zonesById.get(toZoneId) : undefined;
+  return fromZone?.zone === 'deck' && toZone?.zone === 'hand';
+}
+
 function isDeckToPeekTransfer(event: { type?: string; payload?: Record<string, unknown> }) {
   if (event.type !== 'transferCard') return false;
 
@@ -143,6 +154,7 @@ function isEphemeralEvent(event: { type?: string; payload?: Record<string, unkno
     event.type === 'peekCards' ||
     event.type === 'restack' ||
     isDeckToPeekTransfer(event) ||
+    isDeckToHandDrawTransfer(event) ||
     isSilentTransferEvent(event)
   );
 }
@@ -461,9 +473,13 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
     event.type === 'dismissZone' ||
     event.type === 'transferEntireZone' ||
     event.type === 'peekCards' ||
-    event.type === 'deleteClone'
+    event.type === 'deleteClone' ||
+    event.type === 'deckPeek' ||
+    event.type === 'deckDraw' ||
+    event.type === 'deckSearch' ||
+    event.type === 'deckShuffle'
   ) {
-    await EVENTS[event.type](event, playArea);
+    await EVENTS[event.type]?.(event, playArea);
     return;
   }
 
@@ -635,6 +651,7 @@ const EVENTS = {
     const { targetClientId, playerSessionId, gameId } = event.payload ?? {};
     if (targetClientId === undefined) return;
     onKickPlayer(targetClientId, { playerSessionId, gameId });
+    removeOpponentCommanderTracking(playerSessionId as string | undefined);
     readjustPlayAreas();
   },
   passTurn(event: ReturnType<typeof EventCreators.createPassTurnEvent>) {
@@ -837,9 +854,13 @@ const EVENTS = {
 
     playArea.reveal(cardProxy);
   },
-  deckFlipTop(event: Event, playArea: PlayArea) {
-    playArea?.deckFlipTop(event.payload.toggle);
+  deckFlipTop(_event: Event, playArea: PlayArea) {
+    void playArea?.deck.flipTop();
   },
+  deckPeek() {},
+  deckDraw() {},
+  deckSearch() {},
+  deckShuffle() {},
   shuffleDeck(event: Event, playArea: PlayArea) {
     playShuffleDeckSound(isRemotePlayerEvent(event));
     return playArea?.executeShuffleDeck(event.payload.order);
@@ -872,14 +893,12 @@ const EVENTS = {
 
 function addLogMessage(event) {
   if (isEphemeralEvent(event)) return;
-  let index = logs.length;
 
   const { type, clientID, payload } = event;
   let count = 1;
-  let lastEvent = logs[index - 1];
+  let lastEvent = logs[0];
   if (isLogMessageStackable(lastEvent, event)) {
     count = lastEvent.count + 1;
-    index--;
   }
 
   let logPayload = payload;
@@ -894,10 +913,17 @@ function addLogMessage(event) {
 
   const logClientId = type === 'kick' ? payload?.targetClientId : clientID;
 
-  setLogs(index, {
+  const entry = {
     type,
     clientID: logClientId,
     payload: logPayload,
     count,
-  });
+  };
+
+  if (isLogMessageStackable(lastEvent, event)) {
+    setLogs(0, entry);
+    return;
+  }
+
+  setLogs(logs => [entry, ...logs]);
 }

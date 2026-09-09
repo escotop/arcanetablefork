@@ -1,10 +1,33 @@
 import { Card } from '~/lib/constants';
-import { createTransferCardEvent } from '~/lib/createEvents';
+import {
+  createDeckDrawLogEvent,
+  createDeckPeekLogEvent,
+  createDeckSearchLogEvent,
+  createTransferCardEvent,
+} from '~/lib/createEvents';
 import { dispatchGameEvent, doXTimes, flushDispatchEventQueue } from '~/lib/globals';
 import { PlayArea } from '~/lib/playArea';
 import { transferCard } from '~/lib/transferCard';
 
 export const OPENING_HAND_SIZE = 7;
+
+export function logDeckPeek(count: number) {
+  dispatchGameEvent(createDeckPeekLogEvent(count));
+}
+
+export function logDeckSearch() {
+  dispatchGameEvent(createDeckSearchLogEvent());
+}
+
+export function logDeckDrawTop() {
+  dispatchGameEvent(createDeckDrawLogEvent({ source: 'top' }));
+}
+
+export function logDeckDrawChoice(cardName: string, deckPosition: number) {
+  dispatchGameEvent(
+    createDeckDrawLogEvent({ source: 'choice', cardName, deckPosition }),
+  );
+}
 
 export function drawCards(playArea: PlayArea, count: number = 1) {
   const cards = playArea.deck.cards.slice(0, Math.max(0, count));
@@ -14,17 +37,23 @@ export function drawCards(playArea: PlayArea, count: number = 1) {
     } else {
       playArea.deck.prepareCardForRemoval(card);
     }
+    logDeckDrawTop();
     dispatchGameEvent(createTransferCardEvent(card, playArea.deck, playArea.hand));
   }
   return flushDispatchEventQueue();
 }
 
 export function peekFromTop(playArea: PlayArea, count = 1) {
-  void playArea.peekCards(count);
+  const actualCount = Math.min(count, playArea.deck.cards.length);
+  if (actualCount < 1) return;
+  logDeckPeek(actualCount);
+  void playArea.peekCards(count, { mode: 'peek' });
 }
 
 export function searchDeck(playArea: PlayArea) {
-  peekFromTop(playArea, playArea.deck.cards.length);
+  if (!playArea.deck.cards.length) return;
+  logDeckSearch();
+  void playArea.peekCards(playArea.deck.cards.length, { mode: 'search' });
 }
 
 export function shuffleDeck(playArea: PlayArea) {

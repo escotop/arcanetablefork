@@ -43,6 +43,8 @@ import { profileAsync } from './loadProfile';
 import { collectTokenPartIds, appendSavedTokenPrintings, mergeTokenPrintings, resolveTokensByIds } from './deckTokens';
 import {
   createCreateCardEvent,
+  createDeckDrawLogEvent,
+  createDeckShuffleLogEvent,
   createDismissZoneEvent,
   createFlipEvent,
   createTapEvent,
@@ -337,8 +339,12 @@ export class PlayArea {
     );
   }
 
-  async peekCards(count = 1) {
-    const actualCount = Math.min(count, this.deck.cards.length);
+  async peekCards(count = 1, options?: { mode?: 'peek' | 'search' }) {
+    const mode = options?.mode ?? 'peek';
+    const actualCount =
+      mode === 'search'
+        ? this.deck.cards.length
+        : Math.min(count, this.deck.cards.length);
     if (actualCount < 1) return;
 
     const key = `peekCards.${this.peekZone.id}`;
@@ -349,15 +355,20 @@ export class PlayArea {
     
     // En lugar de usar el CardGrid 3D, usamos el modal 2D
     if (this.isLocalPlayArea) {
-      // Obtener las cartas sin crearles meshes 3D
-      const cardsToShow = this.deck.cards.slice(0, actualCount);
+      const cardsToShow =
+        mode === 'search' ? this.deck.cards : this.deck.cards.slice(0, actualCount);
+      const title =
+        mode === 'search'
+          ? `Search Deck (${cardsToShow.length} cards)`
+          : `Peek (${actualCount} cards)`;
       
       // Abrir el modal con los datos de las cartas
       const { setCardSearchModalOpen, setCardSearchModalData } = await import('./globals');
       setCardSearchModalData({
         cards: cardsToShow,
         zone: 'peek',
-        title: `Search Deck (${actualCount} cards)`,
+        deckViewMode: mode,
+        title,
       });
       setCardSearchModalOpen(true);
     } else {
@@ -681,6 +692,7 @@ export class PlayArea {
     let card = this.deck.cards[0];
     if (!card) return;
     this.deck.materializeTopCard();
+    dispatchGameEvent(createDeckDrawLogEvent({ source: 'top' }));
     const event = createTransferCardEvent(card, this.deck, this.hand);
     dispatchGameEvent(event);
   }
@@ -808,9 +820,11 @@ export class PlayArea {
     // this.exileZone.clear();
     this.inProgressActions.delete('peekExile');
   }
-  async deckFlipTop(toggle = false) {
-    let card = await this.deck.flipTop(toggle);
-    this.emitEvent({ type: 'deckFlipTop', payload: { toggle, userData: card.mesh.userData } });
+  async deckFlipTop() {
+    await this.deck.flipTop();
+    const card = this.deck.cards[0];
+    if (!card?.mesh) return;
+    this.emitEvent({ type: 'deckFlipTop', payload: { userData: card.mesh.userData } });
   }
 
   async executeShuffleDeck(existingOrder?: number[]) {
@@ -821,6 +835,7 @@ export class PlayArea {
     const order = await this.executeShuffleDeck(existingOrder);
     if (this.isLocalPlayArea) {
       playShuffleDeckSound();
+      dispatchGameEvent(createDeckShuffleLogEvent());
     }
     this.emitEvent({ type: 'shuffleDeck', payload: { order } });
   }

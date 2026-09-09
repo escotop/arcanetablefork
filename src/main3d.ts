@@ -44,7 +44,9 @@ import {
   init,
   initClock,
   isCameraTiltBlocked,
+  isLocalHandZone,
   isSpectating,
+  isUnderLocalHand,
   isGameplayBlocked,
   playAreas,
   players,
@@ -108,10 +110,12 @@ import {
   acquireWorldSnapshot,
   gameNeedsSnapshotSync,
   hasSnapshotCatchUp,
+  restoreLocalPlayerAwarenessFromWorldSnapshot,
   setupPersistentSnapshotPublisher,
   setupSyncBarrierObserver,
 } from './lib/worldSnapshot';
 import { getDeckStore } from './lib/deckStore';
+import { loadGameMeta, saveGameMeta } from './lib/gameMeta';
 import { refreshMultiplayerSyncState } from './lib/multiplayerSync';
 import { unwrap } from 'solid-js/store';
 import {
@@ -145,30 +149,30 @@ let latchedTiltY = 0;
 let cameraTiltDisarmed = false;
 let cameraTiltWasBlocked = false;
 
-interface StoredGameMeta {
-  name: string;
-  life: number;
-  commanderLife?: number;
-  cardSystemUri: string;
-  deckId?: string;
-}
+function applyReconnectedPlayerAwareness(gameId: string, playerSessionId: string) {
+  restoreLocalPlayerAwarenessFromWorldSnapshot(gameId);
 
-function gameMetaKey(gameId: string) {
-  return `arcanetable-game-meta:${gameId}`;
-}
+  const meta = loadGameMeta(gameId);
+  provider.awareness.setLocalStateField('playerSessionId', playerSessionId);
+  if (meta?.name) provider.awareness.setLocalStateField('name', meta.name);
 
-function saveGameMeta(gameId: string, meta: StoredGameMeta) {
-  sessionStorage.setItem(gameMetaKey(gameId), JSON.stringify(meta));
-}
-
-function loadGameMeta(gameId: string): StoredGameMeta | null {
-  const raw = sessionStorage.getItem(gameMetaKey(gameId));
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as StoredGameMeta;
-  } catch {
-    return null;
+  const localState = provider.awareness.getLocalState() ?? {};
+  if (meta?.life !== undefined) {
+    provider.awareness.setLocalStateField('life', meta.life);
+  } else if (localState.life === undefined) {
+    provider.awareness.setLocalStateField('life', settings.startingLife);
   }
+
+  if (meta?.commanderLife !== undefined) {
+    provider.awareness.setLocalStateField('commanderLife', meta.commanderLife);
+  } else if (isMagicCardSystem(cardSystem) && localState.commanderLife === undefined) {
+    provider.awareness.setLocalStateField('commanderLife', DEFAULT_COMMANDER_LIFE);
+  }
+
+  provider.awareness.setLocalStateField(
+    'color',
+    settings.playerColor ?? resolvePlayerColor({ name: meta?.name ?? localState.name }),
+  );
 }
 
 function waitForProviderSync(maxWaitMs = 8000): Promise<{
@@ -283,18 +287,7 @@ async function finalizeReconnectedPlayArea(
     );
   }
 
-  provider.awareness.setLocalStateField('playerSessionId', playerSessionId);
-  if (meta?.name) provider.awareness.setLocalStateField('name', meta.name);
-  if (meta?.life !== undefined) provider.awareness.setLocalStateField('life', meta.life);
-  if (meta?.commanderLife !== undefined) {
-    provider.awareness.setLocalStateField('commanderLife', meta.commanderLife);
-  } else if (isMagicCardSystem(cardSystem)) {
-    provider.awareness.setLocalStateField('commanderLife', DEFAULT_COMMANDER_LIFE);
-  }
-  provider.awareness.setLocalStateField(
-    'color',
-    settings.playerColor ?? resolvePlayerColor({ name: meta?.name }),
-  );
+  applyReconnectedPlayerAwareness(gameId, playerSessionId);
 
   ensurePlayAreaOnTable(area);
   readjustPlayAreas();
@@ -329,7 +322,6 @@ async function reclaimLocalPlayArea(
   playArea = area;
   hand = area.hand;
   setLocalPlayerClientId(joinClientId);
-  provider.awareness.setLocalStateField('playerSessionId', playerSessionId);
 
   const meta = loadGameMeta(gameId);
   if (meta?.cardSystemUri && initCardSystem) {
@@ -339,17 +331,7 @@ async function reclaimLocalPlayArea(
     );
   }
 
-  if (meta?.name) provider.awareness.setLocalStateField('name', meta.name);
-  if (meta?.life !== undefined) provider.awareness.setLocalStateField('life', meta.life);
-  if (meta?.commanderLife !== undefined) {
-    provider.awareness.setLocalStateField('commanderLife', meta.commanderLife);
-  } else if (isMagicCardSystem(cardSystem)) {
-    provider.awareness.setLocalStateField('commanderLife', DEFAULT_COMMANDER_LIFE);
-  }
-  provider.awareness.setLocalStateField(
-    'color',
-    settings.playerColor ?? resolvePlayerColor({ name: meta?.name }),
-  );
+  applyReconnectedPlayerAwareness(gameId, playerSessionId);
 
   registerPlayerSession(playerSessionId, joinClientId);
   persistJoinBinding(gameId, { playerSessionId, clientId: joinClientId });
@@ -821,6 +803,7 @@ function onContextMenu(event: PointerEvent) {
   let target = resolveContextMenuTarget(intersects[0].object);
   if (!target) return;
   if (isDeckZoneObject(target) && !isUnderLocalDeck(target)) return;
+  if (target.userData.location === 'hand' && !isUnderLocalHand(target)) return;
 
   setContextMenuSignal({
     mouse: { x: event.x, y: event.y },
@@ -936,6 +919,7 @@ function onDocumentClick(event: PointerEvent) {
   }
 
   if (isDeckZoneObject(target) && !isUnderLocalDeck(target)) return;
+  if (target.userData.location === 'hand' && !isUnderLocalHand(target)) return;
 
   target.dispatchEvent({ type: 'click', event });
 }
@@ -987,6 +971,7 @@ function onDocumentDragStart(event: PointerEvent) {
   let targets = [target];
 
   if (target.userData.zone === 'deck' || target.userData.location === 'deck') return;
+  if (target.userData.location === 'hand' && !isUnderLocalHand(target)) return;
   if (!cardsById.has(target.userData.id)) return;
 
   if (!target.userData.isInteractive) {
@@ -1207,6 +1192,7 @@ async function onDocumentDrop(event) {
     let shouldClearSelection = false;
     const toZone = resolveDropZone(intersection.object);
     if (!toZone) return;
+    if (toZone.zone === 'hand' && !isLocalHandZone(toZone)) return;
     const toZoneId = toZone.id;
 
     restackItemsLocally(dragged, getDragRestackIntersections(dragged));
@@ -1623,7 +1609,13 @@ function highlightHover(intersects: THREE.Intersection<THREE.Object3D<THREE.Obje
   if (target !== hover?.object) {
     needsCleanup = true;
     let { isInteractive, isAnimating, location } = target?.userData ?? {};
-    if ((isInteractive || ['graveyard', 'exile'].includes(location)) && !isAnimating) next = target;
+    if (
+      (isInteractive || ['graveyard', 'exile'].includes(location)) &&
+      !isAnimating &&
+      (location !== 'hand' || isUnderLocalHand(target))
+    ) {
+      next = target;
+    }
   }
 
   if (keyboardHandHoverIndex !== undefined) {

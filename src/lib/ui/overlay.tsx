@@ -268,6 +268,7 @@ export default function Overlay() {
             cards={data().cards}
             zone={data().zone}
             title={data().title}
+            deckViewMode={data().deckViewMode}
           />
         )}
       </Show>

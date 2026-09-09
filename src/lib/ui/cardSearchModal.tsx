@@ -30,6 +30,7 @@ import {
 import { transferCard } from '../transferCard';
 import { getCardImage } from '../card';
 import { spawnTokenOnBattlefield } from '../playArea';
+import { logDeckDrawChoice, logDeckDrawTop } from '../shortcuts/commands/deck';
 import { supportsCardPrintings } from '../deck';
 import { playDrawSound } from '../sounds';
 import {
@@ -55,6 +56,7 @@ interface CardSearchModalProps {
   cards: Card[];
   title?: string;
   zone: 'peek' | 'graveyard' | 'exile' | 'tokenSearch';
+  deckViewMode?: 'peek' | 'search';
 }
 
 export const CardSearchModal: Component<CardSearchModalProps> = props => {
@@ -160,6 +162,12 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
         `${card.detail.name} ${card.detail.type_line} ${card.detail.oracle_text}`.toLowerCase();
       candidates = candidates.filter(card =>
         filters.every(filter => haystack(card).includes(filter)),
+      );
+    }
+
+    if (props.deckViewMode === 'search') {
+      candidates = [...candidates].sort((a, b) =>
+        a.detail.name.localeCompare(b.detail.name, undefined, { sensitivity: 'base' }),
       );
     }
 
@@ -405,6 +413,15 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
               : area.deck;
     }
     
+    if (fromZone === area.deck) {
+      const deckIndex = area.deck.cards.findIndex(entry => entry.id === card.id);
+      if (props.zone === 'peek' && deckIndex >= 0) {
+        logDeckDrawChoice(card.detail.name, deckIndex + 1);
+      } else {
+        logDeckDrawTop();
+      }
+    }
+
     transferCard(card, fromZone, area.hand);
     playDrawSound();
     
@@ -483,6 +500,9 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     
     switch (props.zone) {
       case 'peek':
+        if (props.deckViewMode === 'peek') {
+          return `Peek (${filteredCards().length}/${localCards().length})`;
+        }
         return `Search Deck (${filteredCards().length}/${localCards().length})`;
       case 'graveyard':
         return `Search Graveyard (${filteredCards().length}/${localCards().length})`;

@@ -90,6 +90,7 @@ export let [cardSearchModalData, setCardSearchModalData] = createSignal<{
   cards: Card[];
   zone: 'peek' | 'graveyard' | 'exile' | 'tokenSearch';
   title?: string;
+  deckViewMode?: 'peek' | 'search';
 } | null>(null);
 export let ydoc = new Doc();
 export let table: Object3D;
@@ -266,6 +267,24 @@ export function getLocalPlayerClientId() {
 export function getLocalPlayArea(): PlayArea | undefined {
   const clientId = getLocalPlayerClientId();
   return clientId !== undefined ? playAreas[clientId] : undefined;
+}
+
+export function isLocalHandZone(zone: CardZone | undefined): boolean {
+  if (!zone || zone.zone !== 'hand') return false;
+  const localArea = getLocalPlayArea();
+  return !!localArea && localArea.hand.id === zone.id;
+}
+
+export function isUnderLocalHand(object: THREE.Object3D): boolean {
+  const localArea = getLocalPlayArea();
+  if (!localArea) return false;
+
+  let node: THREE.Object3D | null = object;
+  while (node) {
+    if (node === localArea.hand.mesh) return true;
+    node = node.parent;
+  }
+  return false;
 }
 
 type LocalPlayAreaChangedHandler = (area: PlayArea) => void;
@@ -465,8 +484,15 @@ function createSyncProvider(gameId: string) {
   return new WebsocketProvider(wsUrl, gameId, ydoc);
 }
 
+let activeGameId: string | undefined;
+
+export function getActiveGameId(): string | undefined {
+  return activeGameId;
+}
+
 export async function init({ gameId }) {
   tearingDown = false;
+  activeGameId = gameId;
   touchGameLastAccess(gameId);
   headlessInit();
   indexeddbPersistence?.destroy();

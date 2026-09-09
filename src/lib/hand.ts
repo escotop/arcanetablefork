@@ -96,7 +96,7 @@ export class Hand implements CardZone {
     public isLocalHand: boolean,
   ) {
     this.mesh = new Group();
-    this.mesh.userData.isInteractive = true;
+    this.mesh.userData.isInteractive = isLocalHand;
     this.mesh.userData.zone = 'hand';
     this.mesh.userData.zoneId = id;
     this.mesh.setRotationFromEuler(HAND_ROTATION.clone());
@@ -375,9 +375,11 @@ export class Hand implements CardZone {
 
   enableLocalHand() {
     this.isLocalHand = true;
+    this.mesh.userData.isInteractive = true;
     this.resetInteractivity();
     for (let i = 0; i < this.cards.length; i++) {
       const card = this.cards[i];
+      setCardData(card.mesh, 'isInteractive', true);
       card.mesh.removeEventListener('mousein', this.cardMouseIn);
       card.mesh.removeEventListener('mouseout', this.cardMouseOut);
       card.mesh.addEventListener('mousein', this.cardMouseIn);
@@ -388,8 +390,15 @@ export class Hand implements CardZone {
 
   disableLocalHand() {
     this.isLocalHand = false;
+    this.mesh.userData.isInteractive = false;
     this.clearFocus();
     this.clearDragPreview();
+    for (const card of this.cards) {
+      if (!card.mesh) continue;
+      setCardData(card.mesh, 'isInteractive', false);
+      card.mesh.removeEventListener('mousein', this.cardMouseIn);
+      card.mesh.removeEventListener('mouseout', this.cardMouseOut);
+    }
   }
 
   syncManaOverlays() {
@@ -417,6 +426,7 @@ export class Hand implements CardZone {
     setCardData(card.mesh, 'zoneId', this.id);
     setCardData(card.mesh, 'isDragging', false);
     setCardData(card.mesh, 'isPublic', false);
+    setCardData(card.mesh, 'isInteractive', this.isLocalHand);
     setCardData(card.mesh, 'location', 'hand');
 
     this.mesh.add(card.mesh);

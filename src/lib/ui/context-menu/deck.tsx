@@ -5,8 +5,8 @@ import {
   discardFromTop,
   drawCards,
   exileFromTop,
+  logDeckDrawChoice,
   peekFromTop,
-  revealFromTop,
   searchDeck,
   shuffleDeck,
 } from '~/lib/shortcuts/commands/deck';
@@ -57,29 +57,8 @@ export default function DeckContextMenu(props: { playArea: PlayArea }) {
         Peek Top X Cards
       </Dynamic>
       <Dynamic component={ctx.separator} />
-      <Dynamic component={ctx.menu}>
-        <Dynamic component={ctx.trigger}>Reveal Cards</Dynamic>
-        <Dynamic component={ctx.content}>
-          <Dynamic component={ctx.item} onClick={() => setSearchParams({ dialog: 'deck-to-peek' })}>
-            To you
-          </Dynamic>
-          <Dynamic
-            component={ctx.item}
-            onClick={() => setSearchParams({ dialog: 'deck-to-reveal' })}>
-            To Everyone
-          </Dynamic>
-        </Dynamic>
-      </Dynamic>
-      <Dynamic component={ctx.menu}>
-        <Dynamic component={ctx.trigger}>Flip</Dynamic>
-        <Dynamic component={ctx.content}>
-          <Dynamic component={ctx.item} onClick={() => props.playArea.deckFlipTop()}>
-            One
-          </Dynamic>
-          <Dynamic component={ctx.item} onClick={() => props.playArea.deckFlipTop(true)}>
-            Keep flipped
-          </Dynamic>
-        </Dynamic>
+      <Dynamic component={ctx.item} onClick={() => props.playArea.deckFlipTop()}>
+        Flip top card
       </Dynamic>
       <Dynamic component={ctx.separator} />
       <Dynamic component={ctx.menu}>
@@ -185,15 +164,6 @@ export function DeckContextDialogs(props: { playArea: PlayArea }) {
           verb='Peek at'
           item={['Cards', 'Card', 'Cards']}
           header='Peek at Cards from top of deck'
-          onClose={() => setSearchParams({ dialog: undefined })}
-        />
-      </Match>
-      <Match when={searchParams.dialog === 'deck-to-reveal'}>
-        <CardQtyDialog
-          onSubmit={value => revealFromTop(props.playArea, value)}
-          verb='Reveal'
-          item={['Cards', 'Card', 'Cards']}
-          header='Reveal Cards from top of deck'
           onClose={() => setSearchParams({ dialog: undefined })}
         />
       </Match>

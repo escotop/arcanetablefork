@@ -1,6 +1,6 @@
 import { ensureCardMesh, loadCardTextures, setCardData, updateModifiers } from './card';
 import { Card, CardZone } from './constants';
-import { cardsById, getLocalPlayerClientId, sendEvent } from './globals';
+import { cardsById, getLocalPlayerClientId, isEventCatchUpComplete, isLocalHandZone, sendEvent } from './globals';
 import { Deck } from './deck';
 import { Hand } from './hand';
 import { serializeCardUserDataForLog } from './gameLogEvents';
@@ -56,6 +56,11 @@ export async function transferCard<AddOptions extends {}>(
   }
 
   if (!card.mesh) return;
+
+  if (isEventCatchUpComplete() && !preventTransmit) {
+    if (fromZone?.zone === 'hand' && !isLocalHandZone(fromZone)) return;
+    if (toZone?.zone === 'hand' && !isLocalHandZone(toZone)) return;
+  }
 
   if (fromZone === toZone && toZone?.zone === 'hand') {
     (toZone as Hand).reorderCard(

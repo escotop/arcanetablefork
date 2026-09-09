@@ -57,21 +57,11 @@ export default function MoveSubMenu(props: Props) {
         </Show>
       </Dynamic>
       <Dynamic component={ctx.content}>
-        <Show when={props.fromZone !== props.playArea.peekZone}>
-          <Dynamic component={ctx.item} onClick={() => moveTo(props.playArea.peekZone)}>
-            Search
-          </Dynamic>
-        </Show>
         <Show when={props.fromZone !== props.playArea.hand && !(props.hide ?? []).includes('hand')}>
           <Dynamic component={ctx.item} onClick={() => moveTo(props.playArea.hand)}>
             Hand
           </Dynamic>
         </Show>
-        <Dynamic
-          component={ctx.item}
-          onClick={() => props.cards.forEach(card => props.playArea.reveal(card))}>
-          Reveal
-        </Dynamic>
         <Dynamic component={ctx.item} onClick={() => moveTo(props.playArea.graveyardZone)}>
           Discard
           {props.showShortcuts && <Dynamic component={ctx.shortcut}>{KEY.Mod} d</Dynamic>}

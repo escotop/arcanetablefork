@@ -74,6 +74,9 @@ function capturePlayerAwareness(): PlayerAwarenessSnapshot[] {
     name: entry.name,
     life: entry.life,
     commanderLife: entry.commanderLife,
+    opponentCommanderTracking: entry.opponentCommanderTracking
+      ? JSON.parse(JSON.stringify(entry.opponentCommanderTracking))
+      : undefined,
     color: entry.color,
     counters: entry.counters ? { ...entry.counters } : undefined,
     isSpectating: entry.isSpectating,
@@ -178,6 +181,7 @@ function restorePlayerAwareness(snapshots: PlayerAwarenessSnapshot[], gameId: st
     name: snapshot.name ?? localState.name,
     life: snapshot.life ?? localState.life,
     commanderLife: snapshot.commanderLife ?? localState.commanderLife,
+    opponentCommanderTracking: snapshot.opponentCommanderTracking ?? localState.opponentCommanderTracking,
     color: snapshot.color ?? localState.color,
     counters: snapshot.counters ?? localState.counters,
     isSpectating: snapshot.isSpectating ?? localState.isSpectating,
@@ -186,6 +190,13 @@ function restorePlayerAwareness(snapshots: PlayerAwarenessSnapshot[], gameId: st
   if (snapshot.color) {
     syncLocalPlayerColor(snapshot.color);
   }
+}
+
+export function restoreLocalPlayerAwarenessFromWorldSnapshot(gameId: string): boolean {
+  const snapshot = gameState.get('worldSnapshot') as WorldSnapshot | undefined;
+  if (!snapshot?.players?.length) return false;
+  restorePlayerAwareness(snapshot.players, gameId);
+  return true;
 }
 
 export async function applyWorldSnapshot(
@@ -433,6 +444,7 @@ export function setupPersistentSnapshotPublisher() {
     if (event.changes.keys.has('syncBarrier')) return;
     schedulePublish();
   });
+  provider?.awareness?.on('change', schedulePublish);
 }
 
 export function hasSnapshotCatchUp(): boolean {

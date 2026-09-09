@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, JSX, Match, Show, Switch } from 'solid-js';
-import { contextMenuSignal, setContextMenuSignal } from '~/lib/globals';
+import { contextMenuSignal, isUnderLocalHand, setContextMenuSignal } from '~/lib/globals';
 import { DropdownMenu, DropdownMenuContent } from '~/components/ui/dropdown-menu';
 import { PlayArea } from '~/lib/playArea';
 import TableContextMenu, { TableContextDialogs } from './table';
@@ -48,7 +48,7 @@ export default function ContextMenuHandler(props: { playArea: PlayArea }) {
                       playArea={props.playArea}
                     />
                   </Match>
-                  <Match when={location() === 'hand'}>
+                  <Match when={location() === 'hand' && isUnderLocalHand(contextMenuSignal().target)}>
                     <HandContextMenu
                       playArea={props.playArea}
                       targetMesh={contextMenuSignal().target}

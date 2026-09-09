@@ -470,16 +470,17 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
     queueAnimationGroup();
   }
 
-  flipTop(toggle = false) {
+  flipTop() {
     return new Promise<void>(resolve => {
       let card = this.cards[0];
       if (!card) {
         resolve();
         return;
       }
+      const wasPublic = card.mesh?.userData.isPublic ?? false;
       this.materializeTopCard();
       void loadCardTextures(card).then(() => {
-        let isVisible = !card.mesh!.userData.isPublic;
+        const isVisible = !wasPublic;
 
         setCardData(card.mesh!, 'isPublic', isVisible);
 
@@ -494,12 +495,9 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
             rotation: new Euler(0, isVisible ? Math.PI : 0, 0),
           },
           onComplete() {
-            resolve(card);
+            resolve();
           },
         });
-        if (toggle) {
-          this.isTopPublic = !this.isTopPublic;
-        }
       });
     });
   }

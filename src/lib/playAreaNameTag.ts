@@ -1,4 +1,6 @@
+import { getTrackedOpponentCommanderLife } from './commanderTracking';
 import { getLocalPlayerClientId, players, playAreas } from './globals';
+import { displayPlayerColor, getPlayAreaPlayerColor } from './playerColor';
 import type { TurnOrderState } from './turnOrder';
 import { getActiveTurnClientId } from './turnOrder';
 import type { PlayArea } from './playArea';
@@ -30,6 +32,35 @@ export function getPlayAreaPlayerName(playArea: PlayArea) {
   return getPlayAreaPlayerEntry(playArea)?.name?.trim() || 'Player';
 }
 
+function getLogPlayerEntry(clientId: unknown) {
+  const normalizedId = Number(clientId);
+  if (!Number.isFinite(normalizedId)) return undefined;
+
+  const byAwarenessId = players().find(player => Number(player.id) === normalizedId);
+  if (byAwarenessId?.entry) return byAwarenessId.entry;
+
+  const playArea = playAreas[normalizedId];
+  if (!playArea) return undefined;
+
+  return getPlayAreaPlayerEntry(playArea);
+}
+
+/** Resolve a game-log clientID to a display name after reload/reconnect. */
+export function resolveLogPlayerName(clientId: unknown) {
+  return getLogPlayerEntry(clientId)?.name?.trim() || undefined;
+}
+
+export function resolveLogPlayerColor(clientId: unknown) {
+  const entry = getLogPlayerEntry(clientId);
+  if (entry) return displayPlayerColor(entry);
+
+  const normalizedId = Number(clientId);
+  const playArea = Number.isFinite(normalizedId) ? playAreas[normalizedId] : undefined;
+  if (playArea) return getPlayAreaPlayerColor(playArea);
+
+  return displayPlayerColor({ name: resolveLogPlayerName(clientId) ?? 'Player' });
+}
+
 export interface LifeBarPlayer {
   clientId: number;
   playerSessionId?: string;
@@ -49,14 +80,16 @@ function buildLifeBarPlayer(area: PlayArea, turnState: TurnOrderState | null): L
   const entry = getPlayAreaPlayerEntry(area);
   const activeClientId = getActiveTurnClientId(turnState);
 
+  const isLocal = !!area.isLocalPlayArea || area.clientId === localClientId;
+
   return {
     clientId: area.clientId,
     playerSessionId: area.playerSessionId ?? entry?.playerSessionId,
     name: entry?.name?.trim() || getPlayAreaPlayerName(area),
     life: entry?.life,
-    commanderLife: entry?.commanderLife,
+    commanderLife: isLocal ? undefined : getTrackedOpponentCommanderLife(area.clientId),
     counters: entry?.counters,
-    isLocal: !!area.isLocalPlayArea || area.clientId === localClientId,
+    isLocal,
     isActiveTurn: area.clientId === activeClientId,
   };
 }

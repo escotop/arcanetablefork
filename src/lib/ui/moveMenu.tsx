@@ -57,13 +57,9 @@ const MoveMenu: Component<Props> = props => {
         <DropdownIcon class='ml-auto' stroke-width={1} />
       </MenubarTrigger>
       <MenubarContent>
-        <MenubarItem onClick={() => moveTo(props.playArea.peekZone)}>Search</MenubarItem>
         <Show when={props.fromZone !== props.playArea.hand}>
           <MenubarItem onClick={() => moveTo(props.playArea.hand)}>Hand</MenubarItem>
         </Show>
-        <MenubarItem onClick={() => props.cards.forEach(card => props.playArea.reveal(card))}>
-          Reveal
-        </MenubarItem>
         <MenubarItem onClick={() => moveTo(props.playArea.graveyardZone)}>
           Discard {props.showShortcuts && <MenubarShortcut>{KEY.Mod} d</MenubarShortcut>}
         </MenubarItem>

@@ -106,23 +106,7 @@ const DeckMenu: Component<{ playArea: PlayArea }> = props => {
               </MenubarItem>
             </MenubarSubContent>
           </MenubarSub>
-          <MenubarSub>
-            <MenubarSubTrigger onClick={() => props.playArea.deckFlipTop()}>Flip</MenubarSubTrigger>
-            <MenubarSubContent>
-              <MenubarItem
-                onClick={() => {
-                  props.playArea.deckFlipTop();
-                }}>
-                Flip One
-              </MenubarItem>
-              <MenubarItem
-                onClick={() => {
-                  props.playArea.deckFlipTop(true);
-                }}>
-                Keep Flipped
-              </MenubarItem>
-            </MenubarSubContent>
-          </MenubarSub>
+          <MenubarItem onClick={() => props.playArea.deckFlipTop()}>Flip top card</MenubarItem>
           <MenubarSub overlap>
             <MenubarSubTrigger onClick={() => props.playArea.mulligan(1)}>
               Mulligan for

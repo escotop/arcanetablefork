@@ -165,6 +165,38 @@ export function createWaterdropEvent(
   } as const;
 }
 
+export function createDeckPeekLogEvent(count: number) {
+  return {
+    type: 'deckPeek',
+    payload: { count },
+  } as const;
+}
+
+export function createDeckSearchLogEvent() {
+  return {
+    type: 'deckSearch',
+    payload: {},
+  } as const;
+}
+
+export function createDeckShuffleLogEvent() {
+  return {
+    type: 'deckShuffle',
+    payload: {},
+  } as const;
+}
+
+export function createDeckDrawLogEvent(
+  payload:
+    | { source: 'top' }
+    | { source: 'choice'; cardName: string; deckPosition: number },
+) {
+  return {
+    type: 'deckDraw',
+    payload,
+  } as const;
+}
+
 export function createCreateCardEvent(card: Card, zoneId: string) {
   expect(!!card, 'card is undefined');
   if (!card.mesh) {

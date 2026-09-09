@@ -16,11 +16,14 @@ import {
   NumberFieldInput,
 } from '~/components/ui/number-field';
 import { TextField, TextFieldInput } from '~/components/ui/text-field';
-import { cardSystem, getLocalPlayerClientId, provider } from '../globals';
+import { cardSystem, getActiveGameId, getLocalPlayerClientId, playAreas, players, provider } from '../globals';
 import { DEFAULT_COMMANDER_LIFE, isMagicCardSystem } from '../constants';
+import { updateGameMetaLife } from '../gameMeta';
+import { getCommanderHealthTargets, setTrackedOpponentCommanderLife } from '../commanderTracking';
 import { parseLifeInput } from '../utils';
 import { displayPlayerColor } from '../playerColor';
 import { getCameraViewIndexForClientId, getOrderedPlayAreas, setCameraViewByPlayerIndex } from '../cameraView';
+import { turnOrderState } from '../turnOrder';
 import { counters, setIsCounterDialogOpen } from './counterDialog';
 import ChevronDownIcon from 'lucide-solid/icons/chevron-down';
 import ChevronUpIcon from 'lucide-solid/icons/chevron-up';
@@ -108,6 +111,12 @@ const LifeField: Component<{
 
 export const LocalPlayer: Component<{ isActiveTurn?: boolean; life?: number; commanderLife?: number; counters?: Record<string, number> }> = props => {
   const [open, setOpen] = createSignal(true);
+  const commanderHealthTargets = createMemo(() => {
+    players();
+    turnOrderState();
+    Object.values(playAreas);
+    return getCommanderHealthTargets(turnOrderState());
+  });
   const activeTurnClass = () =>
     props.isActiveTurn
       ? 'ring-2 ring-amber-400/80 shadow-[0_0_14px_rgba(251,191,36,0.35)]'
@@ -147,20 +156,47 @@ export const LocalPlayer: Component<{ isActiveTurn?: boolean; life?: number; com
                     ...localState,
                     life,
                   });
+                  const gameId = getActiveGameId();
+                  if (gameId) updateGameMetaLife(gameId, life, localState.commanderLife);
                 }}
               />
               <Show when={isMagicCardSystem(cardSystem)}>
-                <LifeField
-                  life={props?.commanderLife ?? DEFAULT_COMMANDER_LIFE}
-                  title='Commander health, +N/-N relative, or expressions like 21-3'
-                  onLifeChange={commanderLife => {
-                    const localState = provider.awareness.getLocalState();
-                    provider.awareness.setLocalState({
-                      ...localState,
-                      commanderLife,
-                    });
-                  }}
-                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    class='flex h-10 shrink-0 items-center rounded-md border border-input bg-background px-3 text-sm font-medium'
+                    onClick={stopViewSwitch}>
+                    CM Health
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent onClick={stopViewSwitch} class='min-w-[14rem]'>
+                    <Show
+                      when={commanderHealthTargets().length > 0}
+                      fallback={
+                        <DropdownMenuItem disabled class='text-muted-foreground'>
+                          No other players
+                        </DropdownMenuItem>
+                      }>
+                      <For each={commanderHealthTargets()}>
+                        {target => (
+                          <DropdownMenuItem closeOnSelect={false} class='flex items-center gap-2'>
+                            <span
+                              class='max-w-[6rem] shrink-0 truncate'
+                              title={target.name}
+                              classList={{ 'opacity-60': !target.isOnline }}>
+                              {target.name}
+                            </span>
+                            <LifeField
+                              life={target.life}
+                              title={`${target.name} commander health`}
+                              onLifeChange={life =>
+                                setTrackedOpponentCommanderLife(target.sessionId, life)
+                              }
+                            />
+                          </DropdownMenuItem>
+                        )}
+                      </For>
+                    </Show>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </Show>
             </div>
             <CollapsibleTrigger class='size-6 shrink-0' onClick={stopViewSwitch}>
