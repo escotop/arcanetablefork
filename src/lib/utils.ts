@@ -133,6 +133,15 @@ export function resolveDropTargetObject(object: Object3D): Object3D | undefined 
   while (current) {
     const ud = current.userData;
     if (ud?.zoneId && zonesById.has(ud.zoneId)) {
+      const zone = zonesById.get(ud.zoneId);
+      if (
+        zone?.zone === 'battlefield' &&
+        zone.mesh &&
+        current !== zone.mesh &&
+        ud.isInteractive
+      ) {
+        return zone.mesh;
+      }
       return current;
     }
     if (
