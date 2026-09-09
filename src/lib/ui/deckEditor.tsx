@@ -93,6 +93,15 @@ import DeckImportDialog from './deckEditor/deckImportDialog';
 import ExportDeckModal from './deckEditor/exportDeckModal';
 import PrintDeckModal from './deckEditor/printDeckModal';
 import useCardGrouping, { getCardTypeCategory } from './deckEditor/cardGroupings';
+import {
+  countSpecialDeckTabs,
+  entryMatchesSubtypeFilter,
+  getSpecialDeckType,
+  getSubtypeOptionsForTab,
+  SPECIAL_DECK_TAB_TYPES,
+  tabSupportsSubtypeFilter,
+} from './deckEditor/cardSubtypes';
+import SubtypeFilter from './deckEditor/subtypeFilter';
 import CommanderBracketModal from './deckEditor/commanderBracketModal';
 import BracketEstimateTag from './bracketEstimateTag';
 import {
@@ -155,6 +164,7 @@ export const DeckEditor: Component<Props> = props => {
   const [bracketShareUrl, setBracketShareUrl] = createSignal<string>();
   const [newDeckTipOpen, setNewDeckTipOpen] = createSignal(false);
   const [typeFilter, setTypeFilter] = createSignal('deck');
+  const [activeSubtypes, setActiveSubtypes] = createSignal<string[]>([]);
   let formRef: HTMLFormElement;
 
   const [deck, setDeck] = createStore<Deck>(
@@ -680,10 +690,11 @@ export const DeckEditor: Component<Props> = props => {
   const isSearching = () => {
     const hasTextSearch = searchQuery().length > 0;
     const hasTypeFilter = hasCatalogTypeFilter();
+    const hasSubtypeFilter = activeSubtypes().length > 0;
     if (isCatalogTab() || isSideboardTab()) {
-      return hasTextSearch || hasTypeFilter;
+      return hasTextSearch || hasTypeFilter || hasSubtypeFilter;
     }
-    return hasTextSearch;
+    return hasTextSearch || hasSubtypeFilter;
   };
   const searchPlaceholder = () =>
     isCatalogTab() ? 'Search all MTG cards...' : 'Search in this tab...';
@@ -824,7 +835,46 @@ export const DeckEditor: Component<Props> = props => {
 
     return mainLines.join('\n');
   });
+  createEffect(() => {
+    typeFilter();
+    catalogTypeFilter();
+    setActiveSubtypes([]);
+  });
+
+  function entryPassesFilters(entry: DetailedCardEntry | undefined) {
+    return entryMatchesSearch(entry) && entryMatchesSubtypeFilter(entry, activeSubtypes());
+  }
+
   const cardGrouping = useCardGrouping(cardSystem.types ?? [], getDeckList);
+
+  const specialTabCounts = createMemo(() => {
+    trackDeep(deck.cards);
+    return countSpecialDeckTabs(getDeckList());
+  });
+
+  const subtypeOptions = createMemo(() => {
+    const tab = typeFilter();
+    if (!tabSupportsSubtypeFilter(tab)) return [];
+
+    if (tab === 'all') {
+      return getSubtypeOptionsForTab(tab, catalogTypeFilter(), []);
+    }
+
+    if (tab === 'sideboard') {
+      trackDeep(deck.sideboard);
+      return getSubtypeOptionsForTab(tab, catalogTypeFilter(), getSideboardList());
+    }
+
+    trackDeep(deck.cards);
+    return getSubtypeOptionsForTab(tab, catalogTypeFilter(), getDeckList());
+  });
+
+  const filteredSearchResults = createMemo(() => {
+    const results = searchResults();
+    if (!results) return results;
+    if (!activeSubtypes().length) return results;
+    return results.filter(card => entryMatchesSubtypeFilter(card, activeSubtypes()));
+  });
 
   const deckTokenPartIds = createMemo(() => {
     trackDeep(deck.cards);
@@ -863,9 +913,13 @@ export const DeckEditor: Component<Props> = props => {
         const entry = deck.cards[key];
         if (!entry?.qty) return false;
 
+        if (SPECIAL_DECK_TAB_TYPES.includes(filter as (typeof SPECIAL_DECK_TAB_TYPES)[number])) {
+          return getSpecialDeckType(entry) === filter;
+        }
+
         const type = getCardTypeCategory(entry, lowerTypes);
 
-        if (filter === 'unsorted') return !type;
+        if (filter === 'unsorted') return !type && !getSpecialDeckType(entry);
         return type === filter;
       });
     }
@@ -874,7 +928,7 @@ export const DeckEditor: Component<Props> = props => {
   });
 
   const filteredDeckCardKeys = createMemo(() =>
-    filteredMainDeckKeys().filter(key => entryMatchesSearch(deck.cards[key])),
+    filteredMainDeckKeys().filter(key => entryPassesFilters(deck.cards[key])),
   );
 
   const filteredSideboardCardKeys = createMemo(() => {
@@ -884,7 +938,7 @@ export const DeckEditor: Component<Props> = props => {
 
     return sideboardCardKeys().filter(key => {
       const entry = deck.sideboard?.[key];
-      if (!entry?.qty || !entryMatchesSearch(entry)) return false;
+      if (!entry?.qty || !entryPassesFilters(entry)) return false;
 
       if (activeTypeFilter !== CATALOG_TYPE_ALL) {
         const category = getCardTypeCategory(entry, lowerTypes);
@@ -893,6 +947,17 @@ export const DeckEditor: Component<Props> = props => {
 
       return true;
     });
+  });
+
+  const unsortedDeckCount = createMemo(() => {
+    trackDeep(deck.cards);
+    const lowerTypes = (cardSystem.types ?? []).map(type => type.toLowerCase());
+    return getDeckList().reduce((sum, entry) => {
+      if (!entry?.qty) return sum;
+      const type = getCardTypeCategory(entry, lowerTypes);
+      if (type || getSpecialDeckType(entry)) return sum;
+      return sum + (entry.qty ?? 1);
+    }, 0);
   });
 
   const filteredTokenEntries = createMemo(() =>
@@ -934,7 +999,20 @@ export const DeckEditor: Component<Props> = props => {
                   </Show>
                 )}
               </For>
-              <Show when={cardGrouping().unsorted.count > 0}>
+              <For each={SPECIAL_DECK_TAB_TYPES}>
+                {type => (
+                  <Show when={specialTabCounts()[type] > 0}>
+                    <button
+                      type='button'
+                      class={tabButtonClass(typeFilter() === type)}
+                      onClick={() => setTypeFilter(current => (current === type ? 'deck' : type))}>
+                      <span>{capitalize(type)}</span>
+                      <span>{specialTabCounts()[type]}</span>
+                    </button>
+                  </Show>
+                )}
+              </For>
+              <Show when={unsortedDeckCount() > 0}>
                 <button
                   type='button'
                   class={tabButtonClass(typeFilter() === 'unsorted')}
@@ -942,7 +1020,7 @@ export const DeckEditor: Component<Props> = props => {
                     setTypeFilter(current => (current === 'unsorted' ? 'deck' : 'unsorted'))
                   }>
                   <span>Unsorted</span>
-                  <span>{cardGrouping().unsorted.count}</span>
+                  <span>{unsortedDeckCount()}</span>
                 </button>
               </Show>
               <Show when={sideboardQtyCount() > 0}>
@@ -1235,6 +1313,13 @@ export const DeckEditor: Component<Props> = props => {
                     <SelectContent />
                   </Select>
                 </Show>
+                <Show when={tabSupportsSubtypeFilter(typeFilter())}>
+                  <SubtypeFilter
+                    options={subtypeOptions()}
+                    value={activeSubtypes()}
+                    onChange={setActiveSubtypes}
+                  />
+                </Show>
               </div>
             </div>
             <div class={`p-4 ${styles.cardList}`}>
@@ -1390,11 +1475,11 @@ export const DeckEditor: Component<Props> = props => {
                   <Match when={isSearching() && searchResults() === undefined}>
                     <CatalogEmptyState mode='loading' />
                   </Match>
-                  <Match when={isSearching() && searchResults()?.length === 0}>
+                  <Match when={isSearching() && filteredSearchResults()?.length === 0}>
                     <CatalogEmptyState mode='empty' />
                   </Match>
-                  <Match when={searchResults()?.length}>
-                    <For each={searchResults()!}>
+                  <Match when={filteredSearchResults()?.length}>
+                    <For each={filteredSearchResults()!}>
                     {(card, i) => {
                       const cardKey = () => getCardKey(card);
                       const deckMatch = () => findDeckEntryMatch(card, deck.cards ?? {});
