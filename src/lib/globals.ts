@@ -90,6 +90,10 @@ export let focusRenderer: WebGLRenderer;
 export let focusCamera: PerspectiveCamera;
 export let [hoverSignal, setHoverSignal] = createSignal<HoverSignal>();
 export let [contextMenuSignal, setContextMenuSignal] = createSignal<ContextMenuSignal>();
+export let [customCardSpawnScreenPoint, setCustomCardSpawnScreenPoint] = createSignal<{
+  x: number;
+  y: number;
+} | null>(null);
 export let cardsById = new Map<string, Card>();
 export let zonesById = new Map<string, CardZone<unknown>>();
 export let [playAreas, setPlayAreas] = createStore<Record<number, PlayArea>>({});
@@ -165,6 +169,7 @@ export let [cardSearchModalData, setCardSearchModalData] = createSignal<{
   zone: 'peek' | 'graveyard' | 'exile' | 'tokenSearch';
   title?: string;
   deckViewMode?: 'peek' | 'search';
+  readOnly?: boolean;
 } | null>(null);
 export let ydoc = new Doc();
 export let table: Object3D;

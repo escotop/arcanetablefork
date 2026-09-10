@@ -275,6 +275,7 @@ export default function Overlay() {
             zone={data().zone}
             title={data().title}
             deckViewMode={data().deckViewMode}
+            readOnly={data().readOnly}
           />
         )}
       </Show>

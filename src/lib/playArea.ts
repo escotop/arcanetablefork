@@ -3,6 +3,7 @@ import { CatmullRomCurve3, Euler, Group, Mesh, MeshStandardMaterial, Object3D, Q
 import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import { getPlayAreaPlayerColor, textColorOnBackground } from './playerColor';
 import { animateObject, cancelAnimation } from './animations';
+import { playCounterSoundForModifierChange } from './sounds';
 import {
   applyCardOrientation,
   cleanupCard,
@@ -53,7 +54,7 @@ import {
   createTransferCardEvent,
   SKIP_REPLAY,
 } from './createEvents';
-import { playCounterSoundForModifierChange, playDrawSound, playShuffleDeckSound } from './sounds';
+import { getPlayAreaPlayerName } from './playAreaNameTag';
 
 /** Battlefield mesh uses BoxGeometry(200, 100) centered at the origin. */
 const BATTLEFIELD_HALF_W = 100;
@@ -745,83 +746,46 @@ export class PlayArea {
   async peekGraveyard() {
     if (this.inProgressActions.has(`peekGraveyard`)) return;
     this.inProgressActions.add('peekGraveyard');
-    if (this.tokenSearchZone.cards.length) {
+    if (this.isLocalPlayArea && this.tokenSearchZone.cards.length) {
       this.dismissFromZone(this.tokenSearchZone);
     }
-    
-    // Para el jugador local, usar el modal 2D
-    if (this.isLocalPlayArea) {
-      const cardsToShow = [...this.graveyardZone.cards];
-      
-      const { setCardSearchModalOpen, setCardSearchModalData } = await import('./globals');
-      setCardSearchModalData({
-        cards: cardsToShow,
-        zone: 'graveyard',
-        title: `Graveyard (${cardsToShow.length} cards)`,
-      });
-      setCardSearchModalOpen(true);
-    } else {
-      // Para jugadores remotos, usar el método antiguo
-      await Promise.all(
-        this.graveyardZone.mesh.children.map((child, i) => {
-          if (!child.userData.id) return;
-          return new Promise<void>(resolve => {
-            let card = cardsById.get(child.userData.id);
 
-            setTimeout(
-              () => {
-                transferCard(card, this.graveyardZone, this.peekZone);
-                resolve();
-              },
-              (this.graveyardZone.mesh.children.length - i) * 5,
-            );
-          });
-        }),
-      );
-    }
-    
+    const cardsToShow = [...this.graveyardZone.cards];
+    const playerName = getPlayAreaPlayerName(this);
+    const { setCardSearchModalOpen, setCardSearchModalData } = await import('./globals');
+    setCardSearchModalData({
+      cards: cardsToShow,
+      zone: 'graveyard',
+      title: this.isLocalPlayArea
+        ? `Graveyard (${cardsToShow.length} cards)`
+        : `${playerName}'s Graveyard (${cardsToShow.length} cards)`,
+      readOnly: !this.isLocalPlayArea,
+    });
+    setCardSearchModalOpen(true);
+
     this.inProgressActions.delete('peekGraveyard');
   }
 
   async peekExile() {
     if (this.inProgressActions.has(`peekExile`)) return;
     this.inProgressActions.add('peekExile');
-    if (this.tokenSearchZone.cards.length) {
+    if (this.isLocalPlayArea && this.tokenSearchZone.cards.length) {
       this.dismissFromZone(this.tokenSearchZone);
     }
-    
-    // Para el jugador local, usar el modal 2D
-    if (this.isLocalPlayArea) {
-      const cardsToShow = [...this.exileZone.cards];
-      
-      const { setCardSearchModalOpen, setCardSearchModalData } = await import('./globals');
-      setCardSearchModalData({
-        cards: cardsToShow,
-        zone: 'exile',
-        title: `Exile (${cardsToShow.length} cards)`,
-      });
-      setCardSearchModalOpen(true);
-    } else {
-      // Para jugadores remotos, usar el método antiguo
-      await Promise.all(
-        this.exileZone.mesh.children.map((child, i) => {
-          if (!child.userData.id) return;
-          return new Promise<void>(resolve => {
-            let card = cardsById.get(child.userData.id);
 
-            setTimeout(
-              () => {
-                transferCard(card, this.exileZone, this.peekZone);
-                resolve();
-              },
-              (this.exileZone.mesh.children.length - i) * 5,
-            );
-          });
-        }),
-      );
-    }
-    
-    // this.exileZone.clear();
+    const cardsToShow = [...this.exileZone.cards];
+    const playerName = getPlayAreaPlayerName(this);
+    const { setCardSearchModalOpen, setCardSearchModalData } = await import('./globals');
+    setCardSearchModalData({
+      cards: cardsToShow,
+      zone: 'exile',
+      title: this.isLocalPlayArea
+        ? `Exile (${cardsToShow.length} cards)`
+        : `${playerName}'s Exile (${cardsToShow.length} cards)`,
+      readOnly: !this.isLocalPlayArea,
+    });
+    setCardSearchModalOpen(true);
+
     this.inProgressActions.delete('peekExile');
   }
   async deckFlipTop() {

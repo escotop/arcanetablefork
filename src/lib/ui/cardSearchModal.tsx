@@ -57,6 +57,7 @@ interface CardSearchModalProps {
   title?: string;
   zone: 'peek' | 'graveyard' | 'exile' | 'tokenSearch';
   deckViewMode?: 'peek' | 'search';
+  readOnly?: boolean;
 }
 
 export const CardSearchModal: Component<CardSearchModalProps> = props => {
@@ -274,6 +275,8 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
   }
 
   function handleCardContextMenu(card: Card, e: MouseEvent) {
+    if (props.readOnly) return;
+
     e.preventDefault();
     e.stopPropagation();
     mouseDownCardId = null;

@@ -1,5 +1,4 @@
 import uniqBy from 'lodash-es/uniqBy';
-import { nanoid } from 'nanoid';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer';
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass';
@@ -7,7 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { cancelAnimation, renderAnimations, serializeAnimation } from './lib/animations';
 import { resolveHowItPlaysAdviceForDeck } from './lib/commanderBracket';
 import { getDeckStore } from './lib/deckStore';
-import { cloneCard, getCardMeshTetherPoint, setCardData, setCounterLabelHoverTarget, updateTextureAnimation } from './lib/card';
+import { getCardMeshTetherPoint, setCardData, setCounterLabelHoverTarget, updateTextureAnimation } from './lib/card';
 import { clearSpanishPreview, clearSpanishPreviewForCard } from './lib/spanishCardPreview';
 import {
   CARD_STACK_OFFSET,
@@ -898,39 +897,9 @@ function onDocumentClick(event: PointerEvent) {
       });
     });
   } else if (target.userData.location === 'graveyard') {
-    if (target.userData.clientId !== getLocalPlayerClientId()) {
-      let remotePlayArea = playAreas[target.userData.clientId];
-      remotePlayArea?.graveyardZone.mesh.children.forEach((cardMesh, i) => {
-        let card = cardsById.get(cardMesh.userData.id);
-        if (!card) return;
-
-        let cardProxy = cloneCard(card, nanoid());
-        setCardData(cardProxy.mesh, 'isLocalOnly', true);
-        setCardData(cardProxy.mesh, 'isPublic', true);
-        setTimeout(() => {
-          playArea.reveal(cardProxy);
-        }, 50 * i);
-      });
-    } else {
-      playArea.peekGraveyard();
-    }
+    resolvePlayAreaForZoneClick(target)?.peekGraveyard();
   } else if (target.userData.location === 'exile') {
-    if (target.userData.clientId !== getLocalPlayerClientId()) {
-      let remotePlayArea = playAreas[target.userData.clientId];
-      remotePlayArea?.exileZone.mesh.children.forEach((cardMesh, i) => {
-        let card = cardsById.get(cardMesh.userData.id)!;
-        if (!card) return;
-
-        let cardProxy = cloneCard(card, nanoid());
-        setCardData(cardProxy.mesh, 'isLocalOnly', true);
-        setCardData(cardProxy.mesh, 'isPublic', true);
-        setTimeout(() => {
-          playArea.reveal(cardProxy);
-        }, 50 * i);
-      });
-    } else {
-      playArea.peekExile();
-    }
+    resolvePlayAreaForZoneClick(target)?.peekExile();
   }
 
   if (target.parent?.userData.isInteractive) {
@@ -941,6 +910,25 @@ function onDocumentClick(event: PointerEvent) {
   if (target.userData.location === 'hand' && !isUnderLocalHand(target)) return;
 
   target.dispatchEvent({ type: 'click', event });
+}
+
+function resolvePlayAreaForZoneClick(target: THREE.Object3D): PlayArea | undefined {
+  const clientId = target.userData.clientId;
+  if (clientId != null) {
+    return playAreas[clientId];
+  }
+
+  const zoneId = target.userData.zoneId ?? target.userData.id;
+  if (!zoneId) return undefined;
+
+  for (const area of Object.values(playAreas)) {
+    if (!area) continue;
+    if (area.graveyardZone.id === zoneId || area.exileZone.id === zoneId) {
+      return area;
+    }
+  }
+
+  return undefined;
 }
 
 function resolveStackTopCardMesh(zoneId: string | undefined) {

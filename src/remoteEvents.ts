@@ -670,13 +670,13 @@ const EVENTS = {
     const prev = structuredClone(
       card.mesh.userData.modifiers ?? { power: 0, toughness: 0, counters: {} },
     );
-    setCardData(card.mesh, 'modifiers', event.payload.userData.modifiers);
+    card.mesh.userData.modifiers = event.payload.userData.modifiers;
     playCounterSoundForModifierChange(
       prev,
       event.payload.userData.modifiers,
       isRemotePlayerEvent(event),
     );
-    playArea.modifyCard(card);
+    updateModifiers(card);
   },
   createCounter(event: Event) {
     setCounters(counters => uniqBy([...counters, event.counter], 'id'));
@@ -796,7 +796,18 @@ const EVENTS = {
     const cardPayload = userData.card;
     if (!cardPayload?.detail) return;
 
-    let card = cloneCard(cardPayload, String(userData.id));
+    const cardId = String(userData.id);
+    const existing = resolveEventCard(cardId, playArea);
+    if (existing?.mesh?.parent) {
+      if (userData.isToken) {
+        setCardData(existing.mesh, 'isToken', true);
+        updateModifiers(existing);
+      }
+      void loadCardTextures(existing);
+      return;
+    }
+
+    let card = cloneCard(cardPayload, cardId);
     card.clientId = playArea.clientId;
     setCardData(card.mesh, 'clientId', playArea.clientId);
     if (userData.isToken) {

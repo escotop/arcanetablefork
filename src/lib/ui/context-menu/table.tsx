@@ -11,12 +11,23 @@ import { KEY } from '~/lib/constants';
 import { PlayArea } from '~/lib/playArea';
 import { untapAll } from '~/lib/shortcuts/commands/field';
 import { useSearchParams } from '@solidjs/router';
-import { dispatchGameEvent, onConcede } from '~/lib/globals';
+import {
+  contextMenuSignal,
+  customCardSpawnScreenPoint,
+  dispatchGameEvent,
+  onConcede,
+  setCustomCardSpawnScreenPoint,
+} from '~/lib/globals';
 import { createPassTurnEvent } from '~/lib/createEvents';
 import { computeNextTurnState } from '~/lib/turnOrder';
 import { Button } from '~/components/ui/button';
 import MoveSubMenu from './move-submenu';
 import { useMenuContext } from './context';
+import {
+  resolveBattlefieldPositionFromScreen,
+  spawnCustomCardOnBattlefield,
+} from '~/lib/customBattlefieldCard';
+import CustomCardModal from '../customCardModal';
 import {
   DropdownMenuPortal,
   DropdownMenuSub,
@@ -52,6 +63,18 @@ export default function TableMenuItems(props: MenuActionsProps) {
       <Dynamic
         component={menuCtx.item}
         class='w-full flex'
+        onClick={() => {
+          const signal = contextMenuSignal();
+          if (signal) {
+            setCustomCardSpawnScreenPoint({ x: signal.mouse.x, y: signal.mouse.y });
+          }
+          setSearchParams({ dialog: 'add-custom-card' });
+        }}>
+        Add custom card
+      </Dynamic>
+      <Dynamic
+        component={menuCtx.item}
+        class='w-full flex'
         onClick={() => props.playArea.toggleTokenMenu()}>
         Tokens
       </Dynamic>
@@ -73,6 +96,22 @@ export function TableContextDialogs(props: { playArea: PlayArea }) {
 
   return (
     <Switch>
+      <Match when={searchParams.dialog === 'add-custom-card'}>
+        <CustomCardModal
+          onClose={() => {
+            setCustomCardSpawnScreenPoint(null);
+            setSearchParams({ dialog: undefined });
+          }}
+          onConfirm={(frontUrl, backUrl) => {
+            const point = customCardSpawnScreenPoint();
+            const position = point
+              ? resolveBattlefieldPositionFromScreen(point.x, point.y)
+              : undefined;
+            spawnCustomCardOnBattlefield(props.playArea, frontUrl, backUrl, position);
+            setCustomCardSpawnScreenPoint(null);
+          }}
+        />
+      </Match>
       <Match when={searchParams.dialog === 'concede'}>
         <Dialog
           open

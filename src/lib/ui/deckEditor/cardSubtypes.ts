@@ -1,6 +1,11 @@
 import { getSimpleType } from './cardGroupings';
 import { SUBTYPE_LIST_BY_CATEGORY } from './cardSubtypeLists';
 
+/** Supertypes shown in every subtype filter list (not after the em dash). */
+export const UNIVERSAL_SUBTYPE_FILTERS = ['Legendary'] as const;
+
+export type UniversalSubtypeFilter = (typeof UNIVERSAL_SUBTYPE_FILTERS)[number];
+
 export const SPECIAL_DECK_TAB_TYPES = [
   'scheme',
   'vanguard',
@@ -56,6 +61,21 @@ export function getCardSubtypeHaystack(entry: GroupableEntry | undefined) {
   return getCardSubtypeSections(entry).join(' ').toLowerCase();
 }
 
+export function entryHasLegendary(entry: GroupableEntry | undefined) {
+  return getTypeLineParts(entry).some(line => {
+    const beforeDash = line.split(/\s[-—–]\s/)[0] ?? '';
+    return /\blegendary\b/i.test(beforeDash);
+  });
+}
+
+function withUniversalSubtypes(subtypes: string[]) {
+  const merged = [...UNIVERSAL_SUBTYPE_FILTERS];
+  for (const subtype of subtypes) {
+    if (!merged.includes(subtype)) merged.push(subtype);
+  }
+  return merged;
+}
+
 export function subtypeMatchesHaystack(haystack: string, subtype: string) {
   const escaped = subtype
     .trim()
@@ -74,19 +94,25 @@ export function entryMatchesSubtypeFilter(
   if (entry.qty === 0) return false;
 
   const haystack = getCardSubtypeHaystack(entry);
-  return activeSubtypes.every(subtype => subtypeMatchesHaystack(haystack, subtype));
+  return activeSubtypes.every(subtype => {
+    if (subtype.toLowerCase() === 'legendary') {
+      return entryHasLegendary(entry);
+    }
+    return subtypeMatchesHaystack(haystack, subtype);
+  });
 }
 
 export function getOfficialSubtypeList(category: string) {
-  return SUBTYPE_LIST_BY_CATEGORY[category.toLowerCase()] ?? [];
+  const list = SUBTYPE_LIST_BY_CATEGORY[category.toLowerCase()] ?? [];
+  return withUniversalSubtypes([...list]);
 }
 
 export function getAllOfficialSubtypes() {
-  const subtypes = new Set<string>();
+  const subtypes = new Set<string>(UNIVERSAL_SUBTYPE_FILTERS);
   for (const list of Object.values(SUBTYPE_LIST_BY_CATEGORY)) {
     for (const subtype of list) subtypes.add(subtype);
   }
-  return [...subtypes].sort((a, b) => a.localeCompare(b));
+  return withUniversalSubtypes([...subtypes].sort((a, b) => a.localeCompare(b)));
 }
 
 export function matchesSpecialDeckType(simpleType: string | undefined, candidate: string) {
@@ -120,31 +146,31 @@ export function getSubtypeOptionsForTab(
 
   if (tab === 'all') {
     if (catalogType !== 'all') {
-      return [...getOfficialSubtypeList(catalogType)];
+      return getOfficialSubtypeList(catalogType);
     }
     return getAllOfficialSubtypes();
   }
 
   if (tab === 'unsorted') {
-    return uniqueSortedSubtypes(entries);
+    return withUniversalSubtypes(uniqueSortedSubtypes(entries));
   }
 
   if (tab === 'sideboard') {
     if (catalogType !== 'all') {
-      return [...getOfficialSubtypeList(catalogType)];
+      return getOfficialSubtypeList(catalogType);
     }
-    return uniqueSortedSubtypes(entries);
+    return withUniversalSubtypes(uniqueSortedSubtypes(entries));
   }
 
-  return [...getOfficialSubtypeList(tab)];
+  return getOfficialSubtypeList(tab);
 }
 
 export function getSubtypeOptionsForPeek(typeFilter: string | null, entries: GroupableEntry[]) {
   if (!typeFilter || typeFilter === 'unsorted') {
-    return uniqueSortedSubtypes(entries);
+    return withUniversalSubtypes(uniqueSortedSubtypes(entries));
   }
 
-  return [...getOfficialSubtypeList(typeFilter)];
+  return getOfficialSubtypeList(typeFilter);
 }
 
 function uniqueSortedSubtypes(entries: GroupableEntry[]) {

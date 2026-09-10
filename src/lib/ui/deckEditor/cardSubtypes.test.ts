@@ -1,9 +1,12 @@
 import { expect, test } from 'vitest';
 import {
+  entryHasLegendary,
   entryMatchesSubtypeFilter,
   getCardSubtypeHaystack,
+  getOfficialSubtypeList,
   getSpecialDeckType,
   getSubtypeOptionsForPeek,
+  getSubtypeOptionsForTab,
   subtypeMatchesHaystack,
   tabSupportsSubtypeFilter,
 } from './cardSubtypes';
@@ -25,6 +28,17 @@ test('entryMatchesSubtypeFilter uses AND logic', () => {
   expect(entryMatchesSubtypeFilter(entry, ['Human', 'Elf'])).toBe(false);
 });
 
+test('entryMatchesSubtypeFilter supports Legendary supertype', () => {
+  const legendary = { qty: 1, detail: { type_line: 'Legendary Artifact — Equipment' } };
+  const nonLegendary = { qty: 1, detail: { type_line: 'Artifact — Equipment' } };
+
+  expect(entryHasLegendary(legendary)).toBe(true);
+  expect(entryHasLegendary(nonLegendary)).toBe(false);
+  expect(entryMatchesSubtypeFilter(legendary, ['Legendary'])).toBe(true);
+  expect(entryMatchesSubtypeFilter(nonLegendary, ['Legendary'])).toBe(false);
+  expect(entryMatchesSubtypeFilter(legendary, ['Legendary', 'Equipment'])).toBe(true);
+});
+
 test('tabSupportsSubtypeFilter hides deck and shows all cards', () => {
   expect(tabSupportsSubtypeFilter('deck')).toBe(false);
   expect(tabSupportsSubtypeFilter('all')).toBe(true);
@@ -32,7 +46,16 @@ test('tabSupportsSubtypeFilter hides deck and shows all cards', () => {
 
 test('getSubtypeOptionsForPeek uses official list for type tabs', () => {
   expect(getSubtypeOptionsForPeek('creature', []).includes('Human')).toBe(true);
-  expect(getSubtypeOptionsForPeek(null, [{ qty: 1, detail: { type_line: 'Instant' } }])).toEqual([]);
+  expect(getSubtypeOptionsForPeek('creature', []).includes('Legendary')).toBe(true);
+  expect(getSubtypeOptionsForPeek(null, [{ qty: 1, detail: { type_line: 'Instant' } }])).toEqual([
+    'Legendary',
+  ]);
+});
+
+test('getOfficialSubtypeList and tab options always include Legendary', () => {
+  expect(getOfficialSubtypeList('instant')[0]).toBe('Legendary');
+  expect(getOfficialSubtypeList('land').includes('Legendary')).toBe(true);
+  expect(getSubtypeOptionsForTab('creature', 'all', [])[0]).toBe('Legendary');
 });
 
 test('subtypeMatchesHaystack supports multi-word subtypes', () => {

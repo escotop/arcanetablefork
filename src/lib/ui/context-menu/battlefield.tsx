@@ -2,7 +2,8 @@ import { PlayArea } from '~/lib/playArea';
 import { useMenuContext } from './context';
 import MoveSubMenu from './move-submenu';
 import { Mesh } from 'three';
-import { cardsById, doXTimes, selection } from '~/lib/globals';
+import { doXTimes, selection } from '~/lib/globals';
+import { resolveInteractiveCard } from '~/lib/card';
 import { Dynamic, For, Show } from 'solid-js/web';
 import { CoreCounters } from '../cardBattlefieldMenu';
 import { counters, setIsCounterDialogOpen } from '../counterDialog';
@@ -18,26 +19,22 @@ import CardQtyDialog from '../card-qty-dialog';
 
 export default function BattlefieldContextMenu(props: { targetMesh: Mesh; playArea: PlayArea }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [cardModifiers, setCardModifiers] = createSignal(
-    props.targetMesh?.userData.modifiers ?? {},
-  );
   const ctx = useMenuContext();
   let meshes = () =>
     selection.selectedItems.length > 0 ? selection.selectedItems : [props.targetMesh];
 
   function updateCardModifiers(fn) {
-    const card = cardsById.get(props.targetMesh.userData.id)!;
-    setCardModifiers(prev => {
-      const next = fn(prev);
-      props.playArea.modifyCard(card, modifiers => next);
-      return next;
-    });
+    const card = resolveInteractiveCard(props.targetMesh);
+    if (!card) return;
+    const prev = card.mesh.userData.modifiers ?? { power: 0, toughness: 0, counters: {} };
+    const next = fn(prev);
+    props.playArea.modifyCard(card, () => next);
   }
   return (
     <>
       <MoveSubMenu
         onComplete={() => selection.clearSelection()}
-        cards={meshes().map(mesh => cardsById.get(mesh?.userData.id))}
+        cards={meshes().map(mesh => resolveInteractiveCard(mesh)).filter(Boolean)}
         fromZone={props.playArea.battlefieldZone}
         playArea={props.playArea}
       />

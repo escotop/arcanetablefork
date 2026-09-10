@@ -21,30 +21,23 @@ import {
 } from '~/components/ui/number-field';
 import NumberFieldMenuItem from '~/components/ui/number-field-menu-item';
 import { cardsById, doXTimes, scene, selection } from '../globals';
+import { resolveInteractiveCard, setCardData } from '../card';
 import { PlayArea } from '../playArea';
 import { counters, setIsCounterDialogOpen } from './counterDialog';
 import MoveMenu from './moveMenu';
 import { shuffleItems } from '../utils';
-import { setCardData } from '../card';
 
 const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = props => {
-  const [cardModifiers, setCardModifiers] = createSignal(props.cardMesh?.userData.modifiers ?? {});
-
   function updateCardModifiers(fn) {
-    const card = cardsById.get(props.cardMesh.userData.id)!;
-    setCardModifiers(prev => {
-      const next = fn(prev);
-      props.playArea.modifyCard(card, modifiers => next);
-      return next;
-    });
+    const card = resolveInteractiveCard(props.cardMesh);
+    if (!card) return;
+    const prev = card.mesh.userData.modifiers ?? { power: 0, toughness: 0, counters: {} };
+    const next = fn(prev);
+    props.playArea.modifyCard(card, () => next);
   }
 
   let meshes = () =>
     selection.selectedItems.length > 0 ? selection.selectedItems : [props.cardMesh];
-
-  createEffect(() => {
-    setCardModifiers(props.cardMesh?.userData.modifiers ?? {});
-  });
 
   let cardText = () => {
     let count = selection.selectedItems.length;
@@ -53,10 +46,11 @@ const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = 
   };
 
   let cardCounters = createMemo(() => {
+    const modifiers = props.cardMesh?.userData.modifiers;
     return counters()
       .map(counter => ({
         ...counter,
-        value: cardModifiers()?.counters?.[counter.id],
+        value: modifiers?.counters?.[counter.id],
       }))
       .filter(counter => typeof counter.value === 'number');
   });
@@ -126,7 +120,8 @@ export function CoreCounters(props: CoreCountersProps) {
         value={power()}
         style='width: 6rem'
         onChange={rawValue => {
-          let card = cardsById.get(props.cardMesh?.userData.id)!;
+          let card = resolveInteractiveCard(props.cardMesh);
+          if (!card) return;
           let value = parseInt(rawValue, 10);
           setPower(rawValue);
           props.playArea.modifyCard(card, modifiers => ({
@@ -146,7 +141,8 @@ export function CoreCounters(props: CoreCountersProps) {
           variant='ghost'
           style='width: 1rem; height:  1rem; padding: 0; margin: 0 0.5rem'
           onClick={() => {
-            let card = cardsById.get(props.cardMesh?.userData.id)!;
+            let card = resolveInteractiveCard(props.cardMesh);
+            if (!card) return;
             setPower(power => parseInt(power.toString(), 10) + 1);
             setToughness(toughness => parseInt(toughness.toString(), 10) + 1);
             props.playArea.modifyCard(card, modifiers => ({
@@ -171,7 +167,8 @@ export function CoreCounters(props: CoreCountersProps) {
           variant='ghost'
           style='width: 1rem; height:  1rem; padding: 0; margin: 0 0.5rem'
           onClick={() => {
-            let card = cardsById.get(props.cardMesh?.userData.id)!;
+            let card = resolveInteractiveCard(props.cardMesh);
+            if (!card) return;
             setPower(power => parseInt(power.toString(), 10) - 1);
             setToughness(toughness => parseInt(toughness.toString(), 10) - 1);
             props.playArea.modifyCard(card, modifiers => ({
@@ -197,7 +194,8 @@ export function CoreCounters(props: CoreCountersProps) {
         value={toughness()}
         style='width: 6rem'
         onChange={rawValue => {
-          let card = cardsById.get(props.cardMesh?.userData.id)!;
+          let card = resolveInteractiveCard(props.cardMesh);
+          if (!card) return;
           let value = parseInt(rawValue, 10);
           setToughness(rawValue);
           props.playArea.modifyCard(card, modifiers => ({

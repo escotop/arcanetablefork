@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
 import set from 'lodash-es/set';
 import uniqBy from 'lodash-es/uniqBy';
-import { splitProps } from 'solid-js';
+import { splitProps, untrack } from 'solid-js';
 import {
   BoxGeometry,
   Color,
@@ -41,6 +41,7 @@ import {
   cardsById,
   cardSystem,
   getProjectionVec,
+  playAreas,
   scene,
   textureLoader,
   textureLoaderWorker,
@@ -295,17 +296,53 @@ export function getSearchLine(cardDetail: CardEntryDetail) {
   return buildSearchLine(cardDetail, cardSystem.searchField);
 }
 
+function findCardByMesh(mesh: Mesh): Card | undefined {
+  return untrack(() => {
+    for (const area of Object.values(playAreas)) {
+      if (!area) continue;
+      const zones = [
+        area.battlefieldZone,
+        area.hand,
+        area.graveyardZone,
+        area.exileZone,
+        area.deck,
+        area.peekZone,
+        area.revealZone,
+        area.tokenSearchZone,
+      ];
+      for (const zone of zones) {
+        const match = zone.cards?.find(card => card.mesh === mesh);
+        if (match) return match;
+      }
+    }
+    return undefined;
+  });
+}
+
+function resolveCardForMesh(mesh: Mesh | undefined): Card | undefined {
+  if (!mesh?.userData?.id) return undefined;
+
+  const byMesh = findCardByMesh(mesh);
+  if (byMesh) {
+    if (cardsById.get(byMesh.id) !== byMesh) {
+      cardsById.set(byMesh.id, byMesh);
+    }
+    return byMesh;
+  }
+
+  return cardsById.get(mesh.userData.id);
+}
+
 export function resolveInteractiveCard(object?: Object3D | null): Card | undefined {
   if (!object) return undefined;
 
-  const directId = object.userData?.id;
-  if (directId && cardsById.has(directId)) {
-    return cardsById.get(directId);
-  }
+  const mesh = object as Mesh;
+  const resolved = resolveCardForMesh(mesh);
+  if (resolved) return resolved;
 
-  const parentId = object.parent?.userData?.id;
-  if (parentId && cardsById.has(parentId)) {
-    return cardsById.get(parentId);
+  const parent = object.parent as Mesh | undefined;
+  if (parent?.userData?.id) {
+    return resolveCardForMesh(parent);
   }
 
   return undefined;
