@@ -34,6 +34,7 @@ import { getActiveJoinClientIdsFromLog, waitForGameLogCatchUp } from '../remoteE
 import { setCounters } from './ui/counterDialog';
 import { refreshMultiplayerSyncState } from './multiplayerSync';
 import { slimPlayAreaStateForSnapshot } from './gameLogEvents';
+import { devLog } from './devLog';
 import {
   logReloadOther,
   syncReloadOtherTraceFromState,
@@ -496,9 +497,9 @@ function publishPersistentWorldSnapshot() {
         console.error('[worldSnapshot] Failed to set persistent snapshot due to circular refs');
         return;
       }
-      console.log('[worldSnapshot] Published persistent snapshot', { 
-        logLength: snapshot.logLength, 
-        playAreas: snapshot.playAreas.length 
+      devLog.debug('[worldSnapshot] Published persistent snapshot', {
+        logLength: snapshot.logLength,
+        playAreas: snapshot.playAreas.length,
       });
       logReloadOther('publish-persistent-transact-done');
     });
@@ -626,38 +627,33 @@ export function setupPersistentSnapshotPublisher() {
   if (!gameState) return;
 
   let lastPublishedLogLength = 0;
-  let publishScheduled = false;
-  
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
   const publishIfNeeded = () => {
     logReloadOther('persistent-publisher-gamelog-observe', { gameLogLength: gameLog.length });
-    // Ya hay una publicación en curso
-    if (publishScheduled) return;
-    
     const currentLogLength = gameLog.length;
-    
-    // Solo publicar si hay nuevos eventos
     if (currentLogLength === lastPublishedLogLength) return;
-    
-    // Marcar que hay una publicación programada
-    publishScheduled = true;
-    logReloadOther('persistent-publisher-scheduled', {
-      from: lastPublishedLogLength,
-      to: currentLogLength,
-    });
-    
-    // Publicar inmediatamente después de que termine el evento actual
-    queueMicrotask(() => {
-      if (isSyncHost()) {
-        lastPublishedLogLength = gameLog.length;
-        publishPersistentWorldSnapshot();
-      } else {
+
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      debounceTimer = undefined;
+      if (!isSyncHost()) {
         logReloadOther('persistent-publisher-skipped-not-host');
+        return;
       }
-      publishScheduled = false;
-    });
+
+      const length = gameLog.length;
+      if (length === lastPublishedLogLength) return;
+
+      logReloadOther('persistent-publisher-scheduled', {
+        from: lastPublishedLogLength,
+        to: length,
+      });
+      lastPublishedLogLength = length;
+      publishPersistentWorldSnapshot();
+    }, 150);
   };
 
-  // Solo observar cambios en el gameLog (eventos de juego reales)
   gameLog.observe(publishIfNeeded);
 }
 

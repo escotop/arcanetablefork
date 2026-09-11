@@ -155,9 +155,6 @@ export function initReloadOtherPlayerDebug() {
         logReloadOther(`gamestate-key-${key}`, {
           action: change?.action,
         });
-        if (change?.action === 'add' || change?.action === 'update') {
-          beginReloadOtherTrace(`gamestate-${key}-${change.action}`);
-        }
       }
     }
     syncReloadOtherTraceFromState('gameState-observe');

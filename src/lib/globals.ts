@@ -660,7 +660,8 @@ export async function init({ gameId }) {
   focusRenderer = new WebGLRenderer({ alpha: true, antialias: true });
   focusRenderer.setPixelRatio(window.devicePixelRatio);
   focusRenderer.setSize(focusWidth, focusHeight);
-  focusRenderer.shadowMap.enabled = true;
+  // Flat, even preview — shadow maps on tilted hand cards moiré at high zoom.
+  focusRenderer.shadowMap.enabled = false;
   focusRenderer.setClearColor(0x000000, 0);
 
   focusCamera = new PerspectiveCamera(50, focusWidth / focusHeight, 1, 2000);

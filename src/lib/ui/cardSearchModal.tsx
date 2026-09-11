@@ -426,7 +426,6 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     }
 
     transferCard(card, fromZone, area.hand);
-    playDrawSound();
     
     // Actualizar la lista local eliminando la carta
     setLocalCards(prev => prev.filter(c => c.id !== card.id));

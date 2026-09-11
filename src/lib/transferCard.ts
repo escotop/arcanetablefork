@@ -9,6 +9,7 @@ import {
   isLocalHandZone,
   sendEvent,
 } from './globals';
+import { playDrawSound } from './sounds';
 import { Deck } from './deck';
 import { Hand } from './hand';
 import { serializeCardUserDataForLog } from './gameLogEvents';
@@ -161,6 +162,17 @@ export async function transferCard<AddOptions extends {}>(
     !isHistoricalLogReplayInProgress()
   ) {
     dismissHowItPlaysHelp();
+  }
+
+  if (
+    toZone?.zone === 'hand' &&
+    isLocalHandZone(toZone) &&
+    fromZone?.zone !== 'hand' &&
+    !preventTransmit &&
+    isEventCatchUpComplete() &&
+    !isHistoricalLogReplayInProgress()
+  ) {
+    playDrawSound(false);
   }
 
   if (!preventTransmit) {

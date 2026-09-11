@@ -1656,6 +1656,7 @@ function getCardMesh(target: THREE.Object3D | undefined) {
 function clearHoverSignal() {
   clearSpanishPreview();
   setCounterLabelHoverTarget(null);
+  clearFocusPanelState();
   setHoverSignal(signal => (signal?.mouse ? { mouse: signal.mouse } : undefined));
   focusCamera.userData.target = undefined;
   cancelAnimation(focusCamera);
@@ -1752,6 +1753,74 @@ function focusOn(target: THREE.Object3D) {
   focusCamera.userData.target = target.uuid;
 }
 
+type FocusMaterialSnapshot = {
+  mat: THREE.MeshStandardMaterial;
+  alphaMap: THREE.Texture | null;
+};
+
+let focusPanelTargetUuid: string | undefined;
+let focusLayerObjects: THREE.Object3D[] = [];
+let focusMaterialSnapshots: FocusMaterialSnapshot[] | undefined;
+
+/** alphaMap + grazing light on tilted hand cards moiré in the zoom panel; strip once per hover. */
+function applyFocusPanelMaterialOverrides(root: THREE.Object3D): FocusMaterialSnapshot[] {
+  const snapshots: FocusMaterialSnapshot[] = [];
+
+  root.traverse(obj => {
+    if (obj.userData?.excludeFromFocusPanel) return;
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const material of materials) {
+      if (!material || !(material as THREE.MeshStandardMaterial).isMeshStandardMaterial) continue;
+      const mat = material as THREE.MeshStandardMaterial;
+      if (!mat.alphaMap) continue;
+
+      snapshots.push({ mat, alphaMap: mat.alphaMap });
+      mat.alphaMap = null;
+      mat.needsUpdate = true;
+    }
+  });
+
+  return snapshots;
+}
+
+function restoreFocusPanelMaterials(snapshots: FocusMaterialSnapshot[]) {
+  for (const { mat, alphaMap } of snapshots) {
+    mat.alphaMap = alphaMap;
+    mat.needsUpdate = true;
+  }
+}
+
+function clearFocusPanelState() {
+  if (focusMaterialSnapshots?.length) {
+    restoreFocusPanelMaterials(focusMaterialSnapshots);
+  }
+  focusMaterialSnapshots = undefined;
+
+  for (const obj of focusLayerObjects) {
+    obj.layers.disable(FOCUS_PANEL_LAYER);
+  }
+  focusLayerObjects = [];
+  focusPanelTargetUuid = undefined;
+}
+
+function ensureFocusPanelState(mesh: THREE.Object3D) {
+  if (focusPanelTargetUuid === mesh.uuid) return;
+
+  clearFocusPanelState();
+
+  mesh.traverse(obj => {
+    if (obj.userData?.excludeFromFocusPanel) return;
+    obj.layers.enable(FOCUS_PANEL_LAYER);
+    focusLayerObjects.push(obj);
+  });
+
+  focusMaterialSnapshots = applyFocusPanelMaterialOverrides(mesh);
+  focusPanelTargetUuid = mesh.uuid;
+}
+
 function render3d(delta: number) {
   renderAnimations(time);
   updateTextureAnimation(delta);
@@ -1807,19 +1876,10 @@ function render3d(delta: number) {
   if (hoverSignal()?.mesh) {
     const mesh = hoverSignal().mesh as THREE.Object3D;
     updateFocusCamera(mesh);
-
-    const focusLayerObjects: THREE.Object3D[] = [];
-    mesh.traverse(obj => {
-      if (obj.userData?.excludeFromFocusPanel) return;
-      obj.layers.enable(FOCUS_PANEL_LAYER);
-      focusLayerObjects.push(obj);
-    });
-
+    ensureFocusPanelState(mesh);
     focusRenderer.render(scene, focusCamera);
-
-    for (const obj of focusLayerObjects) {
-      obj.layers.disable(FOCUS_PANEL_LAYER);
-    }
+  } else {
+    clearFocusPanelState();
   }
 }
 

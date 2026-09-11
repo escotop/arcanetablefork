@@ -87,6 +87,9 @@ export default function Overlay() {
   const location = () => userData()?.location;
   const playArea = () => getLocalPlayArea();
   const focusCameraStyle = () => {
+    if (hoverSignal()?.mesh?.userData?.location === 'hand') {
+      return { right: `0px`, top: `0` };
+    }
     if (hoverSignal()?.mouse?.y > 0) {
       return { right: `0px`, bottom: '0' };
     }

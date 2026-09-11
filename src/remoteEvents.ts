@@ -539,9 +539,6 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
   if (card?.mesh && event.payload?.userData && event.type !== 'transferCard') {
     applyEventUserData(card, event.payload.userData);
   }
-  if (!isEphemeralEvent(event)) {
-    logger.log('[handleEvents]', ...arguments);
-  }
   await EVENTS[event.type](event, playArea, card);
 }
 
@@ -801,7 +798,7 @@ const EVENTS = {
       applyCardOrientation(card.mesh);
     }
     const remote = isRemotePlayerEvent(event);
-    if (toZone?.zone === 'hand') {
+    if (toZone?.zone === 'hand' && resolvedFromZone?.zone !== 'hand') {
       playDrawSound(remote);
     } else if (resolvedFromZone?.zone === 'hand' && toZone?.zone === 'battlefield') {
       playPlayCardSound(remote);
