@@ -218,13 +218,50 @@ export function syncOpponentCommanderTrackingFromTable(): boolean {
   return changed;
 }
 
+function resolveOwnerSessionId(playArea?: PlayArea): string | undefined {
+  if (!playArea) return undefined;
+  return playArea.playerSessionId ?? getPlayAreaPlayerEntry(playArea)?.playerSessionId;
+}
+
+function isOwnerCommanderTarget(
+  sessionId: string,
+  entry: OpponentCommanderEntry,
+  ownerSessionId: string | undefined,
+  ownerClientId: number | undefined,
+): boolean {
+  if (ownerSessionId && sessionId === ownerSessionId) return true;
+  if (ownerClientId !== undefined && entry.clientId === ownerClientId) return true;
+
+  const ownerArea = ownerClientId !== undefined ? playAreas[ownerClientId] : undefined;
+  if (ownerArea?.playerSessionId && sessionId === ownerArea.playerSessionId) return true;
+
+  const targetArea =
+    entry.clientId !== undefined
+      ? playAreas[entry.clientId]
+      : Object.values(playAreas).find(area => area?.playerSessionId === sessionId);
+  if (
+    ownerClientId !== undefined &&
+    targetArea &&
+    (targetArea.clientId === ownerClientId ||
+      (ownerSessionId && targetArea.playerSessionId === ownerSessionId))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function buildCommanderHealthTargets(
   tracking: Record<string, OpponentCommanderEntry>,
   ownerSessionId: string | undefined,
+  ownerClientId: number | undefined,
   turnState: TurnOrderState | null,
 ): CommanderHealthTarget[] {
   const targets = Object.entries(tracking)
-    .filter(([sessionId]) => sessionId !== ownerSessionId)
+    .filter(
+      ([sessionId, entry]) =>
+        !isOwnerCommanderTarget(sessionId, entry, ownerSessionId, ownerClientId),
+    )
     .map(([sessionId, entry]) => ({
       sessionId,
       clientId: entry.clientId,
@@ -239,7 +276,12 @@ function buildCommanderHealthTargets(
 /** Local player's editable commander notes. */
 export function getCommanderHealthTargets(turnState: TurnOrderState | null): CommanderHealthTarget[] {
   syncOpponentCommanderTrackingFromTable();
-  return buildCommanderHealthTargets(readOpponentCommanderTracking(), getLocalPlayerSessionId(), turnState);
+  return buildCommanderHealthTargets(
+    readOpponentCommanderTracking(),
+    getLocalPlayerSessionId(),
+    getLocalPlayerClientId(),
+    turnState,
+  );
 }
 
 /** Another player's commander notes as published in their awareness (read-only). */
@@ -249,10 +291,12 @@ export function getRemotePlayerCommanderHealthTargets(
 ): CommanderHealthTarget[] {
   if (!playArea) return [];
 
-  const ownerSessionId =
-    playArea.playerSessionId ?? getPlayAreaPlayerEntry(playArea)?.playerSessionId;
-  const tracking = readPlayerCommanderTracking(playArea);
-  return buildCommanderHealthTargets(tracking, ownerSessionId, turnState);
+  return buildCommanderHealthTargets(
+    readPlayerCommanderTracking(playArea),
+    resolveOwnerSessionId(playArea),
+    playArea.clientId,
+    turnState,
+  );
 }
 
 export function getTrackedOpponentCommanderLife(clientId: number): number {
