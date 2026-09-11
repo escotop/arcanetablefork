@@ -92,7 +92,9 @@ export class CardArea implements CardZone<{ positionArray?: [number, number, num
 
     setCardData(card.mesh, 'zoneId', this.id);
     setCardData(card.mesh, 'location', this.zone);
-    setCardData(card.mesh, 'isPublic', true);
+    if (!card.mesh.userData.isFlipped) {
+      setCardData(card.mesh, 'isPublic', true);
+    }
     setCardData(card.mesh, 'isInteractive', true);
     setCardData(card.mesh, 'isInGrid', false);
 

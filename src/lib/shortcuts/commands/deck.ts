@@ -2,6 +2,8 @@ import { Card } from '~/lib/constants';
 import {
   createDeckDrawLogEvent,
   createDeckPeekLogEvent,
+  createDeckPeekMoveEvent,
+  createDeckPeekReorderEvent,
   createDeckSearchLogEvent,
   createTransferCardEvent,
 } from '~/lib/createEvents';
@@ -27,6 +29,14 @@ export function logDeckDrawChoice(cardName: string, deckPosition: number) {
   dispatchGameEvent(
     createDeckDrawLogEvent({ source: 'choice', cardName, deckPosition }),
   );
+}
+
+export function logDeckPeekReorder(order: string[]) {
+  dispatchGameEvent(createDeckPeekReorderEvent(order));
+}
+
+export function logDeckPeekMove(placement: 'top' | 'bottom', cardId: string) {
+  dispatchGameEvent(createDeckPeekMoveEvent(placement, cardId));
 }
 
 export function drawCards(playArea: PlayArea, count: number = 1) {

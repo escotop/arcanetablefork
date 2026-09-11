@@ -1,8 +1,10 @@
 import { expect, test, vi } from 'vitest';
 import {
+  clearStaleJoinBinding,
   findJoinClientIdForClientId,
   findJoinClientIdForSession,
   persistJoinBinding,
+  resolveJoinClientId,
 } from './playerSession';
 
 function mockGameLog(entries: unknown[]) {
@@ -64,4 +66,37 @@ test('persistJoinBinding roundtrip', () => {
   });
   persistJoinBinding('game-1', { playerSessionId: 's1', clientId: 42 });
   expect(storage.get('arcanetable-join-binding:game-1')).toContain('"clientId":42');
+});
+
+test('clearStaleJoinBinding removes binding without active join in log', () => {
+  const storage = new Map<string, string>();
+  vi.stubGlobal('sessionStorage', {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+    clear: () => storage.clear(),
+  });
+
+  persistJoinBinding('game-1', { playerSessionId: 's1', clientId: 42 });
+  const gameLog = mockGameLog([{ type: 'join', clientID: 7, payload: { playerSessionId: 'host' } }]);
+
+  clearStaleJoinBinding(gameLog as never, 'game-1', 's1');
+  expect(storage.has('arcanetable-join-binding:game-1')).toBe(false);
+});
+
+test('resolveJoinClientId ignores stale stored clientId without log join', async () => {
+  const storage = new Map<string, string>();
+  vi.stubGlobal('sessionStorage', {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+    clear: () => storage.clear(),
+  });
+
+  persistJoinBinding('game-1', { playerSessionId: 's1', clientId: 42 });
+  const gameLog = mockGameLog([{ type: 'join', clientID: 7, payload: { playerSessionId: 'host' } }]);
+
+  await expect(
+    resolveJoinClientId(gameLog as never, 'game-1', 's1', async () => undefined),
+  ).resolves.toBeUndefined();
 });

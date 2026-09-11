@@ -73,7 +73,9 @@ export function cleanupMesh(object: Mesh) {
   if (object.material.isMaterial) {
     cleanMaterial(object.material);
   } else {
-    for (const material of object.material) cleanMaterial(material);
+    for (const material of object.material) {
+      if (material) cleanMaterial(material);
+    }
   }
 }
 

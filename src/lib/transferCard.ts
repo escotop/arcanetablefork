@@ -122,9 +122,16 @@ export async function transferCard<AddOptions extends {}>(
     });
   }
 
+  const placingFaceDown =
+    userData &&
+    typeof userData === 'object' &&
+    (userData as Record<string, unknown>).isFlipped === true;
+
   if (fromZone?.zone === 'hand' && toZone?.zone === 'battlefield' && card.mesh) {
     setCardData(card.mesh, 'isTapped', false);
-    setCardData(card.mesh, 'isFlipped', false);
+    if (!placingFaceDown) {
+      setCardData(card.mesh, 'isFlipped', false);
+    }
   }
 
   if (!toZone) {

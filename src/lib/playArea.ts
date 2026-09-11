@@ -3,13 +3,14 @@ import { CatmullRomCurve3, Euler, Group, Mesh, MeshStandardMaterial, Object3D, Q
 import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import { getPlayAreaPlayerColor, textColorOnBackground } from './playerColor';
 import { animateObject, cancelAnimation } from './animations';
-import { playCounterSoundForModifierChange, playDrawSound } from './sounds';
+import { playCounterSoundForModifierChange, playDrawSound, playShuffleDeckSound } from './sounds';
 import { slimCardDetailForLog } from './gameLogEvents';
 import {
   applyCardOrientation,
   cleanupCard,
   cloneCard,
   ensureCardMesh,
+  ensureDoubleSidedCardMaterials,
   getRotationFromCardState,
   initializeCardMesh,
   loadCardTextures,
@@ -805,10 +806,10 @@ export class PlayArea {
   async shuffleDeck(existingOrder?: number[]) {
     const order = await this.executeShuffleDeck(existingOrder);
     if (this.isLocalPlayArea) {
-      playShuffleDeckSound();
+      this.emitEvent({ type: 'shuffleDeck', payload: { order } });
       dispatchGameEvent(createDeckShuffleLogEvent());
+      playShuffleDeckSound();
     }
-    this.emitEvent({ type: 'shuffleDeck', payload: { order } });
   }
 
   flip(cardMesh: Mesh) {
@@ -1137,13 +1138,28 @@ function cardFromSerializable(serialized: Record<string, unknown>, clientId: num
     modifiers: (embedded?.modifiers ?? {}) as Card['modifiers'],
   };
   const card = initializeCardMesh(base, clientId);
+  let deferredIsPublic: boolean | undefined;
   if (userData) {
     for (const [key, value] of Object.entries(userData)) {
-      if (key === 'card' || key === 'spanishPreviewSavedMat' || key === 'spanishPreviewSavedUrl') {
+      if (
+        key === 'card' ||
+        key === 'cardBack' ||
+        key === 'publicCardBack' ||
+        key === 'spanishPreviewSavedMat' ||
+        key === 'spanishPreviewSavedUrl'
+      ) {
+        continue;
+      }
+      if (key === 'isPublic') {
+        deferredIsPublic = value as boolean;
         continue;
       }
       setCardData(card.mesh!, key, value);
     }
+  }
+  ensureDoubleSidedCardMaterials(card.mesh!);
+  if (deferredIsPublic !== undefined) {
+    setCardData(card.mesh!, 'isPublic', deferredIsPublic);
   }
   // Actualizar modifiers visuales si la carta tiene modifiers
   if (card.mesh.userData.modifiers) {

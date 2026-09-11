@@ -1,6 +1,6 @@
 import { isEventCatchUpComplete, settings } from './globals';
 
-type SoundId = 'draw' | 'tap' | 'counterUp' | 'counterDown' | 'playCard' | 'shuffleDeck' | 'turn';
+type SoundId = 'draw' | 'tap' | 'counterUp' | 'counterDown' | 'playCard' | 'shuffleDeck' | 'turn' | 'coinFlip' | 'diceRoll';
 
 type PlaySoundOptions = {
   /** Allow playback before the game has finished loading (e.g. volume preview in settings). */
@@ -15,6 +15,8 @@ const SOUND_URLS: Record<SoundId, string> = {
   playCard: '/sounds/play-card-sound.mp3',
   shuffleDeck: '/sounds/shuffle-deck-sound.mp3',
   turn: '/sounds/turn ding.mp3',
+  coinFlip: '/sounds/Coinflip.mp3',
+  diceRoll: '/sounds/Diceroll.mp3',
 };
 
 const audioCache = new Map<SoundId, HTMLAudioElement>();
@@ -61,6 +63,14 @@ export function playShuffleDeckSound(remote = false, options?: PlaySoundOptions)
 
 export function playTurnSound(options?: PlaySoundOptions) {
   playAudio('turn', false, options);
+}
+
+export function playCoinFlipSound(options?: PlaySoundOptions) {
+  playAudio('coinFlip', false, options);
+}
+
+export function playDiceRollSound(options?: PlaySoundOptions) {
+  playAudio('diceRoll', false, options);
 }
 
 interface CardModifiers {

@@ -260,6 +260,18 @@ async function drainProcessEvents() {
 
     if (shouldSkipLocallyAppliedEvent(srcEvent)) {
       if (isLoadProfiling()) recordReplaySkip('local');
+      if (srcEvent.type !== 'bulk') {
+        try {
+          addLogMessage(srcEvent);
+        } catch (e) {
+          logReloadOther('process-events-add-log-failed', {
+            type: srcEvent.type,
+            error: e instanceof Error ? e.message : String(e),
+          });
+          Sentry.captureException(e, 'addLogMessage');
+          logger.error(e);
+        }
+      }
       continue;
     }
 
@@ -510,9 +522,13 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
     event.type === 'peekCards' ||
     event.type === 'deleteClone' ||
     event.type === 'deckPeek' ||
+    event.type === 'deckPeekReorder' ||
+    event.type === 'deckPeekMove' ||
     event.type === 'deckDraw' ||
     event.type === 'deckSearch' ||
-    event.type === 'deckShuffle'
+    event.type === 'deckShuffle' ||
+    event.type === 'roll' ||
+    event.type === 'coinFlip'
   ) {
     await EVENTS[event.type]?.(event, playArea);
     return;
@@ -904,6 +920,34 @@ const EVENTS = {
     void playArea?.deck.flipTop();
   },
   deckPeek() {},
+  roll() {},
+  coinFlip() {},
+  deckPeekReorder(event: Event, playArea: PlayArea) {
+    const order = event.payload?.order as string[] | undefined;
+    if (!playArea || !order?.length) return;
+    const cards = order
+      .map(id => playArea.deck.cards.find(card => card.id === id))
+      .filter((card): card is Card => Boolean(card));
+    if (cards.length !== order.length) return;
+    playArea.deck.reorderTopCards(order.length, cards);
+  },
+  deckPeekMove(event: Event, playArea: PlayArea) {
+    const cardId = event.payload?.cardId as string | undefined;
+    const placement = event.payload?.placement as 'top' | 'bottom' | undefined;
+    if (!playArea || !cardId || !placement) return;
+    const card = playArea.deck.cards.find(entry => entry.id === cardId);
+    if (!card) return;
+
+    const index = playArea.deck.cards.findIndex(entry => entry.id === cardId);
+    if (placement === 'bottom' && index === playArea.deck.cards.length - 1) return;
+    if (placement === 'top' && index === 0) return;
+
+    const location = placement === 'bottom' ? 'bottom' : 'top';
+    return transferCard(card, playArea.deck, playArea.deck, {
+      addOptions: { location, skipAnimation: true },
+      preventTransmit: true,
+    });
+  },
   deckDraw() {},
   deckSearch() {},
   deckShuffle() {},

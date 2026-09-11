@@ -137,6 +137,20 @@ export function ensureCardMesh(card: Card, clientId: number): Card {
   return card;
 }
 
+export function ensureDoubleSidedCardMaterials(mesh: Mesh) {
+  if (!mesh.userData.isDoubleSided) return;
+
+  if (!isValidMaterial(mesh.userData.publicCardBack)) {
+    const publicBack = new MeshStandardMaterial({ map: cardBackTexture });
+    publicBack.transparent = true;
+    mesh.userData.publicCardBack = publicBack;
+  }
+
+  if (!isValidMaterial(mesh.userData.cardBack)) {
+    mesh.userData.cardBack = (mesh.userData.publicCardBack as MeshStandardMaterial).clone();
+  }
+}
+
 export function createCardGeometry(card: Card, cache?: Map<string, ImageBitmap>) {
   const geometry = new BoxGeometry(CARD_WIDTH, CARD_HEIGHT, CARD_THICKNESS);
   let cardBackMat = new MeshStandardMaterial({ map: cardBackTexture });
@@ -797,14 +811,18 @@ export function setCardData<Field extends keyof CardUserData>(
       let material = cardMesh.userData[value ? 'cardBack' : 'publicCardBack'];
 
       if (!isValidMaterial(material)) {
-        devLog.warn(`Invalid material assigned to mesh!`, {
-          material,
-          cardMesh,
-        });
-        console.trace(`Material Assignment Trace`);
+        ensureDoubleSidedCardMaterials(cardMesh as Mesh);
+        material = cardMesh.userData[value ? 'cardBack' : 'publicCardBack'];
       }
 
-      cardMesh.material[cardMesh.material.length - 1] = material;
+      if (isValidMaterial(material)) {
+        (cardMesh.material as Material[])[(cardMesh.material as Material[]).length - 1] = material;
+      } else {
+        devLog.warn('[setCardData] skipping isPublic face — no valid card back material', {
+          cardId: cardMesh.userData.id,
+          isPublic: value,
+        });
+      }
     }
     if (!value) {
       setCardData(cardMesh, 'isFlipped', false);

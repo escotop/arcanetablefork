@@ -40,6 +40,7 @@ import Log from './log';
 import styles from './overlay.module.css';
 import PeekMenu from './peekMenu';
 import ManaCounters from './manaCounters';
+import RandomToolsPanel from './randomToolsPanel';
 import PlayerListPanel, { LocalPlayerPanel } from './playerListPanel';
 import RevealMenu from './revealMenu';
 import TokenSearchMenu from './tokenMenu';
@@ -224,6 +225,7 @@ export default function Overlay() {
       </Show>
       <Show when={!isSpectating()}>
         <div class={styles.bottomRightHud}>
+          <RandomToolsPanel />
           <Show when={playArea()}>
             <div class={styles.handCounter}>
               Hand ({playArea()!.hand.observable.cardCount})

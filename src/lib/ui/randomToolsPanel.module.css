@@ -1,0 +1,132 @@
+.root {
+  position: relative;
+  pointer-events: initial;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  max-width: 100%;
+}
+
+.flashResult {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.4rem);
+  z-index: 2;
+  min-width: 4.5rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.5rem;
+  border: 1px solid hsl(var(--border));
+  background: hsla(var(--background) / 0.94);
+  box-shadow: 0 4px 20px hsla(0 0% 0% / 0.28);
+  backdrop-filter: blur(8px);
+  color: hsl(var(--foreground));
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: randomToolsFlash 2.4s ease forwards;
+}
+
+@keyframes randomToolsFlash {
+  0% {
+    opacity: 0;
+    transform: translateY(0.35rem);
+  }
+
+  8%,
+  75% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-0.2rem);
+  }
+}
+
+.toggleTab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 2.35rem;
+  border: 1px solid hsl(var(--border));
+  border-right: none;
+  border-radius: 0.5rem 0 0 0.5rem;
+  background: hsla(var(--background) / 0.9);
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition:
+    height 0.2s ease,
+    background 150ms ease;
+}
+
+.toggleTabExpanded {
+  align-self: stretch;
+  height: auto;
+}
+
+.toggleTab:hover {
+  background: hsl(var(--muted));
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+  border: 1px solid hsl(var(--border));
+  border-left: none;
+  background: hsla(var(--background) / 0.82);
+  box-shadow: 0 4px 16px hsla(0 0% 0% / 0.2);
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+  transition:
+    width 0.2s ease,
+    opacity 0.2s ease,
+    padding 0.2s ease;
+}
+
+.panelCollapsed {
+  width: 0;
+  opacity: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-color: transparent;
+  pointer-events: none;
+}
+
+.toolButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.45rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.toolButton:hover {
+  background: hsl(var(--muted));
+}
+
+.toolButton:active {
+  transform: scale(0.96);
+}
+
+.toolButton :global(svg) {
+  width: 1.1rem;
+  height: 1.1rem;
+}

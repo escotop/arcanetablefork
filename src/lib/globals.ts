@@ -523,22 +523,30 @@ export async function setCardBackTexture(url: string) {
     return;
   }
   cardBackTexture.colorSpace = THREE.SRGBColorSpace;
+  cardBackTexture.userData.isCardBack = true;
+
+  if (!scene) return;
 
   scene.traverse(obj => {
     const mesh = obj as THREE.Mesh;
-    if (mesh.isMesh) {
-      const mat = mesh.material as THREE.MeshStandardMaterial;
-      if (Array.isArray(mat)) {
-        mat.forEach((mat, i) => {
-          if (mat.map === old) {
-            mat.map = cardBackTexture;
-            mat.needsUpdate = true;
-          }
-        });
-      } else if (mat?.map?.userData?.isCardBack) {
-        mat.map = cardBackTexture;
-        mat.needsUpdate = true;
+    if (!mesh.isMesh) return;
+
+    const materials = mesh.material;
+    if (!materials) return;
+
+    const updateMaterial = (material: THREE.Material | undefined) => {
+      if (!material || !('map' in material)) return;
+      const standard = material as THREE.MeshStandardMaterial;
+      if (standard.map === old || standard.map?.userData?.isCardBack) {
+        standard.map = cardBackTexture;
+        standard.needsUpdate = true;
       }
+    };
+
+    if (Array.isArray(materials)) {
+      materials.forEach(updateMaterial);
+    } else {
+      updateMaterial(materials);
     }
   });
   old?.dispose();
@@ -631,6 +639,7 @@ export async function init({ gameId }) {
 
   cardBackTexture = textureLoader.load(cardSystem.cardBack ?? DEFAULT_CARD_BACK);
   cardBackTexture.colorSpace = THREE.SRGBColorSpace;
+  cardBackTexture.userData.isCardBack = true;
 
   cardLoadingTexture = textureLoader.load(`/loading-texture.png`);
   cardLoadingTexture.repeat.setX(1 / 3);

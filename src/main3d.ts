@@ -87,6 +87,7 @@ import {
 } from './lib/globals';
 import { devLog } from './lib/devLog';
 import {
+  clearStaleJoinBinding,
   getOrCreatePlayerSessionId,
   getStoredJoinBinding,
   persistJoinBinding,
@@ -212,6 +213,32 @@ function waitForProviderSync(maxWaitMs = 8000): Promise<{
     provider.on('sync', onSync);
     setTimeout(() => finish(false, true), maxWaitMs);
   });
+}
+
+async function waitForRemoteGameLog(maxWaitMs = 10000): Promise<boolean> {
+  if (gameLog.length > 0) return true;
+
+  const deadline = performance.now() + maxWaitMs;
+  while (performance.now() < deadline) {
+    await processEvents();
+    if (gameLog.length > 0) return true;
+
+    const remaining = Math.max(250, deadline - performance.now());
+    const sync = await waitForProviderSync(Math.min(1000, remaining));
+    if (sync.synced && gameLog.length > 0) return true;
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  return gameLog.length > 0;
+}
+
+function assertMultiplayerConnectionReady(providerSync: { synced: boolean; timedOut: boolean }) {
+  if (providerSync.synced) return;
+
+  throw new Error(
+    'No se pudo conectar con la sala. Comprueba tu red, desactiva extensiones que bloqueen websockets o prueba otro navegador.',
+  );
 }
 
 async function waitForGameLogReplay(maxWaitMs = 30_000) {
@@ -378,6 +405,7 @@ export async function tryReconnectToGame(
   initCardSystem?: (uri: string) => Promise<unknown>,
 ): Promise<boolean> {
   const playerSessionId = getOrCreatePlayerSessionId(gameId);
+  clearStaleJoinBinding(gameLog, gameId, playerSessionId);
   const providerSync = await profileAsync('provider sync', () => waitForProviderSync());
   markLoadProfile('provider sync result', providerSync);
   const joinClientId = await profileAsync('resolve join client', () =>
@@ -576,27 +604,47 @@ export async function loadDeckAndJoin(
   settings: LoadSettings,
   initCardSystem?: (uri: string) => Promise<unknown>,
 ) {
-  await profileAsync('provider sync (join)', () => waitForProviderSync(5000));
+  const providerSync = await profileAsync('provider sync (join)', () => waitForProviderSync(10000));
+  await profileAsync('process events after provider sync', () => processEvents());
 
   const playerSessionId = getOrCreatePlayerSessionId(currentGameId);
+  clearStaleJoinBinding(gameLog, currentGameId, playerSessionId);
   const remotePlayersOnline = players().filter(
     player => player.id !== provider.awareness.clientID && !player.entry?.isSpectating,
   );
   markLoadProfile('join context', {
     remotePlayers: remotePlayersOnline.length,
     gameLogLength: gameLog.length,
+    providerSynced: providerSync.synced,
   });
 
   const existingJoinClientId = await profileAsync('resolve join client (new game)', () =>
     resolveJoinClientId(gameLog, currentGameId, playerSessionId, processEvents),
   );
 
-  const needsMultiplayerSync =
-    existingJoinClientId !== undefined || remotePlayersOnline.length > 0;
+  const joiningExistingRoom =
+    existingJoinClientId !== undefined ||
+    remotePlayersOnline.length > 0 ||
+    gameLog.length > 0;
+
+  const needsMultiplayerSync = joiningExistingRoom;
 
   if (needsMultiplayerSync) {
+    assertMultiplayerConnectionReady(providerSync);
+
+    if (gameLog.length === 0) {
+      const gotRemoteLog = await profileAsync('wait for remote game log', () =>
+        waitForRemoteGameLog(8000),
+      );
+      if (!gotRemoteLog) {
+        throw new Error(
+          'La sala no respondió a tiempo. Pide al anfitrión que confirme que la partida sigue activa e inténtalo de nuevo.',
+        );
+      }
+    }
+
     await profileAsync('multiplayer state (pre-join)', () =>
-      waitForMultiplayerGameState(existingJoinClientId !== undefined ? 8000 : 3000),
+      waitForMultiplayerGameState(existingJoinClientId !== undefined ? 10000 : 8000),
     );
     syncPlayAreasFromGameLog();
 

@@ -372,6 +372,24 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
     }
   }
 
+  reorderTopCards(count: number, orderedCards: Card[]) {
+    if (count <= 0 || orderedCards.length !== count) return false;
+
+    const currentIds = this.cards.slice(0, count).map(card => card.id);
+    const nextIds = orderedCards.map(card => card.id);
+    if (currentIds.every((id, index) => id === nextIds[index])) return false;
+
+    this.cards = [...orderedCards, ...this.cards.slice(count)];
+    orderedCards.forEach((card, index) => {
+      if (!card.mesh) return;
+      setCardData(card.mesh, 'location', 'deck');
+      setCardData(card.mesh, 'zoneId', this.id);
+      card.mesh.position.set(0, 0, index * CARD_THICKNESS);
+    });
+    this.condenseMeshes();
+    return true;
+  }
+
   async shuffle(order?: number[]) {
     if (this.cards?.[0]?.mesh?.userData?.isPublic) {
       await this.flipTop();

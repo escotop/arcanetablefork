@@ -77,6 +77,33 @@ export function clearJoinBinding(gameId: string) {
   sessionStorage.removeItem(`${JOIN_BINDING_PREFIX}:${gameId}`);
 }
 
+/** Drop sessionStorage reconnect hints that no longer match the persisted game log. */
+export function clearStaleJoinBinding(
+  gameLog: YArray<unknown>,
+  gameId: string,
+  playerSessionId: string,
+) {
+  const stored = getStoredJoinBinding(gameId);
+  if (!stored) return;
+
+  if (stored.playerSessionId !== playerSessionId) {
+    clearJoinBinding(gameId);
+    return;
+  }
+
+  if (findJoinClientIdForSession(gameLog, playerSessionId) !== undefined) return;
+
+  // Log may still be syncing from IndexedDB / websocket on first load.
+  if (!gameLog.length) return;
+
+  if (
+    stored.clientId === undefined ||
+    findJoinClientIdForClientId(gameLog, stored.clientId) === undefined
+  ) {
+    clearJoinBinding(gameId);
+  }
+}
+
 export function* iterateGameLogEvents(gameLog: YArray<unknown>): Generator<GameLogEvent> {
   for (let i = 0; i < gameLog.length; i++) {
     const srcEvent = gameLog.get(i) as GameLogEvent;
@@ -124,7 +151,11 @@ export async function resolveJoinClientId(
   if (joinClientId !== undefined) return joinClientId;
 
   const mayReconnect =
-    !!stored || findJoinClientIdForSession(gameLog, playerSessionId) !== undefined;
+    findJoinClientIdForSession(gameLog, playerSessionId) !== undefined ||
+    (stored?.playerSessionId === playerSessionId &&
+      stored.clientId !== undefined &&
+      (!gameLog.length || findJoinClientIdForClientId(gameLog, stored.clientId) !== undefined));
+
   if (!mayReconnect) return undefined;
 
   for (let i = 0; i < 200; i++) {
@@ -134,7 +165,7 @@ export async function resolveJoinClientId(
     await new Promise(resolve => setTimeout(resolve, 50));
   }
 
-  return lookup() ?? stored?.clientId;
+  return lookup();
 }
 
 const sessionToClientId = new Map<string, number>();

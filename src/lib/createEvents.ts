@@ -197,6 +197,34 @@ export function createDeckDrawLogEvent(
   } as const;
 }
 
+export function createDeckPeekReorderEvent(order: string[]) {
+  return {
+    type: 'deckPeekReorder',
+    payload: { order },
+  } as const;
+}
+
+export function createDeckPeekMoveEvent(placement: 'top' | 'bottom', cardId: string) {
+  return {
+    type: 'deckPeekMove',
+    payload: { placement, cardId },
+  } as const;
+}
+
+export function createCoinFlipEvent(result: 'heads' | 'tails') {
+  return {
+    type: 'coinFlip',
+    payload: { result },
+  } as const;
+}
+
+export function createDieRollEvent(sides: number, result: number) {
+  return {
+    type: 'roll',
+    payload: { roll: [{ sides, result }] },
+  } as const;
+}
+
 export function createCreateCardEvent(card: Card, zoneId: string) {
   expect(!!card, 'card is undefined');
   if (!card.mesh) {

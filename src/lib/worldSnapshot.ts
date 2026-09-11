@@ -136,15 +136,9 @@ export function isSyncHost(): boolean {
   return Number(localId) === hostId;
 }
 
-export function gameNeedsSnapshotSync(playerSessionId: string, gameId: string): boolean {
+export function gameNeedsSnapshotSync(playerSessionId: string, _gameId: string): boolean {
   if (!gameLog?.length) return false;
-
-  const joinClientId =
-    findJoinClientIdForSession(gameLog, playerSessionId) ??
-    getStoredJoinBinding(gameId)?.clientId;
-
-  // Solo reconexiones usan snapshot; un jugador nuevo entra sin barrera
-  return joinClientId !== undefined;
+  return findJoinClientIdForSession(gameLog, playerSessionId) !== undefined;
 }
 
 function getLocalPlayerSessionId(): string | undefined {

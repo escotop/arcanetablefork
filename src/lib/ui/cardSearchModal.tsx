@@ -30,7 +30,7 @@ import {
 import { transferCard } from '../transferCard';
 import { getCardImage } from '../card';
 import { spawnTokenOnBattlefield } from '../playArea';
-import { logDeckDrawChoice, logDeckDrawTop } from '../shortcuts/commands/deck';
+import { logDeckDrawChoice, logDeckDrawTop, logDeckPeekMove, logDeckPeekReorder } from '../shortcuts/commands/deck';
 import { supportsCardPrintings } from '../deck';
 import { playDrawSound } from '../sounds';
 import {
@@ -72,6 +72,11 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
   const [contextMenuCard, setContextMenuCard] = createSignal<Card | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = createSignal<{ x: number; y: number } | null>(null);
   const [activeSubtypes, setActiveSubtypes] = createSignal<string[]>([]);
+  const [peekWindowSize, setPeekWindowSize] = createSignal(0);
+  const [peekDragCardId, setPeekDragCardId] = createSignal<string | null>(null);
+  const [peekDropTargetId, setPeekDropTargetId] = createSignal<string | null>(null);
+  const PEEK_REORDER_THRESHOLD_PX = 6;
+  let suppressNextCardClick = false;
   const [cardsPerRow, setCardsPerRow] = createSignal(
     parseInt(localStorage.getItem('cardSearchModal_cardsPerRow') || '5', 10)
   );
@@ -84,10 +89,152 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
 
   // Crear una lista de cartas reactiva que se actualiza cuando se roban cartas
   const [localCards, setLocalCards] = createSignal<Card[]>(props.cards);
-  
+
   createEffect(() => {
     setLocalCards(props.cards);
+    if (props.open && props.deckViewMode === 'peek') {
+      setPeekWindowSize(props.cards.length);
+    }
   });
+
+  const canReorderPeek = () =>
+    props.zone === 'peek' && props.deckViewMode === 'peek' && !props.readOnly;
+
+  function syncPeekOrderToDeck(orderedCards: Card[]) {
+    const area = playArea();
+    if (!area || !canReorderPeek()) return false;
+    return area.deck.reorderTopCards(orderedCards.length, orderedCards);
+  }
+
+  function refreshLocalPeekCards() {
+    const area = playArea();
+    const size = peekWindowSize();
+    if (!area || !size || !canReorderPeek()) return;
+    setLocalCards(area.deck.cards.slice(0, size));
+  }
+
+  function swapPeekCards(fromIndex: number, toIndex: number) {
+    if (!canReorderPeek() || fromIndex === toIndex) return;
+
+    const current = localCards();
+    const next = [...current];
+    [next[fromIndex], next[toIndex]] = [next[toIndex], next[fromIndex]];
+
+    if (syncPeekOrderToDeck(next)) {
+      logDeckPeekReorder(next.map(card => card.id));
+    }
+    setLocalCards(next);
+  }
+
+  function resolvePeekCardIndex(cardId: string) {
+    return localCards().findIndex(card => card.id === cardId);
+  }
+
+  function findPeekCardFromPoint(x: number, y: number) {
+    const el = document.elementFromPoint(x, y)?.closest('[data-peek-card-id]');
+    if (!el) return null;
+    return {
+      id: el.getAttribute('data-peek-card-id') ?? '',
+      el,
+    };
+  }
+
+  function clearPeekReorderVisuals() {
+    setPeekDragCardId(null);
+    setPeekDropTargetId(null);
+  }
+
+  function beginPeekReorderPointer(card: Card, event: PointerEvent) {
+    if (!canReorderPeek() || event.button !== 0) return;
+
+    const fromIndex = resolvePeekCardIndex(card.id);
+    if (fromIndex === -1) return;
+
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let dropTargetId: string | null = null;
+    let dragging = false;
+
+    const onMove = (moveEvent: PointerEvent) => {
+      if (!dragging) {
+        const distance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
+        if (distance < PEEK_REORDER_THRESHOLD_PX) return;
+        dragging = true;
+        setPeekDragCardId(card.id);
+        blockCardInteraction(300);
+      }
+
+      moveEvent.preventDefault();
+      const hit = findPeekCardFromPoint(moveEvent.clientX, moveEvent.clientY);
+      if (!hit?.id || hit.id === card.id) {
+        if (dropTargetId !== null) {
+          dropTargetId = null;
+          setPeekDropTargetId(null);
+        }
+        return;
+      }
+
+      if (hit.id !== dropTargetId) {
+        dropTargetId = hit.id;
+        setPeekDropTargetId(hit.id);
+      }
+    };
+
+    const onEnd = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onEnd);
+
+      if (dragging) {
+        const targetId = peekDropTargetId() ?? dropTargetId;
+        if (targetId) {
+          const toIndex = resolvePeekCardIndex(targetId);
+          if (toIndex !== -1) {
+            swapPeekCards(fromIndex, toIndex);
+          }
+        }
+        suppressNextCardClick = true;
+        blockDraw(500);
+        blockCardInteraction(300);
+      }
+
+      clearPeekReorderVisuals();
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
+  }
+
+  async function movePeekCardInDeck(card: Card, placement: 'top' | 'bottom') {
+    const area = playArea();
+    if (!area || !canReorderPeek()) return;
+
+    suppressNextCardClick = true;
+    blockDraw(500);
+    blockCardInteraction(500);
+    mouseDownCardId = null;
+
+    await transferCard(card, area.deck, area.deck, {
+      addOptions: { location: placement, skipAnimation: true } as { location: 'top' | 'bottom' },
+      preventTransmit: true,
+    });
+
+    logDeckPeekMove(placement, card.id);
+    refreshLocalPeekCards();
+  }
+
+  function handleCardPointerDown(card: Card, event: PointerEvent) {
+    if (canReorderPeek()) {
+      if (event.button === 0) {
+        mouseDownCardId = card.id;
+        beginPeekReorderPointer(card, event);
+      }
+      return;
+    }
+    if (event.button !== 0) return;
+    mouseDownCardId = card.id;
+  }
 
   const cardGrouping = useCardGrouping(cardSystem.types ?? [], localCards);
 
@@ -111,7 +258,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
       
       // Limpiar cualquier búsqueda 3D antigua
       const area = playArea();
-      if (area) {
+      if (area && !props.readOnly) {
         // Si hay cartas en peekZone 3D, dismissarlo
         if (area.peekZone.cards.length > 0) {
           void area.dismissFromZone(area.peekZone);
@@ -175,13 +322,26 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     return candidates;
   });
 
+  const isPeekDragging = () => canReorderPeek() && peekDragCardId() !== null;
+
+  const isPeekSwapTarget = (cardId: string) =>
+    isPeekDragging() && peekDropTargetId() === cardId && peekDragCardId() !== cardId;
+
+  const peekSwapTargetClass =
+    'border-2 border-dashed !border-white shadow-[0_0_0_1px_rgba(0,0,0,0.85),0_0_16px_rgba(255,255,255,0.65)]';
+
   function handleCardMouseDown(card: Card, e: MouseEvent) {
+    if (canReorderPeek()) return;
     if (e.button !== 0) return; // Solo click izquierdo
     mouseDownCardId = card.id;
   }
 
   function handleCardClick(card: Card, e: MouseEvent) {
-    // Solo ejecutar si el mousedown fue en la misma carta
+    if (props.readOnly) return;
+    if (suppressNextCardClick) {
+      suppressNextCardClick = false;
+      return;
+    }
     if (mouseDownCardId !== card.id) {
       mouseDownCardId = null;
       return;
@@ -312,7 +472,9 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     e.preventDefault();
     e.stopPropagation();
     mouseDownCardId = null;
-    blockCardInteraction();
+    suppressNextCardClick = true;
+    blockDraw(500);
+    blockCardInteraction(500);
     action();
     closeContextMenu();
   }
@@ -321,7 +483,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     e.preventDefault();
     e.stopPropagation();
     mouseDownCardId = null;
-    blockCardInteraction();
+    blockCardInteraction(500);
     drawWithoutRevealing(card, { force: true });
     closeContextMenu();
   }
@@ -367,6 +529,14 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
         return;
     }
 
+    if (zoneName === 'deck-bottom' || zoneName === 'deck-top') {
+      if (canReorderPeek()) {
+        void movePeekCardInDeck(card, zoneName === 'deck-bottom' ? 'bottom' : 'top');
+        closeContextMenu();
+        return;
+      }
+    }
+
     if (zoneName === 'deck-bottom') {
       transferCard(card, fromZone, toZone, { addOptions: { location: 'bottom' } });
     } else {
@@ -378,6 +548,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
   }
 
   function drawWithoutRevealing(card: Card, options?: { force?: boolean }) {
+    if (props.readOnly) return;
     if (!options?.force && isDrawBlocked()) return;
 
     const area = playArea();
@@ -440,13 +611,13 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     if (!area) return;
     
     // Limpiar tanto el peekZone 3D como el modal 2D
-    if (props.zone === 'peek') {
+    if (!props.readOnly && props.zone === 'peek') {
       if (area.peekZone.cards.length > 0) {
         void area.dismissFromZone(area.peekZone);
       }
     }
     
-    if (props.zone === 'tokenSearch') {
+    if (!props.readOnly && props.zone === 'tokenSearch') {
       if (area.tokenSearchZone.cards.length > 0) {
         void area.dismissFromZone(area.tokenSearchZone);
       }
@@ -469,6 +640,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
       setFlippedCardIds(new Set());
       clearModalSpanishPreviews();
       setActiveSubtypes([]);
+      clearPeekReorderVisuals();
     }
   });
 
@@ -603,9 +775,14 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
             <div class='sticky top-0 z-20 overflow-visible bg-background border-b p-4 space-y-3'>
             {/* Título */}
             <div class='flex items-center justify-between'>
-              <h2 class='text-lg font-semibold'>
-                {getModalTitle()}
-              </h2>
+              <div>
+                <h2 class='text-lg font-semibold'>{getModalTitle()}</h2>
+                <Show when={canReorderPeek()}>
+                  <p class='text-xs text-muted-foreground mt-1'>
+                    Drag cards to reorder in case you are scrying.
+                  </p>
+                </Show>
+              </div>
               <button
                 type='button'
                 class='rounded px-3 py-1.5 text-sm transition-colors border border-border hover:bg-accent'
@@ -762,24 +939,37 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                     <For each={filteredCards()}>
                       {card => {
                         const hasDoubleFace = () => card.detail?.card_faces && card.detail.card_faces.length >= 2;
+                        const isDragging = () => peekDragCardId() === card.id;
                         return (
                           <div
-                            class='group relative aspect-[2.5/3.5] cursor-pointer overflow-hidden rounded-lg border-2 border-transparent transition-all hover:border-primary hover:scale-105 hover:shadow-lg'
+                            data-peek-card-id={card.id}
+                            class={cn(
+                              'group relative aspect-[2.5/3.5] cursor-pointer overflow-hidden rounded-lg border-2 border-transparent',
+                              isPeekDragging()
+                                ? 'transition-none'
+                                : 'transition-all hover:border-primary hover:scale-105 hover:shadow-lg',
+                              isDragging() && 'opacity-45 pointer-events-none',
+                              isPeekSwapTarget(card.id) && peekSwapTargetClass,
+                              canReorderPeek() && 'touch-none select-none',
+                            )}
+                            onPointerDown={event => {
+                              if (isDrawBlocked() || isCardInteractionBlocked()) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                return;
+                              }
+                              handleCardPointerDown(card, event);
+                            }}
                             onMouseDown={(e) => handleCardMouseDown(card, e)}
                             onClick={(e) => handleCardClick(card, e)}
-                            onPointerDown={e => {
-                              if (isDrawBlocked() || isCardInteractionBlocked()) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                              }
-                            }}
                             onContextMenu={(e) => handleCardContextMenu(card, e)}
                             onMouseEnter={() => setHoveredCard(card)}
                             onMouseLeave={() => setHoveredCard(null)}>
                             <img
                               src={getCurrentCardImage(card)}
                               alt={card.detail.name}
-                              class='w-full h-full object-cover'
+                              class='w-full h-full object-cover pointer-events-none'
+                              draggable={false}
                               loading='lazy'
                             />
                             <Show when={getSpanishPreviewState(card.id)?.phase === 'loading'}>
@@ -818,17 +1008,29 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                     <For each={filteredCards()}>
                       {card => {
                         const hasDoubleFace = () => card.detail?.card_faces && card.detail.card_faces.length >= 2;
+                        const isDragging = () => peekDragCardId() === card.id;
                         return (
                           <div
-                            class='group flex items-center gap-3 p-2 rounded-lg border cursor-pointer transition-all hover:border-primary hover:bg-accent'
+                            data-peek-card-id={card.id}
+                            class={cn(
+                              'group flex items-center gap-3 p-2 rounded-lg border cursor-pointer',
+                              isPeekDragging()
+                                ? 'transition-none'
+                                : 'transition-all hover:border-primary hover:bg-accent',
+                              isDragging() && 'opacity-45 pointer-events-none',
+                              isPeekSwapTarget(card.id) && peekSwapTargetClass,
+                              canReorderPeek() && 'touch-none select-none',
+                            )}
+                            onPointerDown={event => {
+                              if (isDrawBlocked() || isCardInteractionBlocked()) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                return;
+                              }
+                              handleCardPointerDown(card, event);
+                            }}
                             onMouseDown={(e) => handleCardMouseDown(card, e)}
                             onClick={(e) => handleCardClick(card, e)}
-                            onPointerDown={e => {
-                              if (isDrawBlocked() || isCardInteractionBlocked()) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                              }
-                            }}
                             onContextMenu={(e) => handleCardContextMenu(card, e)}
                             onMouseEnter={() => setHoveredCard(card)}
                             onMouseLeave={() => setHoveredCard(null)}>
@@ -836,7 +1038,8 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                               <img
                                 src={getCurrentCardImage(card)}
                                 alt={card.detail.name}
-                                class='w-16 h-22 object-cover rounded'
+                                class='w-16 h-22 object-cover rounded pointer-events-none'
+                                draggable={false}
                                 loading='lazy'
                               />
                               <Show when={getSpanishPreviewState(card.id)?.phase === 'loading'}>
@@ -893,7 +1096,10 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                 <>
                   <div
                     class='absolute inset-0 z-[100]'
-                    onClick={closeContextMenu}
+                    onMouseDown={e => {
+                      e.preventDefault();
+                      closeContextMenu();
+                    }}
                     onContextMenu={e => {
                       e.preventDefault();
                       closeContextMenu();
@@ -906,19 +1112,19 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                       left: `${pos.x}px`,
                       top: `${pos.y}px`,
                     }}
-                    onClick={e => e.stopPropagation()}
+                    onMouseDown={e => e.stopPropagation()}
                     onContextMenu={e => e.preventDefault()}>
                     <button
                       type='button'
                       class='w-full px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent'
-                      onClick={e => handleDrawFromMenu(e, card)}>
+                      onMouseDown={e => handleDrawFromMenu(e, card)}>
                       Draw
                     </button>
                     <Show when={hasDoubleFace}>
                       <button
                         type='button'
                         class='w-full px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent'
-                        onClick={e =>
+                        onMouseDown={e =>
                           handleContextMenuAction(e, () => handleFlipCard(card))
                         }>
                         Flip card
@@ -929,7 +1135,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                     <button
                       type='button'
                       class='w-full px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent'
-                      onClick={e =>
+                      onMouseDown={e =>
                         handleContextMenuAction(e, () => moveCardToZone(card, 'battlefield'))
                       }>
                       Battlefield
@@ -937,7 +1143,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                     <button
                       type='button'
                       class='w-full px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent'
-                      onClick={e =>
+                      onMouseDown={e =>
                         handleContextMenuAction(e, () => moveCardToZone(card, 'graveyard'))
                       }>
                       Graveyard
@@ -945,7 +1151,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                     <button
                       type='button'
                       class='w-full px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent'
-                      onClick={e =>
+                      onMouseDown={e =>
                         handleContextMenuAction(e, () => moveCardToZone(card, 'exile'))
                       }>
                       Exile
@@ -953,7 +1159,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                     <button
                       type='button'
                       class='w-full px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent'
-                      onClick={e =>
+                      onMouseDown={e =>
                         handleContextMenuAction(e, () => moveCardToZone(card, 'deck-top'))
                       }>
                       Deck (top)
@@ -961,7 +1167,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                     <button
                       type='button'
                       class='w-full px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent'
-                      onClick={e =>
+                      onMouseDown={e =>
                         handleContextMenuAction(e, () => moveCardToZone(card, 'deck-bottom'))
                       }>
                       Deck (bottom)

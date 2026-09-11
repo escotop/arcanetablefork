@@ -1750,7 +1750,9 @@ export const DeckEditor: Component<Props> = props => {
               <DialogTitle>Choosing card art</DialogTitle>
             </DialogHeader>
             <p>
-              Right click an added card to choose an official impression or community ones.
+Mark your commander card with the star icon in the card.
+Right click an added card to choose an official impression or community ones.
+
             </p>
             <DialogFooter>
               <Button type='button' onClick={closeNewDeckTip}>
