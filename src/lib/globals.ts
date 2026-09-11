@@ -43,6 +43,7 @@ import { DEFAULT_CARD_BACK_URL } from './mtgCardSystem';
 import TextureLoaderWorker from './textureLoaderWorker?worker';
 import { type TextureLoaderWorkerType } from './textureLoaderWorker';
 import { sanitizeGameLogEvent } from './gameLogEvents';
+import { logReloadOther } from './reloadOtherPlayerDebug';
 import { cleanupFromNode, getFocusCameraPositionRelativeTo } from './utils';
 import { Selection } from './selection';
 import { captureConsole } from './console-capture';
@@ -64,6 +65,7 @@ import { resetMultiplayerSyncState } from './multiplayerSync';
 import { removePlayerFromTurnOrder } from './turnOrder';
 import { clearWaterdrops } from './waterdropEffect';
 import { clearPingSync } from './pingSync';
+import { clearVideoPings } from './pingVideoEffect';
 import { resetCameraView, captureLocalCameraView } from './cameraView';
 import { setupCameraDebugGui, resetCameraDebugGui } from './cameraDebugGui';
 import { clearSpanishPreview } from './spanishCardPreview';
@@ -114,6 +116,7 @@ export function bumpHowItPlaysHandTick() {
 export let [howItPlaysMulliganTick, setHowItPlaysMulliganTick] = createSignal(0);
 
 export function notifyHowItPlaysMulligan() {
+  bumpHowItPlaysHandTick();
   setHowItPlaysMulliganTick(value => value + 1);
 }
 
@@ -172,6 +175,15 @@ export let [cardSearchModalData, setCardSearchModalData] = createSignal<{
   readOnly?: boolean;
 } | null>(null);
 export let ydoc = new Doc();
+
+// Interceptar errores de serialización en el YDoc
+ydoc.on('update', (update, origin) => {
+  logReloadOther('ydoc-update', {
+    origin: origin === null ? 'null' : typeof origin === 'string' ? origin : origin?.constructor?.name,
+    updateBytes: update?.byteLength,
+  });
+});
+
 export let table: Object3D;
 export let gameLog: YArray<any>;
 export let gameState: YMap<GameState>;
@@ -575,8 +587,45 @@ export async function init({ gameId }) {
   touchGameLastAccess(gameId);
   headlessInit();
   indexeddbPersistence?.destroy();
-  indexeddbPersistence = new IndexeddbPersistence(`arcanetable-${gameId}`, ydoc);
-  await profileAsync('indexeddb sync', () => waitForIndexedDbSync(), { gameId });
+  
+  try {
+    logReloadOther('indexeddb-init-start', { gameId });
+    indexeddbPersistence = new IndexeddbPersistence(`arcanetable-${gameId}`, ydoc);
+    await profileAsync('indexeddb sync', () => waitForIndexedDbSync(), { gameId });
+    logReloadOther('indexeddb-init-done', { gameId });
+  } catch (error) {
+    logReloadOther('indexeddb-init-failed', {
+      gameId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    console.error('[IndexedDB] Failed to initialize, clearing corrupted database:', error);
+    // Clear corrupted database
+    try {
+      const dbName = `arcanetable-${gameId}`;
+      await new Promise((resolve, reject) => {
+        const deleteRequest = indexedDB.deleteDatabase(dbName);
+        deleteRequest.onsuccess = () => {
+          console.log('[IndexedDB] Corrupted database cleared successfully');
+          resolve(null);
+        };
+        deleteRequest.onerror = () => {
+          console.error('[IndexedDB] Failed to clear database');
+          reject(deleteRequest.error);
+        };
+        deleteRequest.onblocked = () => {
+          console.warn('[IndexedDB] Database deletion blocked, will retry');
+          setTimeout(() => resolve(null), 1000);
+        };
+      });
+      // Retry with clean database
+      indexeddbPersistence = new IndexeddbPersistence(`arcanetable-${gameId}`, ydoc);
+      await profileAsync('indexeddb sync (retry)', () => waitForIndexedDbSync(), { gameId });
+    } catch (retryError) {
+      console.error('[IndexedDB] Failed to recover, continuing without persistence:', retryError);
+      indexeddbPersistence = null;
+    }
+  }
+  
   provider = createSyncProvider(gameId);
   markLoadProfile('sync provider created', { gameId });
 
@@ -738,6 +787,67 @@ export function startSpectating() {
   });
 }
 
+function detectCircularRefs(obj: unknown, path = '', seen = new WeakSet()): string | null {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj !== 'object') return null;
+  
+  if (seen.has(obj as object)) {
+    return `Circular reference at: ${path}`;
+  }
+  seen.add(obj as object);
+  
+  // Check for Three.js objects
+  if ('isObject3D' in obj || 'isMaterial' in obj || 'isTexture' in obj) {
+    return `Three.js object at: ${path} (type: ${(obj as any).type || 'unknown'})`;
+  }
+  
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) {
+      const result = detectCircularRefs(obj[i], `${path}[${i}]`, seen);
+      if (result) return result;
+    }
+  } else {
+    for (const [key, value] of Object.entries(obj)) {
+      const result = detectCircularRefs(value, path ? `${path}.${key}` : key, seen);
+      if (result) return result;
+    }
+  }
+  return null;
+}
+
+function safeGameLogPush(events: unknown[]) {
+  const eventTypes = Array.isArray(events)
+    ? events.map((event: any) => event?.type ?? 'unknown')
+    : ['unknown'];
+  logReloadOther('gamelog-push-attempt', { eventTypes, count: events.length });
+
+  const circular = detectCircularRefs(events);
+  if (circular) {
+    logReloadOther('gamelog-push-blocked-circular', { circular, eventTypes });
+    console.error('[CIRCULAR_REF_DETECTED]', circular);
+    console.error('[EVENT_CAUSING_ISSUE]', JSON.stringify(events, (key, value) => {
+      if (value && typeof value === 'object') {
+        if ('isObject3D' in value) return '[Object3D]';
+        if ('isMaterial' in value) return '[Material]';
+        if ('isTexture' in value) return '[Texture]';
+      }
+      return value;
+    }, 2).slice(0, 2000));
+    // Skip pushing to avoid crash
+    return;
+  }
+  try {
+    gameLog.push(events);
+    logReloadOther('gamelog-push-done', { eventTypes, newLength: gameLog.length });
+  } catch (error) {
+    logReloadOther('gamelog-push-threw', {
+      eventTypes,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
 /**
  * @deprecated use dispatchEvent instead
  */
@@ -748,7 +858,7 @@ export function sendEvent(event) {
   event.clientID = getLocalPlayerClientId();
   event.locallyApplied = true;
   sanitizeGameLogEvent(event);
-  gameLog.push([event]);
+  safeGameLogPush([event]);
 }
 
 let batch: any[] = [];
@@ -769,7 +879,7 @@ export async function flushDispatchEventQueue() {
       clientID: events[0].clientID,
     };
     sanitizeGameLogEvent(event);
-    gameLog.push([event]);
+    safeGameLogPush([event]);
   });
 }
 
@@ -829,6 +939,15 @@ export function cleanup() {
   indexeddbPersistence = null;
   ydoc.destroy();
   ydoc = new Doc();
+  
+  // Interceptar errores de serialización en el nuevo YDoc
+  ydoc.on('update', (update, origin) => {
+    logReloadOther('ydoc-update-after-reset', {
+      origin: origin === null ? 'null' : typeof origin === 'string' ? origin : origin?.constructor?.name,
+      updateBytes: update?.byteLength,
+    });
+  });
+  
   setAnimating(false);
   setPlayers([]);
   setSelectedDeckId();
@@ -839,6 +958,7 @@ export function cleanup() {
   initHowItPlaysAdvice();
   clearWaterdrops();
   clearPingSync();
+  clearVideoPings();
   resetCameraView();
 
   resetCameraDebugGui();

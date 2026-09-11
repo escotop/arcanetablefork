@@ -97,7 +97,21 @@ import { Hand } from './lib/hand';
 import { PlayArea } from './lib/playArea';
 import { getPlayAreaPlayerName } from './lib/playAreaNameTag';
 import { resolvePlayerColor } from './lib/playerColor';
-import { handlePingAwarenessChanges, publishTablePingFromHit } from './lib/pingSync';
+import { handlePingAwarenessChanges, isCardPingTarget, publishTablePingFromHit } from './lib/pingSync';
+import {
+  isBoardInteractionSuppressed,
+  suppressBoardInteractionAfterPing,
+} from './lib/pingInteractionGuard';
+import {
+  cancelPingWheelDrag,
+  finishPingWheelDrag,
+  isPingModifierHeld,
+  isPingWheelDragActive,
+  setupPingWheelKeys,
+  startPingWheelDrag,
+  updatePingWheelHover,
+} from './lib/pingWheelState';
+import { preloadPingVideos } from './lib/pingVideoEffect';
 import { updateWaterdrops } from './lib/waterdropEffect';
 import { setCameraViewMode as applyCameraViewMode, setCameraViewByPlayerIndex as applyCameraViewByPlayerIndex, getVisualSeatIndex, setAfterCameraViewChange } from './lib/cameraView';
 import { syncCameraDebugGuiFromActiveView } from './lib/cameraDebugGui';
@@ -119,6 +133,7 @@ import {
 import { getDeckStore } from './lib/deckStore';
 import { loadGameMeta, saveGameMeta } from './lib/gameMeta';
 import { refreshMultiplayerSyncState } from './lib/multiplayerSync';
+import { initReloadOtherPlayerDebug, logReloadOther } from './lib/reloadOtherPlayerDebug';
 import { unwrap } from 'solid-js/store';
 import {
   beginLoadProfile,
@@ -483,11 +498,21 @@ export async function localInit(gameOptions: GameOptions) {
   cameraMouse = new THREE.Vector2();
 
   gameLog.observe(() => {
-    void processEvents().then(() => syncPlayAreasFromGameLog());
+    logReloadOther('main-gamelog-observe-fired', {
+      logLength: gameLog.length,
+      processed: processedEvents(),
+    });
+    void processEvents().then(() => {
+      logReloadOther('main-gamelog-process-done-sync-playareas');
+      syncPlayAreasFromGameLog();
+    });
   });
   setupGameStateImportObserver(() => currentGameId);
+  initReloadOtherPlayerDebug();
   setupSyncBarrierObserver();
   setupPersistentSnapshotPublisher();
+  setupPingWheelKeys({ onQuickPing: publishQuickRegularPing });
+  preloadPingVideos();
   refreshMultiplayerSyncState();
 
   container.appendChild(renderer.domElement);
@@ -506,6 +531,7 @@ export async function localInit(gameOptions: GameOptions) {
   document.documentElement.addEventListener('mouseleave', onDocumentMouseLeave, false);
   document.addEventListener('click', onDocumentClick, false);
   document.addEventListener('dragstart', onDocumentDragStart, false);
+  document.addEventListener('dragend', onDocumentDragEnd, false);
   document.addEventListener('mouseup', onDocumentDrop, false);
   document.addEventListener('wheel', onDocumentScroll, { passive: false });
   window.addEventListener('resize', onWindowResize, false);
@@ -747,7 +773,7 @@ function onDocumentScroll(event: WheelEvent) {
 
 let postDragClickGuard: (() => void) | null = null;
 
-function activatePostDragClickGuard() {
+function activatePostDragClickGuard(timeoutMs = 50) {
   postDragClickGuard?.();
 
   let active = true;
@@ -756,18 +782,36 @@ function activatePostDragClickGuard() {
     active = false;
     cleanup();
     event.stopImmediatePropagation();
+    event.preventDefault();
   };
   const cleanup = () => {
     document.removeEventListener('click', onClickCapture, true);
+    document.removeEventListener('pointerup', onPointerUpCapture, true);
     clearTimeout(timer);
     if (postDragClickGuard === cleanup) {
       postDragClickGuard = null;
     }
   };
 
+  const onPointerUpCapture = (event: PointerEvent) => {
+    if (!active) return;
+    event.stopImmediatePropagation();
+  };
+
   document.addEventListener('click', onClickCapture, true);
-  const timer = window.setTimeout(cleanup, 50);
+  document.addEventListener('pointerup', onPointerUpCapture, true);
+  const timer = window.setTimeout(cleanup, timeoutMs);
   postDragClickGuard = cleanup;
+}
+
+function finishPingWheelInteraction(clientX: number, clientY: number) {
+  const pingSelection = finishPingWheelDrag(clientX, clientY);
+  if (!pingSelection) return false;
+
+  publishTablePingFromHit(pingSelection.hit, pingSelection.type);
+  suppressBoardInteractionAfterPing();
+  activatePostDragClickGuard(400);
+  return true;
 }
 
 function isUnderLocalDeck(object: THREE.Object3D): boolean {
@@ -829,26 +873,40 @@ function onContextMenu(event: PointerEvent) {
   });
 }
 
-function onAuxClick(event: MouseEvent) {
-  if (event.button !== 1 || isSpectating() || !getLocalPlayArea()) return;
-
-  event.preventDefault();
-  updateMouse(event);
-  raycaster.setFromCamera(mouse, camera);
-
+function findTablePingHit(): THREE.Intersection | undefined {
   const targets: THREE.Object3D[] = [table];
   Object.values(playAreas).forEach(area => {
-    targets.push(area.battlefieldZone.mesh);
+    if (area) targets.push(area.battlefieldZone.mesh);
   });
 
-  const hits = raycaster.intersectObjects(targets, false);
-  if (!hits.length) return;
+  const hits = raycaster.intersectObjects(targets, true);
+  for (const hit of hits) {
+    if (!hit.face) continue;
+    if (isCardPingTarget(hit.object)) continue;
+    return hit;
+  }
+  return undefined;
+}
 
-  const hit = hits[0];
-  publishTablePingFromHit(hit);
+function publishQuickRegularPing() {
+  if (isGameplayBlocked()) return;
+  if (isSpectating()) return;
+  if (!getLocalPlayArea()) return;
+
+  raycaster.setFromCamera(mouse, camera);
+  const tableHit = findTablePingHit();
+  if (tableHit) {
+    publishTablePingFromHit(tableHit, 'regular');
+  }
+}
+
+function onAuxClick(event: MouseEvent) {
+  if (event.button !== 1) return;
+  event.preventDefault();
 }
 
 function onDocumentClick(event: PointerEvent) {
+  if (isBoardInteractionSuppressed()) return;
   if (isGameplayBlocked()) return;
   updateMouse(event);
   setContextMenuSignal();
@@ -969,8 +1027,21 @@ function onDocumentDragStart(event: PointerEvent) {
   event.dataTransfer.dropEffect = 'move';
   if (isGameplayBlocked()) return;
   raycaster.setFromCamera(mouse, camera);
-  let intersects = raycaster.intersectObject(scene);
   if (isSpectating()) return;
+
+  if (isPingModifierHeld() && getLocalPlayArea()) {
+    const tableHit = findTablePingHit();
+    if (tableHit) {
+      const emptyDragImage = new Image();
+      emptyDragImage.src =
+        'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      event.dataTransfer.setDragImage(emptyDragImage, 0, 0);
+      startPingWheelDrag(tableHit, event.clientX, event.clientY);
+      return;
+    }
+  }
+
+  let intersects = raycaster.intersectObject(scene);
   if (!intersects.length) return;
 
   let intersection = intersects[0];
@@ -1177,10 +1248,31 @@ function getBattlefieldDropPosition(
   return anchor.clone().add(offset);
 }
 
+function onDocumentDragEnd(event: DragEvent) {
+  if (!isPingWheelDragActive()) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  finishPingWheelInteraction(event.clientX, event.clientY);
+}
+
 async function onDocumentDrop(event) {
   event.preventDefault();
   updateMouse(event);
   if (isGameplayBlocked()) return;
+
+  if (finishPingWheelInteraction(event.clientX, event.clientY)) {
+    event.stopImmediatePropagation();
+    return;
+  }
+
+  if (isBoardInteractionSuppressed()) return;
+
+  if (isPingWheelDragActive()) {
+    cancelPingWheelDrag();
+    return;
+  }
+
   if (selection.isDown || selection.helper.enabled) {
     selection.completeRectangleSelection(event);
   }
@@ -1320,6 +1412,9 @@ function onDocumentMouseMove(event) {
     (event.clientX / window.innerWidth) * 2 - 1,
     -(event.clientY / window.innerHeight) * 2 + 1,
   );
+  if (isPingWheelDragActive()) {
+    updatePingWheelHover(event.clientX, event.clientY);
+  }
   if (dragTargets?.length) {
     updateMouse(event);
   }
@@ -1327,6 +1422,9 @@ function onDocumentMouseMove(event) {
 
 function onDocumentMouseLeave() {
   onCameraMouseLeave();
+  if (isPingWheelDragActive()) {
+    cancelPingWheelDrag();
+  }
 }
 
 function updateMouse(event) {
@@ -1338,6 +1436,11 @@ function updateMouse(event) {
 
 function onRendererMouseMove(event) {
   updateMouse(event);
+
+  if (isPingWheelDragActive()) {
+    updatePingWheelHover(event.clientX, event.clientY);
+    return;
+  }
 
   selection.onMove(event);
 

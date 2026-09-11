@@ -1,5 +1,4 @@
-import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
-import { Mesh } from 'three';
+import { createEffect, createSignal, onCleanup, Show } from 'solid-js';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -25,8 +24,6 @@ import {
   isSpectating,
   onConcede,
   playAreas,
-  players,
-  provider,
   selection,
   setCardSearchModalData,
   setCardSearchModalOpen,
@@ -43,16 +40,15 @@ import Log from './log';
 import styles from './overlay.module.css';
 import PeekMenu from './peekMenu';
 import ManaCounters from './manaCounters';
-import { LocalPlayer, NetworkPlayer } from './playerMenu';
+import PlayerListPanel, { LocalPlayerPanel } from './playerListPanel';
 import RevealMenu from './revealMenu';
 import TokenSearchMenu from './tokenMenu';
 import { useSearchParams } from '@solidjs/router';
 import SettingsOverlay from './settingsOverlay';
 import { PlayArea } from '../playArea';
-import { getLifeBarPlayersInTurnOrder } from '../playAreaNameTag';
-import { turnOrderState } from '../turnOrder';
 import Announcement from './announcement';
 import ContextMenuHandler from './context-menu/handler';
+import PingWheel from './pingWheel';
 import CameraTiltHints from './cameraTiltHints';
 import HowItPlaysGameHelp from './howItPlaysGameHelp';
 import CardSearchModal from './cardSearchModal';
@@ -102,8 +98,6 @@ export default function Overlay() {
     return aspect === FOCUS_PANEL_WIDE_ASPECT ? '750 / 700' : `${CARD_WIDTH} / ${CARD_HEIGHT}`;
   };
 
-  let currentPlayer = () => players().find(player => player.id === provider?.awareness?.clientID);
-
   let [container, setContainer] = createSignal();
 
   createEffect(() => {
@@ -132,32 +126,8 @@ export default function Overlay() {
         e.stopImmediatePropagation();
       }}>
       <CameraTiltHints />
-      <div class={styles.top}>
-        <div class='flex flex-wrap justify-start p-2 gap-2 items-start'>
-          <For each={getLifeBarPlayersInTurnOrder(turnOrderState())}>
-            {player => (
-              <Show
-                when={player.isLocal && !isSpectating()}
-                fallback={
-                  <NetworkPlayer
-                    clientId={player.clientId}
-                    playerSessionId={player.playerSessionId}
-                    name={player.name}
-                    life={player.life}
-                    commanderLife={player.commanderLife}
-                    counters={player.counters}
-                    isActiveTurn={player.isActiveTurn}
-                  />
-                }>
-                <LocalPlayer
-                  {...currentPlayer()?.entry}
-                  isActiveTurn={player.isActiveTurn}
-                />
-              </Show>
-            )}
-          </For>
-        </div>
-      </div>
+      <LocalPlayerPanel />
+      <PlayerListPanel />
       <div class={styles.focusCamera} style={focusCameraStyle()}>
         <Show
           when={
@@ -263,6 +233,7 @@ export default function Overlay() {
       <RevealMenu />
       <TokenSearchMenu />
       <ContextMenuHandler playArea={playArea()!} />
+      <PingWheel />
       <CounterDialog />
       <Announcement />
       <CommandPalette playArea={playArea()!} />

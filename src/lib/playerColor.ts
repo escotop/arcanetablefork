@@ -117,6 +117,8 @@ export function getPlayAreaPlayerColor(playArea: PlayArea) {
       return displayPlayerColor(player.entry);
     }
   }
+  const cachedName = playArea.lastKnownDisplayName?.trim();
+  if (cachedName) return displayPlayerColor({ name: cachedName });
   return vividPlayerColor(playerFallbackHash.hex('Player'));
 }
 export function syncLocalPlayerColor(color: string) {

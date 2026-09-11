@@ -3,7 +3,8 @@ import { CatmullRomCurve3, Euler, Group, Mesh, MeshStandardMaterial, Object3D, Q
 import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import { getPlayAreaPlayerColor, textColorOnBackground } from './playerColor';
 import { animateObject, cancelAnimation } from './animations';
-import { playCounterSoundForModifierChange } from './sounds';
+import { playCounterSoundForModifierChange, playDrawSound } from './sounds';
+import { slimCardDetailForLog } from './gameLogEvents';
 import {
   applyCardOrientation,
   cleanupCard,
@@ -136,6 +137,8 @@ export class PlayArea {
   private peekSessionId = 0;
   public index: number;
   public playerSessionId?: string;
+  /** Kept when awareness disconnects so name tags and lists still show the player name. */
+  public lastKnownDisplayName?: string;
   private nameTagElement: HTMLDivElement;
   private nameTagWrapper: HTMLDivElement;
   private nameTagPivot: Object3D;
@@ -951,7 +954,12 @@ export class PlayArea {
       tokenSearchZone: { id: this.tokenSearchZone.id, cards: [] },
       hand: this.hand.getSerializable(),
       deck: this.deck.getSerializable(),
-      cards: this.cards.map(card => ({ ...card, mesh: undefined })),
+      cards: this.cards.map(card => ({
+        id: card.id,
+        clientId: card.clientId,
+        detail: slimCardDetailForLog(card.detail as Record<string, unknown> | undefined),
+        customArtUrl: card.customArtUrl,
+      })),
       index: this.index,
     };
 
@@ -1136,6 +1144,10 @@ function cardFromSerializable(serialized: Record<string, unknown>, clientId: num
       }
       setCardData(card.mesh!, key, value);
     }
+  }
+  // Actualizar modifiers visuales si la carta tiene modifiers
+  if (card.mesh.userData.modifiers) {
+    updateModifiers(card);
   }
   return card;
 }

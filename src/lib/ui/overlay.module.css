@@ -120,11 +120,11 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* How it plays help — edit top/right/bottom/left to reposition the icon */
+/* How it plays help — viewport-relative so position scales with screen size */
 .howItPlaysHelpButton {
   --how-it-plays-help-top: auto;
-  --how-it-plays-help-right: 36rem;
-  --how-it-plays-help-bottom: 5rem;
+  --how-it-plays-help-right: clamp(1rem, 31vw, 36rem);
+  --how-it-plays-help-bottom: clamp(3rem, 8.5vh, 5rem);
   --how-it-plays-help-left: auto;
 
   pointer-events: auto;
@@ -137,8 +137,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: clamp(1.75rem, 2.4vw, 2.25rem);
+  height: clamp(1.75rem, 2.4vw, 2.25rem);
   padding: 0;
   border: none;
   border-radius: 9999px;
@@ -151,6 +151,11 @@
 .howItPlaysHelpButton:hover {
   color: hsl(var(--foreground));
   transform: scale(1.08);
+}
+
+.howItPlaysHelpButton :global(svg) {
+  width: 70%;
+  height: 70%;
 }
 
 .howItPlaysHelpButtonPending {
@@ -188,17 +193,46 @@
 
 .howItPlaysModalPanel {
   pointer-events: auto;
+  display: flex;
+  flex-direction: column;
   width: min(100%, 52rem);
   max-height: 70vh;
-  overflow-y: auto;
+  overflow: hidden;
   border-radius: 0 0 0.75rem 0.75rem;
   border: 1px solid hsl(var(--border) / 0.55);
   border-top: none;
   background: hsl(var(--background) / 0.68);
   backdrop-filter: blur(10px);
-  padding: 1rem 1.25rem 1.25rem;
   text-align: left;
   box-shadow: 0 16px 48px hsla(0 0% 0% / 0.28);
+}
+
+.howItPlaysModalBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1rem 1.25rem 0.75rem;
+}
+
+.howItPlaysModalFooter {
+  position: sticky;
+  bottom: 0;
+  flex-shrink: 0;
+  padding: 0.75rem 1.25rem 1.25rem;
+  border-top: 1px solid hsl(var(--border) / 0.55);
+  background: transparent;
+}
+
+.howItPlaysMulliganButton {
+  width: 100%;
+  background: #fff;
+  color: #000;
+  border-color: hsl(var(--border) / 0.8);
+}
+
+.howItPlaysMulliganButton:hover {
+  background: hsl(0 0% 96%);
+  color: #000;
 }
 
 .log {

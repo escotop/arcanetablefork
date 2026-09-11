@@ -33,6 +33,12 @@ import {
 import { getActiveJoinClientIdsFromLog, waitForGameLogCatchUp } from '../remoteEvents';
 import { setCounters } from './ui/counterDialog';
 import { refreshMultiplayerSyncState } from './multiplayerSync';
+import { slimPlayAreaStateForSnapshot } from './gameLogEvents';
+import {
+  logReloadOther,
+  syncReloadOtherTraceFromState,
+  endReloadOtherTrace,
+} from './reloadOtherPlayerDebug';
 
 export const WORLD_SNAPSHOT_VERSION = 1;
 
@@ -62,7 +68,42 @@ export interface WorldSnapshot {
 }
 
 function cloneJson<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value));
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (error) {
+    console.error('[worldSnapshot] cloneJson failed, attempting deep sanitize', error);
+    return deepSanitize(value) as T;
+  }
+}
+
+function deepSanitize(value: unknown, seen = new WeakSet()): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value !== 'object') return value;
+  
+  // Detectar referencias circulares
+  if (seen.has(value as object)) {
+    console.warn('[worldSnapshot] Circular reference detected and removed');
+    return undefined;
+  }
+  seen.add(value as object);
+  
+  if (Array.isArray(value)) {
+    return value.map(item => deepSanitize(item, seen));
+  }
+  
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value)) {
+    // Omitir campos que son meshes de Three.js
+    if (val && typeof val === 'object' && 'isObject3D' in val) {
+      continue;
+    }
+    // Omitir funciones
+    if (typeof val === 'function') {
+      continue;
+    }
+    result[key] = deepSanitize(val, seen);
+  }
+  return result;
 }
 
 function capturePlayerAwareness(): PlayerAwarenessSnapshot[] {
@@ -122,19 +163,40 @@ function shouldPublishSnapshotForBarrier(barrier: SyncBarrier): boolean {
 
 function getStoredWorldSnapshot(): WorldSnapshot | undefined {
   const snapshot = gameState.get('worldSnapshot') as WorldSnapshot | undefined;
-  if (!snapshot?.playAreas?.length) return undefined;
-  if (snapshot.logLength > gameLog.length) return undefined;
+  if (!snapshot?.playAreas?.length) {
+    console.log('[worldSnapshot] No snapshot or empty playAreas');
+    return undefined;
+  }
+  if (snapshot.logLength > gameLog.length) {
+    console.log('[worldSnapshot] Snapshot too new', {
+      snapshotLogLength: snapshot.logLength,
+      currentLogLength: gameLog.length,
+    });
+    return undefined;
+  }
+  console.log('[worldSnapshot] Valid snapshot found', {
+    logLength: snapshot.logLength,
+    currentLogLength: gameLog.length,
+    playAreas: snapshot.playAreas.length,
+  });
   return snapshot;
 }
 
 async function tryApplyStoredWorldSnapshot(gameId: string, playerSessionId: string): Promise<boolean> {
+  console.log('[worldSnapshot] Trying to apply stored snapshot');
   const snapshot = getStoredWorldSnapshot();
-  if (!snapshot) return false;
+  if (!snapshot) {
+    console.log('[worldSnapshot] No stored snapshot available');
+    return false;
+  }
 
   try {
+    console.log('[worldSnapshot] Applying snapshot...');
     await applyWorldSnapshot(gameId, playerSessionId, snapshot);
+    console.log('[worldSnapshot] Snapshot applied successfully');
     return true;
-  } catch {
+  } catch (error) {
+    console.error('[worldSnapshot] Failed to apply snapshot:', error);
     return false;
   }
 }
@@ -145,7 +207,7 @@ export function exportWorldSnapshot(barrierId: string): WorldSnapshot {
     .map(area => ({
       clientId: area.clientId,
       playerSessionId: area.playerSessionId,
-      state: cloneJson(area.getLocalState()),
+      state: cloneJson(slimPlayAreaStateForSnapshot(area.getLocalState() as Record<string, unknown>)),
     }));
 
   return {
@@ -283,52 +345,162 @@ async function waitForBarrierSnapshot(barrierId: string, maxWaitMs: number): Pro
 }
 
 function releaseSyncBarrier(barrierId: string) {
+  logReloadOther('release-barrier-start', { barrierId });
   gameState.doc?.transact(() => {
     const current = gameState.get('syncBarrier') as SyncBarrier | undefined;
     if (current?.id !== barrierId) return;
     gameState.set('syncBarrier', { ...current, status: 'released' });
+    logReloadOther('release-barrier-set-released', { barrierId });
   });
 
   window.setTimeout(() => {
     gameState.doc?.transact(() => {
+      logReloadOther('release-barrier-cleanup-start', { barrierId });
       const current = gameState.get('syncBarrier') as SyncBarrier | undefined;
       if (current?.id !== barrierId) return;
       gameState.delete('syncBarrier');
       gameState.delete('worldSnapshot');
+      logReloadOther('release-barrier-cleanup-done', { barrierId });
+      endReloadOtherTrace('barrier-released');
     });
   }, 300);
 }
 
-function publishSnapshotForBarrier(barrier: SyncBarrier) {
-  if (!shouldPublishSnapshotForBarrier(barrier)) return;
+function detectCircularRefsInSnapshot(obj: unknown, path = '', seen = new WeakSet()): string | null {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj !== 'object') return null;
+  
+  if (seen.has(obj as object)) {
+    return `Circular reference at: ${path}`;
+  }
+  seen.add(obj as object);
+  
+  // Check for Three.js objects
+  if ('isObject3D' in obj || 'isMaterial' in obj || 'isTexture' in obj || 'isVector3' in obj) {
+    return `Three.js object at: ${path} (keys: ${Object.keys(obj).slice(0, 5).join(', ')})`;
+  }
+  
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) {
+      const result = detectCircularRefsInSnapshot(obj[i], `${path}[${i}]`, seen);
+      if (result) return result;
+    }
+  } else {
+    for (const [key, value] of Object.entries(obj)) {
+      const result = detectCircularRefsInSnapshot(value, path ? `${path}.${key}` : key, seen);
+      if (result) return result;
+    }
+  }
+  return null;
+}
 
+function safeSetWorldSnapshot(snapshot: WorldSnapshot) {
+  logReloadOther('safe-set-world-snapshot-start', {
+    barrierId: snapshot.barrierId,
+    logLength: snapshot.logLength,
+    playAreas: snapshot.playAreas.length,
+  });
+  const circular = detectCircularRefsInSnapshot(snapshot);
+  if (circular) {
+    logReloadOther('safe-set-world-snapshot-circular-ref', { circular });
+    console.error('[SNAPSHOT_CIRCULAR_REF]', circular);
+    // Try to identify which playArea has the issue
+    for (let i = 0; i < snapshot.playAreas.length; i++) {
+      const areaCircular = detectCircularRefsInSnapshot(snapshot.playAreas[i], `playAreas[${i}]`);
+      if (areaCircular) {
+        console.error('[SNAPSHOT_AREA_ISSUE]', areaCircular);
+        console.error('[AREA_STATE_KEYS]', Object.keys(snapshot.playAreas[i].state));
+      }
+    }
+    return false;
+  }
+  try {
+    gameState.set('worldSnapshot', snapshot);
+    logReloadOther('safe-set-world-snapshot-done', { barrierId: snapshot.barrierId });
+    return true;
+  } catch (error) {
+    logReloadOther('safe-set-world-snapshot-threw', {
+      barrierId: snapshot.barrierId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+function publishSnapshotForBarrier(barrier: SyncBarrier) {
+  if (!shouldPublishSnapshotForBarrier(barrier)) {
+    logReloadOther('publish-barrier-skipped', { barrierId: barrier.id });
+    return;
+  }
+
+  logReloadOther('publish-barrier-scheduled', { barrierId: barrier.id });
   void flushDispatchEventQueue().then(async () => {
+    logReloadOther('publish-barrier-flush-done', { barrierId: barrier.id });
     await waitForGameLogCatchUp({ maxWaitMs: 5_000 });
+    logReloadOther('publish-barrier-catchup-done', { barrierId: barrier.id });
     const snapshot = exportWorldSnapshot(barrier.id);
+    logReloadOther('publish-barrier-export-done', {
+      barrierId: barrier.id,
+      logLength: snapshot.logLength,
+    });
     gameState.doc?.transact(() => {
+      logReloadOther('publish-barrier-transact-start', { barrierId: barrier.id });
       const current = gameState.get('syncBarrier') as SyncBarrier | undefined;
-      if (current?.id !== barrier.id || current.status !== 'pending') return;
-      gameState.set('worldSnapshot', snapshot);
+      if (current?.id !== barrier.id || current.status !== 'pending') {
+        logReloadOther('publish-barrier-transact-abort', {
+          barrierId: barrier.id,
+          currentStatus: current?.status,
+        });
+        return;
+      }
+      if (!safeSetWorldSnapshot(snapshot)) {
+        console.error('[worldSnapshot] Failed to set snapshot due to circular refs');
+        return;
+      }
+      console.log('[worldSnapshot] Published barrier snapshot', { 
+        barrierId: barrier.id,
+        logLength: snapshot.logLength
+      });
       gameState.set('syncBarrier', {
         ...current,
         status: 'ready',
         snapshotVersion: snapshot.snapshotVersion,
         hostClientId: provider?.awareness?.clientID,
       });
+      logReloadOther('publish-barrier-transact-done', { barrierId: barrier.id });
     });
   });
 }
 
 function publishPersistentWorldSnapshot() {
-  if (!Object.values(playAreas).some(area => Boolean(area))) return;
+  if (!Object.values(playAreas).some(area => Boolean(area))) {
+    logReloadOther('publish-persistent-skipped-no-areas');
+    return;
+  }
 
+  logReloadOther('publish-persistent-scheduled');
   void flushDispatchEventQueue().then(async () => {
+    logReloadOther('publish-persistent-flush-done');
     await waitForGameLogCatchUp({ maxWaitMs: 3_000 });
+    logReloadOther('publish-persistent-catchup-done');
     const snapshot = exportWorldSnapshot('persistent');
+    logReloadOther('publish-persistent-export-done', { logLength: snapshot.logLength });
     gameState.doc?.transact(() => {
+      logReloadOther('publish-persistent-transact-start');
       const activeBarrier = gameState.get('syncBarrier') as SyncBarrier | undefined;
-      if (activeBarrier && activeBarrier.status === 'pending') return;
-      gameState.set('worldSnapshot', snapshot);
+      if (activeBarrier && activeBarrier.status === 'pending') {
+        logReloadOther('publish-persistent-transact-abort-barrier-pending');
+        return;
+      }
+      if (!safeSetWorldSnapshot(snapshot)) {
+        console.error('[worldSnapshot] Failed to set persistent snapshot due to circular refs');
+        return;
+      }
+      console.log('[worldSnapshot] Published persistent snapshot', { 
+        logLength: snapshot.logLength, 
+        playAreas: snapshot.playAreas.length 
+      });
+      logReloadOther('publish-persistent-transact-done');
     });
   });
 }
@@ -341,7 +513,13 @@ export function setupSyncBarrierObserver() {
   if (!gameState) return;
 
   gameState.observe(() => {
+    syncReloadOtherTraceFromState('sync-barrier-observer');
     const barrier = gameState.get('syncBarrier') as SyncBarrier | undefined;
+    logReloadOther('sync-barrier-observer-fired', {
+      hasBarrier: !!barrier,
+      status: barrier?.status,
+      barrierId: barrier?.id,
+    });
 
     if (!barrier) {
       if (
@@ -349,6 +527,7 @@ export function setupSyncBarrierObserver() {
         lastObservedBarrier.status !== 'released' &&
         isLocalJoiner(lastObservedBarrier)
       ) {
+        logReloadOther('sync-barrier-cleared-unpause-joiner');
         setSyncPaused(false);
       }
       lastObservedBarrier = undefined;
@@ -357,6 +536,7 @@ export function setupSyncBarrierObserver() {
     }
 
     if (barrier.id !== lastObservedBarrier?.id && barrier.status === 'pending' && isLocalJoiner(barrier)) {
+      logReloadOther('sync-barrier-joiner-pause');
       void flushDispatchEventQueue().then(() => {
         setSyncPaused(true);
         refreshMultiplayerSyncState();
@@ -364,10 +544,12 @@ export function setupSyncBarrierObserver() {
     }
 
     if (barrier.status === 'pending') {
+      logReloadOther('sync-barrier-pending-publish-request', { barrierId: barrier.id });
       publishSnapshotForBarrier(barrier);
     }
 
     if (barrier.status === 'released') {
+      logReloadOther('sync-barrier-released', { barrierId: barrier.id });
       if (isLocalJoiner(barrier)) {
         setSyncPaused(false);
       }
@@ -383,12 +565,21 @@ export async function acquireWorldSnapshot(
   gameId: string,
   playerSessionId: string,
 ): Promise<boolean> {
-  if (!gameNeedsSnapshotSync(playerSessionId, gameId)) return false;
+  console.log('[worldSnapshot] acquireWorldSnapshot called', { gameId, playerSessionId });
+  
+  if (!gameNeedsSnapshotSync(playerSessionId, gameId)) {
+    console.log('[worldSnapshot] Game does not need snapshot sync (new player)');
+    return false;
+  }
 
+  console.log('[worldSnapshot] Game needs snapshot sync (reconnecting player)');
+  
   if (await tryApplyStoredWorldSnapshot(gameId, playerSessionId)) {
+    console.log('[worldSnapshot] Used stored snapshot successfully');
     return true;
   }
 
+  console.log('[worldSnapshot] Creating sync barrier for fresh snapshot');
   const barrierId = nanoid();
   await flushDispatchEventQueue();
   setSyncPaused(true);
@@ -407,15 +598,21 @@ export async function acquireWorldSnapshot(
   });
 
   try {
+    console.log('[worldSnapshot] Waiting for barrier snapshot...');
     const snapshot = await waitForBarrierSnapshot(barrierId, 12_000);
+    console.log('[worldSnapshot] Received barrier snapshot, applying...');
     await applyWorldSnapshot(gameId, playerSessionId, snapshot);
     releaseSyncBarrier(barrierId);
+    console.log('[worldSnapshot] Barrier snapshot applied successfully');
     return true;
-  } catch {
+  } catch (error) {
+    console.error('[worldSnapshot] Barrier snapshot failed:', error);
     if (await tryApplyStoredWorldSnapshot(gameId, playerSessionId)) {
+      console.log('[worldSnapshot] Fallback to stored snapshot succeeded');
       releaseSyncBarrier(barrierId);
       return true;
     }
+    console.error('[worldSnapshot] All snapshot methods failed, will use full replay');
     releaseSyncBarrier(barrierId);
     return false;
   } finally {
@@ -428,23 +625,40 @@ export async function acquireWorldSnapshot(
 export function setupPersistentSnapshotPublisher() {
   if (!gameState) return;
 
-  let publishTimer: number | undefined;
-  const schedulePublish = () => {
-    if (publishTimer !== undefined) return;
-    publishTimer = window.setTimeout(() => {
-      publishTimer = undefined;
+  let lastPublishedLogLength = 0;
+  let publishScheduled = false;
+  
+  const publishIfNeeded = () => {
+    logReloadOther('persistent-publisher-gamelog-observe', { gameLogLength: gameLog.length });
+    // Ya hay una publicación en curso
+    if (publishScheduled) return;
+    
+    const currentLogLength = gameLog.length;
+    
+    // Solo publicar si hay nuevos eventos
+    if (currentLogLength === lastPublishedLogLength) return;
+    
+    // Marcar que hay una publicación programada
+    publishScheduled = true;
+    logReloadOther('persistent-publisher-scheduled', {
+      from: lastPublishedLogLength,
+      to: currentLogLength,
+    });
+    
+    // Publicar inmediatamente después de que termine el evento actual
+    queueMicrotask(() => {
       if (isSyncHost()) {
+        lastPublishedLogLength = gameLog.length;
         publishPersistentWorldSnapshot();
+      } else {
+        logReloadOther('persistent-publisher-skipped-not-host');
       }
-    }, 1500);
+      publishScheduled = false;
+    });
   };
 
-  gameLog.observe(schedulePublish);
-  gameState.observe(event => {
-    if (event.changes.keys.has('syncBarrier')) return;
-    schedulePublish();
-  });
-  provider?.awareness?.on('change', schedulePublish);
+  // Solo observar cambios en el gameLog (eventos de juego reales)
+  gameLog.observe(publishIfNeeded);
 }
 
 export function hasSnapshotCatchUp(): boolean {

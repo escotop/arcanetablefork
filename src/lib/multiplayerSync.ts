@@ -2,6 +2,7 @@ import { createSignal } from 'solid-js';
 import { gameState, playAreas, players, provider, setGameplayBlocked } from './globals';
 import type { SyncBarrier } from './worldSnapshot';
 import { getPlayAreaPlayerName } from './playAreaNameTag';
+import { logReloadOther } from './reloadOtherPlayerDebug';
 
 export interface MultiplayerBlockState {
   blocked: boolean;
@@ -49,6 +50,7 @@ function getJoiningPlayerLabel(joinerSessionId?: string) {
 }
 
 export function refreshMultiplayerSyncState() {
+  logReloadOther('refresh-multiplayer-sync-start');
   const localState = provider?.awareness?.getLocalState() ?? {};
   const localSessionId = localState.playerSessionId as string | undefined;
   const localClientId = provider?.awareness?.clientID;
@@ -80,4 +82,10 @@ export function refreshMultiplayerSyncState() {
 
   setMultiplayerBlockState({ blocked, message, isJoiner });
   setGameplayBlocked(blocked);
+  logReloadOther('refresh-multiplayer-sync-done', {
+    blocked,
+    isJoiner,
+    barrierStatus: barrier?.status,
+    someoneElseJoining,
+  });
 }

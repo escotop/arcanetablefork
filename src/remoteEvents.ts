@@ -74,6 +74,7 @@ import {
   recordReplayDelay,
   recordReplaySkip,
 } from './lib/loadProfile';
+import { logReloadOther } from './lib/reloadOtherPlayerDebug';
 
 type Events = ReturnType<(typeof EventCreators)[keyof typeof EventCreators]>;
 type Event = { clientID: string; skipReplay?: boolean } & Events;
@@ -236,13 +237,25 @@ async function tryBatchReplayEvent(
 }
 
 async function drainProcessEvents() {
-  if (isGameStateImportInProgress()) return;
+  if (isGameStateImportInProgress()) {
+    logReloadOther('process-events-skipped-import-in-progress');
+    return;
+  }
   if (processedEvents() > gameLog.length) {
+    logReloadOther('process-events-reset-replay', {
+      processed: processedEvents(),
+      logLength: gameLog.length,
+    });
     resetGameSceneForReplay();
   }
 
   while (processedEvents() < gameLog.length) {
     const srcEvent = gameLog.get(processedEvents());
+    logReloadOther('process-events-next', {
+      index: processedEvents(),
+      type: srcEvent?.type,
+      clientID: srcEvent?.clientID,
+    });
     setProcessedEvents(e => e + 1);
 
     if (shouldSkipLocallyAppliedEvent(srcEvent)) {
@@ -277,8 +290,13 @@ async function drainProcessEvents() {
         continue;
       }
       try {
+        logReloadOther('process-events-handle-start', { type: event.type, clientID: event.clientID });
         addLogMessage(event);
       } catch (e) {
+        logReloadOther('process-events-add-log-failed', {
+          type: event.type,
+          error: e instanceof Error ? e.message : String(e),
+        });
         Sentry.captureException(e, 'addLogMessage');
         logger.error(e);
       }
@@ -307,9 +325,25 @@ async function drainProcessEvents() {
 }
 
 export function processEvents(): Promise<void> {
+  logReloadOther('process-events-scheduled', {
+    processed: processedEvents(),
+    logLength: gameLog.length,
+  });
   processEventsChain = processEventsChain
-    .then(() => drainProcessEvents())
+    .then(() => {
+      logReloadOther('process-events-drain-start');
+      return drainProcessEvents();
+    })
+    .then(() => {
+      logReloadOther('process-events-drain-done', {
+        processed: processedEvents(),
+        logLength: gameLog.length,
+      });
+    })
     .catch(error => {
+      logReloadOther('process-events-drain-error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       Sentry.captureException(error);
       logger.error(error);
     })
@@ -462,6 +496,7 @@ function ensureCardReady(card: Card | undefined, clientId?: number): Card | unde
 }
 
 export async function handleEvent(event: Event, playArea: PlayArea) {
+  logReloadOther('handle-event-start', { type: event.type, clientID: event.clientID });
   expect(!!EVENTS[event.type], `${event.type} not implemented`);
 
   if (event.type === 'animateObject') {
@@ -560,6 +595,7 @@ function applyJoinEvent(event: Event) {
 }
 
 export function syncPlayAreasFromGameLog() {
+  logReloadOther('sync-playareas-from-gamelog-start', { logLength: gameLog.length });
   const activeJoins = new Map<number, Event>();
 
   for (const rawEvent of iterateGameLogEvents(gameLog)) {
@@ -578,8 +614,10 @@ export function syncPlayAreasFromGameLog() {
   }
 
   for (const event of activeJoins.values()) {
+    logReloadOther('sync-playareas-apply-join', { clientID: event.clientID });
     applyJoinEvent(event);
   }
+  logReloadOther('sync-playareas-from-gamelog-done', { joinCount: activeJoins.size });
 }
 
 export function getActiveJoinClientIdsFromLog(): Set<number> {

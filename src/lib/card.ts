@@ -36,11 +36,13 @@ import {
   normalizeTextureUrl,
 } from './customCardArt';
 import {
+  boxGeometry,
   cardBackTexture,
   cardLoadingTexture,
   cardsById,
   cardSystem,
   getProjectionVec,
+  isEventCatchUpComplete,
   playAreas,
   scene,
   textureLoader,
@@ -49,7 +51,7 @@ import {
 import { counters } from './ui/counterDialog';
 import { cancelAnimation } from './animations';
 import { cleanupFromNode, isValidMaterial } from './utils';
-import { serializeCardUserDataForLog } from './gameLogEvents';
+import { serializeCardUserDataForLog, slimCardDetailForLog } from './gameLogEvents';
 import { devLog } from './devLog';
 import { removeHandManaOverlay } from './handManaOverlay';
 import { getCardById, getCardNamed } from './scryfall/client';
@@ -322,30 +324,39 @@ function findCardByMesh(mesh: Mesh): Card | undefined {
 function resolveCardForMesh(mesh: Mesh | undefined): Card | undefined {
   if (!mesh?.userData?.id) return undefined;
 
-  const byMesh = findCardByMesh(mesh);
-  if (byMesh) {
-    if (cardsById.get(byMesh.id) !== byMesh) {
-      cardsById.set(byMesh.id, byMesh);
+  return untrack(() => {
+    // Durante el replay, solo usar cardsById (no buscar por mesh para evitar bucles)
+    if (!isEventCatchUpComplete()) {
+      return cardsById.get(mesh.userData.id);
     }
-    return byMesh;
-  }
 
-  return cardsById.get(mesh.userData.id);
+    const byMesh = findCardByMesh(mesh);
+    if (byMesh) {
+      if (cardsById.get(byMesh.id) !== byMesh) {
+        cardsById.set(byMesh.id, byMesh);
+      }
+      return byMesh;
+    }
+
+    return cardsById.get(mesh.userData.id);
+  });
 }
 
 export function resolveInteractiveCard(object?: Object3D | null): Card | undefined {
-  if (!object) return undefined;
+  return untrack(() => {
+    if (!object) return undefined;
 
-  const mesh = object as Mesh;
-  const resolved = resolveCardForMesh(mesh);
-  if (resolved) return resolved;
+    const mesh = object as Mesh;
+    const resolved = resolveCardForMesh(mesh);
+    if (resolved) return resolved;
 
-  const parent = object.parent as Mesh | undefined;
-  if (parent?.userData?.id) {
-    return resolveCardForMesh(parent);
-  }
+    const parent = object.parent as Mesh | undefined;
+    if (parent?.userData?.id) {
+      return resolveCardForMesh(parent);
+    }
 
-  return undefined;
+    return undefined;
+  });
 }
 
 export function cloneCard(card: Card, newId: string): Card {
@@ -1166,7 +1177,7 @@ export function updateModifiers(card: Card) {
 
 export function getSerializableCard(cardMesh: Object3D) {
   return {
-    detail: cardMesh.userData.card.detail,
+    detail: slimCardDetailForLog(cardMesh.userData.card.detail),
     id: cardMesh.userData.id,
     userData: serializeCardUserDataForLog(cardMesh.userData),
     position: cardMesh.position.toArray(),

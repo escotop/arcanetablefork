@@ -50,13 +50,21 @@ const LifeReadout: Component<{ value: number; title: string }> = props => {
   );
 };
 
-const LifeField: Component<{
+export const LifeField: Component<{
   life: number;
   title?: string;
+  compact?: boolean;
   onLifeChange: (life: number) => void;
 }> = props => {
   const [draft, setDraft] = createSignal<string | null>(null);
   const displayValue = () => draft() ?? String(props.life);
+  const fieldClass = () =>
+    props.compact
+      ? 'h-7 pr-7 text-sm'
+      : 'h-10 pr-8';
+  const buttonTopClass = () => (props.compact ? 'right-2 top-0.5' : 'right-3 top-1.5');
+  const buttonBottomClass = () => (props.compact ? 'bottom-0.5 right-2' : 'bottom-1.5 right-3');
+  const fieldWidth = () => (props.compact ? '3.75rem' : '5rem');
 
   function commit() {
     const raw = draft();
@@ -74,14 +82,14 @@ const LifeField: Component<{
   return (
     <div class='relative rounded-md focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2'>
       <TextField
-        style='width: 5rem'
+        style={{ width: fieldWidth() }}
         value={displayValue()}
         onChange={value => setDraft(value)}>
         <TextFieldInput
           type='text'
           inputMode='numeric'
           title={props.title ?? 'Life, +N/-N relative, or expressions like 40-6'}
-          class='h-10 pr-8'
+          class={fieldClass()}
           onBlur={commit}
           onKeyDown={e => {
             if (e.key === 'Enter') {
@@ -95,13 +103,13 @@ const LifeField: Component<{
       </TextField>
       <button
         type='button'
-        class='absolute right-3 top-1.5 inline-flex size-4 items-center justify-center cursor-pointer'
+        class={`absolute inline-flex size-4 items-center justify-center cursor-pointer ${buttonTopClass()}`}
         onClick={() => adjust(1)}>
         <ChevronUpIcon class='size-4' />
       </button>
       <button
         type='button'
-        class='absolute bottom-1.5 right-3 inline-flex size-4 items-center justify-center cursor-pointer'
+        class={`absolute inline-flex size-4 items-center justify-center cursor-pointer ${buttonBottomClass()}`}
         onClick={() => adjust(-1)}>
         <ChevronDownIcon class='size-4' />
       </button>

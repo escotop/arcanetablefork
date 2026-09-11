@@ -1,8 +1,10 @@
 import { nanoid } from 'nanoid';
 import { Matrix4, Object3D, Vector3 } from 'three';
-import { playAreas, provider, table } from './globals';
+import { playAreas, provider, table, cardsById } from './globals';
 import type { PlayArea } from './playArea';
 import { displayPlayerColor } from './playerColor';
+import type { PingTypeId } from './pingTypes';
+import { spawnVideoPing } from './pingVideoEffect';
 import {
   DEFAULT_WATERDROP_NORMAL,
   spawnWaterdrop,
@@ -12,6 +14,7 @@ import type { Intersection } from 'three';
 
 export interface PingPayload {
   id: string;
+  type?: PingTypeId;
   space: 'playArea' | 'table';
   /** playAreas key when space is playArea */
   playAreaClientId?: number;
@@ -83,49 +86,84 @@ function resolvePingToWorld(ping: PingPayload) {
 function spawnPing(ping: PingPayload) {
   const world = resolvePingToWorld(ping);
   if (!world) return;
+
+  if (ping.type) {
+    spawnVideoPing(world.position, world.normal, ping.type);
+    return;
+  }
+
   spawnWaterdrop(world.position, world.normal, ping.color);
 }
 
-export function publishTablePingFromHit(hit: Intersection) {
-  if (!provider?.awareness) return;
+function buildPingFromHit(hit: Intersection, type?: PingTypeId): PingPayload | undefined {
+  if (!hit.face) return undefined;
 
-  const worldNormal = worldNormalFromIntersection(hit.face!.normal, hit.object.matrixWorld);
-  const color = displayPlayerColor(provider.awareness.getLocalState());
+  const worldNormal = worldNormalFromIntersection(hit.face.normal, hit.object.matrixWorld);
+  const color = displayPlayerColor(provider?.awareness?.getLocalState());
   const playArea = findPlayAreaForHit(hit.object);
-
-  let ping: PingPayload;
 
   if (playArea) {
     const localPoint = playArea.mesh.worldToLocal(hit.point.clone());
     const localNormal = worldToLocalDirection(worldNormal, playArea.mesh.matrixWorld);
 
-    ping = {
+    return {
       id: nanoid(),
+      type,
       space: 'playArea',
       playAreaClientId: playArea.clientId,
       position: localPoint.toArray(),
       normal: localNormal.toArray(),
       color,
     };
-  } else if (table) {
+  }
+
+  if (table) {
     const localPoint = table.worldToLocal(hit.point.clone());
     const localNormal = worldToLocalDirection(worldNormal, table.matrixWorld);
 
-    ping = {
+    return {
       id: nanoid(),
+      type,
       space: 'table',
       position: localPoint.toArray(),
       normal: localNormal.toArray(),
       color,
     };
-  } else {
-    return;
   }
+
+  return undefined;
+}
+
+export function publishTablePingFromHit(hit: Intersection, type?: PingTypeId) {
+  if (!provider?.awareness) return;
+
+  const ping = buildPingFromHit(hit, type);
+  if (!ping) return;
 
   const clientId = provider.awareness.clientID;
   lastPingIdByClient.set(clientId, ping.id);
   spawnPing(ping);
   provider.awareness.setLocalStateField('ping', ping);
+}
+
+export function isTablePingSurface(object: Object3D) {
+  if (object === table) return true;
+
+  for (const area of Object.values(playAreas)) {
+    if (!area) continue;
+    if (object === area.battlefieldZone.mesh || object === area.mesh) return true;
+  }
+
+  return false;
+}
+
+export function isCardPingTarget(object: Object3D) {
+  let current: Object3D | null = object;
+  while (current) {
+    if (current.userData?.id && cardsById.has(current.userData.id)) return true;
+    current = current.parent;
+  }
+  return false;
 }
 
 function applyRemotePing(clientId: number, ping: PingPayload | undefined) {
@@ -134,9 +172,16 @@ function applyRemotePing(clientId: number, ping: PingPayload | undefined) {
 
   lastPingIdByClient.set(clientId, ping.id);
 
-  // Legacy pings used world-space coordinates before per-client layout fix.
   if (!ping.space) {
-    spawnWaterdrop(ping.position, ping.normal ?? DEFAULT_WATERDROP_NORMAL, ping.color);
+    if (ping.type) {
+      spawnVideoPing(
+        new Vector3().fromArray(ping.position),
+        new Vector3().fromArray(ping.normal ?? DEFAULT_WATERDROP_NORMAL),
+        ping.type,
+      );
+    } else {
+      spawnWaterdrop(ping.position, ping.normal ?? DEFAULT_WATERDROP_NORMAL, ping.color);
+    }
     return;
   }
 

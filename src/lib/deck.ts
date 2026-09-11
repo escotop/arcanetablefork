@@ -28,7 +28,7 @@ import {
   DetailedCardEntry,
 } from './constants';
 import { applyCustomArtToEntry, normalizeTextureUrl } from './customCardArt';
-import { devLog } from './devLog';
+import { slimCardDetailForLog } from './gameLogEvents';
 import { parseImportedCardList } from './deckParser';
 import { getCardCollectorNumber } from './deckListFormat';
 import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
@@ -510,10 +510,12 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
           ? getSerializableCard(card.mesh)
           : {
               id: card.id,
-              detail: card.detail,
+              detail: slimCardDetailForLog(card.detail as Record<string, unknown> | undefined),
               userData: {
                 id: card.id,
-                card: { detail: card.detail },
+                card: {
+                  detail: slimCardDetailForLog(card.detail as Record<string, unknown> | undefined),
+                },
                 clientId: card.clientId,
               },
               position: [0, 0, 0],

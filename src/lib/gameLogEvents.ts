@@ -4,6 +4,10 @@ const LOG_OMITTED_USERDATA_KEYS = new Set([
   'resting',
   'spanishPreviewSavedMat',
   'spanishPreviewSavedUrl',
+  // Three.js mesh references that would create circular refs
+  'pt',
+  'token',
+  'handMana',
 ]);
 
 const LOG_OMITTED_USERDATA_EPHEMERAL_KEYS = [
@@ -105,6 +109,18 @@ export function serializeCardUserDataForLog(userData: Record<string, unknown>) {
     cloneable.card = slimCardForLog(cloneable.card as Record<string, unknown>);
   }
 
+  // Sanitizar modifiers para solo incluir datos serializables (power, toughness, counters)
+  if (cloneable.modifiers && typeof cloneable.modifiers === 'object') {
+    const mods = cloneable.modifiers as Record<string, unknown>;
+    cloneable.modifiers = {
+      power: typeof mods.power === 'number' ? mods.power : 0,
+      toughness: typeof mods.toughness === 'number' ? mods.toughness : 0,
+      counters: mods.counters && typeof mods.counters === 'object' 
+        ? { ...mods.counters as Record<string, number> }
+        : {},
+    };
+  }
+
   return cloneJsonSafe(cloneable);
 }
 
@@ -129,18 +145,54 @@ function slimJoinDeck(deck: unknown) {
 
   return {
     ...entry,
-    cards: entry.cards.map(card => {
-      if (!card || typeof card !== 'object') return card;
-      const serialized = card as Record<string, unknown>;
-      return {
-        ...serialized,
-        detail: slimCardDetailForLog(serialized.detail as Record<string, unknown> | undefined),
-        userData:
-          serialized.userData && typeof serialized.userData === 'object'
-            ? serializeCardUserDataForLog(serialized.userData as Record<string, unknown>)
-            : serialized.userData,
-      };
-    }),
+    cards: entry.cards.map(card => slimSerializedCardEntry(card)),
+  };
+}
+
+export function slimSerializedCardEntry(card: unknown) {
+  if (!card || typeof card !== 'object') return card;
+  const entry = card as Record<string, unknown>;
+  return {
+    ...entry,
+    detail: slimCardDetailForLog(entry.detail as Record<string, unknown> | undefined),
+    userData:
+      entry.userData && typeof entry.userData === 'object'
+        ? serializeCardUserDataForLog(entry.userData as Record<string, unknown>)
+        : entry.userData,
+  };
+}
+
+function slimSerializedZone(zone: unknown) {
+  if (!zone || typeof zone !== 'object') return zone;
+  const entry = zone as Record<string, unknown>;
+  if (!Array.isArray(entry.cards)) return zone;
+  return {
+    ...entry,
+    cards: entry.cards.map(card => slimSerializedCardEntry(card)),
+  };
+}
+
+/** Strip heavy Scryfall payloads before persisting world snapshots to Yjs. */
+export function slimPlayAreaStateForSnapshot(state: Record<string, unknown>) {
+  return {
+    ...state,
+    cards: Array.isArray(state.cards)
+      ? state.cards.map(card => {
+          if (!card || typeof card !== 'object') return card;
+          const entry = card as Record<string, unknown>;
+          return {
+            ...entry,
+            detail: slimCardDetailForLog(entry.detail as Record<string, unknown> | undefined),
+          };
+        })
+      : state.cards,
+    hand: slimSerializedZone(state.hand),
+    deck: slimSerializedZone(state.deck),
+    graveyard: slimSerializedZone(state.graveyard),
+    exile: slimSerializedZone(state.exile),
+    battlefield: slimSerializedZone(state.battlefield),
+    peekZone: slimSerializedZone(state.peekZone),
+    tokenSearchZone: slimSerializedZone(state.tokenSearchZone),
   };
 }
 

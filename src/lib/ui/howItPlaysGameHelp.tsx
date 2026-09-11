@@ -1,4 +1,4 @@
-import { Component, Show, createEffect, createSignal, on, onCleanup } from 'solid-js';
+import { Component, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import CircleHelpIcon from 'lucide-solid/icons/circle-help';
 import { Button } from '~/components/ui/button';
 import {
@@ -13,8 +13,6 @@ import type { PlayArea } from '~/lib/playArea';
 import HowItPlaysContent from './howItPlaysContent';
 import styles from './overlay.module.css';
 
-const MULLIGAN_MODAL_REFRESH_MS = 400;
-
 interface Props {
   playArea?: PlayArea;
 }
@@ -22,38 +20,14 @@ interface Props {
 const HowItPlaysGameHelp: Component<Props> = props => {
   const section = () => howItPlaysAdvice();
   const [helpClicked, setHelpClicked] = createSignal(false);
-  const [contentKey, setContentKey] = createSignal(0);
   let panelRef: HTMLDivElement | undefined;
   let helpButtonRef: HTMLButtonElement | undefined;
-  let refreshTimer: number | undefined;
 
   const handCards = () => {
     howItPlaysHandTick();
-    contentKey();
-    return props.playArea?.hand.cards ?? [];
+    howItPlaysMulliganTick();
+    return [...(props.playArea?.hand.cards ?? [])];
   };
-
-  async function refreshModalAfterMulligan() {
-    if (!howItPlaysModalOpen()) return;
-
-    setHowItPlaysModalOpen(false);
-    await new Promise<void>(resolve => {
-      refreshTimer = window.setTimeout(resolve, MULLIGAN_MODAL_REFRESH_MS);
-    });
-    refreshTimer = undefined;
-
-    if (howItPlaysHelpVisible() && section()) {
-      setContentKey(key => key + 1);
-      setHowItPlaysModalOpen(true);
-    }
-  }
-
-  createEffect(
-    on(howItPlaysMulliganTick, tick => {
-      if (tick === 0 || !howItPlaysModalOpen()) return;
-      void refreshModalAfterMulligan();
-    }),
-  );
 
   createEffect(() => {
     if (!howItPlaysModalOpen()) return;
@@ -73,12 +47,6 @@ const HowItPlaysGameHelp: Component<Props> = props => {
       window.clearTimeout(timer);
       document.removeEventListener('pointerdown', handlePointerDown);
     });
-  });
-
-  onCleanup(() => {
-    if (refreshTimer !== undefined) {
-      window.clearTimeout(refreshTimer);
-    }
   });
 
   async function mulliganToSeven() {
@@ -110,16 +78,20 @@ const HowItPlaysGameHelp: Component<Props> = props => {
       <Show when={howItPlaysModalOpen() && section()}>
         <div class={styles.howItPlaysModalBackdrop}>
           <div ref={panelRef} class={styles.howItPlaysModalPanel}>
-            <h3 class='text-sm font-semibold'>How it plays</h3>
-            <HowItPlaysContent
-              section={section()!}
-              handCards={handCards}
-              class='mt-2'
-            />
+            <div class={styles.howItPlaysModalBody}>
+              <h3 class='text-sm font-semibold'>How it plays</h3>
+              <HowItPlaysContent section={section()!} handCards={handCards} class='mt-2' />
+            </div>
             <Show when={props.playArea}>
-              <Button type='button' class='mt-4 w-full' onClick={() => void mulliganToSeven()}>
-                Mulligan to 7
-              </Button>
+              <div class={styles.howItPlaysModalFooter}>
+                <Button
+                  type='button'
+                  variant='outline'
+                  class={styles.howItPlaysMulliganButton}
+                  onClick={() => void mulliganToSeven()}>
+                  Mulligan to 7
+                </Button>
+              </div>
             </Show>
           </div>
         </div>

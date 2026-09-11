@@ -1,7 +1,9 @@
 import { DEFAULT_COMMANDER_LIFE } from './constants';
-import { getLocalPlayerClientId, playAreas, players, provider } from './globals';
+import { gameState, getLocalPlayerClientId, playAreas, players, provider } from './globals';
 import type { PlayArea } from './playArea';
 import type { TurnOrderState } from './turnOrder';
+import type { PlayerAwarenessSnapshot } from './gameStateSnapshot';
+import type { WorldSnapshot } from './worldSnapshot';
 
 function normalizeClientId(clientId: unknown): number | undefined {
   const id = Number(clientId);
@@ -24,7 +26,7 @@ function getPlayAreaPlayerEntry(area: PlayArea) {
 }
 
 function getPlayAreaPlayerName(area: PlayArea) {
-  return getPlayAreaPlayerEntry(area)?.name?.trim() || 'Player';
+  return getPlayAreaPlayerEntry(area)?.name?.trim() || area.lastKnownDisplayName?.trim() || 'Player';
 }
 
 export interface OpponentCommanderEntry {
@@ -39,6 +41,41 @@ export interface CommanderHealthTarget {
   name: string;
   life: number;
   isOnline: boolean;
+}
+
+const commanderTrackingBySession = new Map<string, Record<string, OpponentCommanderEntry>>();
+
+function parseTrackingRecord(raw: unknown): Record<string, OpponentCommanderEntry> {
+  if (!raw || typeof raw !== 'object') return {};
+
+  const result: Record<string, OpponentCommanderEntry> = {};
+  for (const [sessionId, value] of Object.entries(raw as Record<string, unknown>)) {
+    const cloned = cloneEntry(value);
+    if (cloned) result[sessionId] = cloned;
+  }
+  return result;
+}
+
+function rememberCommanderTracking(sessionId: string | undefined, tracking: Record<string, OpponentCommanderEntry>) {
+  if (!sessionId || !Object.keys(tracking).length) return;
+  commanderTrackingBySession.set(sessionId, tracking);
+}
+
+function readCachedCommanderTracking(sessionId: string | undefined): Record<string, OpponentCommanderEntry> | undefined {
+  if (!sessionId) return undefined;
+  return commanderTrackingBySession.get(sessionId);
+}
+
+function readSnapshotPlayer(playArea: PlayArea): PlayerAwarenessSnapshot | undefined {
+  const snapshot = gameState.get('worldSnapshot') as WorldSnapshot | undefined;
+  const playersFromSnapshot = snapshot?.players;
+  if (!playersFromSnapshot?.length) return undefined;
+
+  return playersFromSnapshot.find(
+    player =>
+      (playArea.playerSessionId && player.playerSessionId === playArea.playerSessionId) ||
+      player.clientId === playArea.clientId,
+  );
 }
 
 function getLocalPlayerSessionId(): string | undefined {
@@ -60,12 +97,7 @@ function readOpponentCommanderTracking(): Record<string, OpponentCommanderEntry>
   const localState = provider?.awareness?.getLocalState();
   const tracking = localState?.opponentCommanderTracking;
   if (tracking && typeof tracking === 'object') {
-    const result: Record<string, OpponentCommanderEntry> = {};
-    for (const [sessionId, entry] of Object.entries(tracking as Record<string, unknown>)) {
-      const cloned = cloneEntry(entry);
-      if (cloned) result[sessionId] = cloned;
-    }
-    return result;
+    return parseTrackingRecord(tracking);
   }
 
   const legacy = localState?.opponentCommanderLife;
@@ -94,6 +126,47 @@ function readOpponentCommanderTracking(): Record<string, OpponentCommanderEntry>
   return migrated;
 }
 
+function readPlayerCommanderTracking(playArea: PlayArea): Record<string, OpponentCommanderEntry> {
+  const awarenessEntry = getPlayAreaPlayerEntry(playArea);
+  if (awarenessEntry?.opponentCommanderTracking) {
+    const tracking = parseTrackingRecord(awarenessEntry.opponentCommanderTracking);
+    rememberCommanderTracking(playArea.playerSessionId, tracking);
+    return tracking;
+  }
+
+  const cached = readCachedCommanderTracking(playArea.playerSessionId);
+  if (cached) return cached;
+
+  const snapshotPlayer = readSnapshotPlayer(playArea);
+  if (snapshotPlayer?.opponentCommanderTracking) {
+    const tracking = parseTrackingRecord(snapshotPlayer.opponentCommanderTracking);
+    rememberCommanderTracking(playArea.playerSessionId, tracking);
+    return tracking;
+  }
+
+  return {};
+}
+
+function sortCommanderHealthTargets(
+  targets: CommanderHealthTarget[],
+  turnState: TurnOrderState | null,
+) {
+  const orderMap = turnState?.order.length
+    ? new Map(turnState.order.map((clientId, index) => [clientId, index]))
+    : null;
+
+  return targets.sort((left, right) => {
+    if (left.isOnline !== right.isOnline) return left.isOnline ? -1 : 1;
+    if (left.isOnline && right.isOnline && orderMap && left.clientId && right.clientId) {
+      return (
+        (orderMap.get(left.clientId) ?? Number.MAX_SAFE_INTEGER) -
+        (orderMap.get(right.clientId) ?? Number.MAX_SAFE_INTEGER)
+      );
+    }
+    return left.name.localeCompare(right.name);
+  });
+}
+
 function toPlainTracking(tracking: Record<string, OpponentCommanderEntry>) {
   const plain: Record<string, { name: string; life: number; clientId?: number }> = {};
   for (const [sessionId, entry] of Object.entries(tracking)) {
@@ -108,6 +181,8 @@ function toPlainTracking(tracking: Record<string, OpponentCommanderEntry>) {
 
 function writeOpponentCommanderTracking(tracking: Record<string, OpponentCommanderEntry>) {
   if (!provider?.awareness) return;
+  const localSessionId = getLocalPlayerSessionId();
+  if (localSessionId) rememberCommanderTracking(localSessionId, tracking);
   provider.awareness.setLocalStateField('opponentCommanderTracking', toPlainTracking(tracking));
 }
 
@@ -143,13 +218,13 @@ export function syncOpponentCommanderTrackingFromTable(): boolean {
   return changed;
 }
 
-export function getCommanderHealthTargets(turnState: TurnOrderState | null): CommanderHealthTarget[] {
-  syncOpponentCommanderTrackingFromTable();
-  const tracking = readOpponentCommanderTracking();
-  const localSessionId = getLocalPlayerSessionId();
-
+function buildCommanderHealthTargets(
+  tracking: Record<string, OpponentCommanderEntry>,
+  ownerSessionId: string | undefined,
+  turnState: TurnOrderState | null,
+): CommanderHealthTarget[] {
   const targets = Object.entries(tracking)
-    .filter(([sessionId]) => sessionId !== localSessionId)
+    .filter(([sessionId]) => sessionId !== ownerSessionId)
     .map(([sessionId, entry]) => ({
       sessionId,
       clientId: entry.clientId,
@@ -158,20 +233,26 @@ export function getCommanderHealthTargets(turnState: TurnOrderState | null): Com
       isOnline: entry.clientId !== undefined && !!playAreas[entry.clientId],
     }));
 
-  const orderMap = turnState?.order.length
-    ? new Map(turnState.order.map((clientId, index) => [clientId, index]))
-    : null;
+  return sortCommanderHealthTargets(targets, turnState);
+}
 
-  return targets.sort((left, right) => {
-    if (left.isOnline !== right.isOnline) return left.isOnline ? -1 : 1;
-    if (left.isOnline && right.isOnline && orderMap && left.clientId && right.clientId) {
-      return (
-        (orderMap.get(left.clientId) ?? Number.MAX_SAFE_INTEGER) -
-        (orderMap.get(right.clientId) ?? Number.MAX_SAFE_INTEGER)
-      );
-    }
-    return left.name.localeCompare(right.name);
-  });
+/** Local player's editable commander notes. */
+export function getCommanderHealthTargets(turnState: TurnOrderState | null): CommanderHealthTarget[] {
+  syncOpponentCommanderTrackingFromTable();
+  return buildCommanderHealthTargets(readOpponentCommanderTracking(), getLocalPlayerSessionId(), turnState);
+}
+
+/** Another player's commander notes as published in their awareness (read-only). */
+export function getRemotePlayerCommanderHealthTargets(
+  playArea: PlayArea | undefined,
+  turnState: TurnOrderState | null,
+): CommanderHealthTarget[] {
+  if (!playArea) return [];
+
+  const ownerSessionId =
+    playArea.playerSessionId ?? getPlayAreaPlayerEntry(playArea)?.playerSessionId;
+  const tracking = readPlayerCommanderTracking(playArea);
+  return buildCommanderHealthTargets(tracking, ownerSessionId, turnState);
 }
 
 export function getTrackedOpponentCommanderLife(clientId: number): number {

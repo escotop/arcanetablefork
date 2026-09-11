@@ -2,7 +2,7 @@ import { Component, For, Show, createMemo } from 'solid-js';
 import CheckIcon from 'lucide-solid/icons/check';
 import type { CommanderBracketHowItPlaysSection } from '~/lib/commanderBracket';
 import type { Card } from '~/lib/constants';
-import { howItPlaysHandTick } from '~/lib/globals';
+import { howItPlaysHandTick, howItPlaysMulliganTick } from '~/lib/globals';
 
 interface Props {
   section: CommanderBracketHowItPlaysSection;
@@ -30,7 +30,8 @@ function landCountClass(count: number, min: number, max: number) {
 const HowItPlaysContent: Component<Props> = props => {
   const handSnapshot = createMemo(() => {
     howItPlaysHandTick();
-    return props.handCards?.() ?? [];
+    howItPlaysMulliganTick();
+    return [...(props.handCards?.() ?? [])];
   });
   const landCount = createMemo(() => countLandsInHand(handSnapshot()));
 
@@ -91,14 +92,14 @@ const HowItPlaysContent: Component<Props> = props => {
                 <div class='space-y-3'>
                   <For each={props.section.worthHolding}>
                     {card => {
-                      const inHand = () => props.handCards && handContainsCardName(handSnapshot(), card.name);
+                      const inHand = () => handContainsCardName(handSnapshot(), card.name);
 
                       return (
                         <div>
                           <div
                             classList={{
                               'inline-flex items-center gap-1.5 text-sm font-medium': true,
-                              'text-green-600': !!inHand(),
+                              'text-green-600': inHand(),
                             }}>
                             <Show when={inHand()}>
                               <CheckIcon class='size-4 shrink-0' aria-hidden='true' />
