@@ -115,6 +115,7 @@ const PrintDeckModal: Component<Props> = props => {
             <div class='grid gap-4 py-2'>
               <p class='text-sm text-muted-foreground'>
                 Generates a PDF with printable card fronts using standard MTG dimensions (63×88 mm).
+                Double-faced cards print both faces as separate slots.
               </p>
 
               <div class='rounded-md border p-3 text-sm'>

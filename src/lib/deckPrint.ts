@@ -85,15 +85,47 @@ export function estimatePrintDeckLayout(options: PrintDeckOptions): PrintDeckLay
   };
 }
 
+function isDoubleFacedForPrint(card: DetailedCardEntry): boolean {
+  const faces = card.detail?.card_faces;
+  if (!faces || faces.length < 2) return false;
+  return !!getCardImage(card, 1);
+}
+
+function getPrintFaceSlots(card: DetailedCardEntry): { name: string; imageUrl: string }[] {
+  const frontUrl = getCardImage(card, 0);
+  if (!frontUrl) return [];
+
+  if (!isDoubleFacedForPrint(card)) {
+    return [{ name: card.name, imageUrl: frontUrl }];
+  }
+
+  const backUrl = getCardImage(card, 1);
+  if (!backUrl) {
+    return [{ name: card.name, imageUrl: frontUrl }];
+  }
+
+  const frontName = card.detail?.card_faces?.[0]?.name ?? card.name;
+  const backName = card.detail?.card_faces?.[1]?.name ?? `${card.name} (back)`;
+
+  return [
+    { name: frontName, imageUrl: frontUrl },
+    { name: backName, imageUrl: backUrl },
+  ];
+}
+
 export function expandDeckForPrint(cards: DetailedCardEntry[]) {
   const slots: { name: string; imageUrl: string }[] = [];
 
   for (const card of cards) {
-    const imageUrl = getCardImage(card);
-    if (!imageUrl || !card.qty) continue;
+    if (!card.qty) continue;
+
+    const faceSlots = getPrintFaceSlots(card);
+    if (!faceSlots.length) continue;
 
     for (let copy = 0; copy < card.qty; copy++) {
-      slots.push({ name: card.name, imageUrl });
+      for (const slot of faceSlots) {
+        slots.push(slot);
+      }
     }
   }
 
