@@ -205,6 +205,26 @@ export function getTextureLoadUrl(url: string | undefined): string | undefined {
   return proxyPath;
 }
 
+/** Ordered fallbacks for fetching remote card art (proxy, direct, weserv). */
+export function getTextureLoadUrlCandidates(url: string | undefined): string[] {
+  const normalized = normalizeTextureUrl(url);
+  if (!normalized) return [];
+
+  const candidates: string[] = [];
+  const push = (candidate: string | undefined) => {
+    if (candidate && !candidates.includes(candidate)) candidates.push(candidate);
+  };
+
+  push(getTextureLoadUrl(normalized));
+  push(normalized);
+
+  if (needsTextureProxy(normalized)) {
+    push(buildPublicImageProxyUrl(normalized));
+  }
+
+  return candidates;
+}
+
 export function buildPublicImageProxyUrl(url: string): string | undefined {
   try {
     const parsed = new URL(url);

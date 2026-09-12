@@ -1,5 +1,8 @@
 import { getCardImage } from './card';
-import { getTextureLoadUrl } from './customCardArt';
+import {
+  getTextureLoadUrlCandidates,
+  normalizeTextureUrl,
+} from './customCardArt';
 import { DetailedCardEntry } from './constants';
 
 export const MTG_CARD_WIDTH_MM = 63;
@@ -146,39 +149,60 @@ function loadImageElement(src: string) {
   });
 }
 
-async function loadImageForPdf(url: string): Promise<{ dataUrl: string; format: PdfImageFormat }> {
-  const loadUrl = getTextureLoadUrl(url) ?? url;
+function blobToPdfImage(blob: Blob, sourceUrl: string): Promise<{ dataUrl: string; format: PdfImageFormat }> {
+  const mime = blob.type.toLowerCase();
+  const urlHint = normalizeTextureUrl(sourceUrl)?.toLowerCase() ?? sourceUrl.toLowerCase();
+
+  if (mime.includes('png') || urlHint.includes('.png')) {
+    return blobToDataUrl(blob).then(dataUrl => ({ dataUrl, format: 'PNG' }));
+  }
+
+  if (mime.includes('jpeg') || mime.includes('jpg') || /\.jpe?g(\?|$)/.test(urlHint)) {
+    return blobToDataUrl(blob).then(dataUrl => ({ dataUrl, format: 'JPEG' }));
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  return loadImageElement(objectUrl)
+    .then(image => {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth || image.width;
+      canvas.height = image.naturalHeight || image.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Failed to prepare image for PDF');
+      ctx.drawImage(image, 0, 0);
+      return { dataUrl: canvas.toDataURL('image/png'), format: 'PNG' as PdfImageFormat };
+    })
+    .finally(() => {
+      URL.revokeObjectURL(objectUrl);
+    });
+}
+
+async function fetchImageForPdf(loadUrl: string): Promise<{ dataUrl: string; format: PdfImageFormat }> {
   const response = await fetch(loadUrl, { credentials: 'omit' });
   if (!response.ok) {
     throw new Error(`Failed to fetch image (${response.status})`);
   }
 
   const blob = await response.blob();
-  const mime = blob.type.toLowerCase();
+  return blobToPdfImage(blob, loadUrl);
+}
 
-  if (mime.includes('png')) {
-    const dataUrl = await blobToDataUrl(blob);
-    return { dataUrl, format: 'PNG' };
+async function loadImageForPdf(url: string): Promise<{ dataUrl: string; format: PdfImageFormat }> {
+  const candidates = getTextureLoadUrlCandidates(url);
+  if (!candidates.length) {
+    throw new Error('Missing image URL');
   }
 
-  if (mime.includes('jpeg') || mime.includes('jpg')) {
-    const dataUrl = await blobToDataUrl(blob);
-    return { dataUrl, format: 'JPEG' };
+  let lastError: Error | undefined;
+  for (const loadUrl of candidates) {
+    try {
+      return await fetchImageForPdf(loadUrl);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
   }
 
-  const objectUrl = URL.createObjectURL(blob);
-  try {
-    const image = await loadImageElement(objectUrl);
-    const canvas = document.createElement('canvas');
-    canvas.width = image.naturalWidth || image.width;
-    canvas.height = image.naturalHeight || image.height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Failed to prepare image for PDF');
-    ctx.drawImage(image, 0, 0);
-    return { dataUrl: canvas.toDataURL('image/png'), format: 'PNG' };
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
+  throw lastError ?? new Error(`Failed to load image: ${url}`);
 }
 
 function blobToDataUrl(blob: Blob) {

@@ -6,6 +6,13 @@ export function isAllowedImageHost(hostname) {
   );
 }
 
+const IMAGE_PATH_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i;
+
+function upstreamLooksLikeImage(contentType, pathname) {
+  if (contentType.startsWith('image/')) return true;
+  return IMAGE_PATH_EXT.test(pathname);
+}
+
 export async function handleImageProxyRequest(uri) {
   if (!uri) {
     return { status: 400, body: 'Missing uri parameter' };
@@ -36,7 +43,7 @@ export async function handleImageProxyRequest(uri) {
     }
 
     const contentType = upstream.headers.get('content-type') ?? 'application/octet-stream';
-    if (!contentType.startsWith('image/')) {
+    if (!upstreamLooksLikeImage(contentType, target.pathname)) {
       return { status: 400, body: 'Upstream response is not an image' };
     }
 
