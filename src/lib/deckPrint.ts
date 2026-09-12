@@ -12,6 +12,8 @@ export interface PrintDeckOptions {
   scale: number;
   pageMarginMm: number;
   pageSize: PrintPageSize;
+  includeSideboard: boolean;
+  includeTokens: boolean;
 }
 
 export interface PrintDeckLayout {
@@ -44,7 +46,21 @@ export function getDefaultPrintDeckOptions(): PrintDeckOptions {
     scale: 1,
     pageMarginMm: 5,
     pageSize: 'a4',
+    includeSideboard: false,
+    includeTokens: false,
   };
+}
+
+export function buildPrintDeckCardList(
+  main: DetailedCardEntry[],
+  sideboard: DetailedCardEntry[] = [],
+  tokens: DetailedCardEntry[] = [],
+  options: Pick<PrintDeckOptions, 'includeSideboard' | 'includeTokens'>,
+) {
+  let cards = [...main];
+  if (options.includeSideboard) cards = cards.concat(sideboard);
+  if (options.includeTokens) cards = cards.concat(tokens);
+  return cards;
 }
 
 export function estimatePrintDeckLayout(options: PrintDeckOptions): PrintDeckLayout {

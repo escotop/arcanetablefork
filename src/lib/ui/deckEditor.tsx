@@ -990,6 +990,24 @@ export const DeckEditor: Component<Props> = props => {
     deckTokenEntryList().filter(entry => entryMatchesSearch(entry)),
   );
 
+  const getPrintTokenList = createMemo(() => {
+    trackDeep(deck.tokens);
+    return deckTokenEntryList()
+      .map(entry => {
+        const key = getTokenKey(entry.detail);
+        const saved = deck.tokens?.[key];
+        const qty = saved?.qty ?? entry.qty ?? 1;
+        if (qty < 1) return undefined;
+        return {
+          ...entry,
+          ...saved,
+          qty,
+          detail: saved?.detail ?? entry.detail,
+        };
+      })
+      .filter((entry): entry is DetailedCardEntry => entry !== undefined);
+  });
+
   return (
     <>
       <div class={styles.container} onDragOver={e => e.preventDefault()}>
@@ -1734,6 +1752,8 @@ export const DeckEditor: Component<Props> = props => {
             open={printDialogOpen()}
             deckName={getDeckName()}
             cards={getDeckList()}
+            sideboardCards={getSideboardList()}
+            tokenCards={getPrintTokenList()}
             onClose={closePrintDialog}
           />
         </Show>

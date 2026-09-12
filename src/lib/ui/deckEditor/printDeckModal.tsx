@@ -1,6 +1,7 @@
 import { Component, createMemo, createSignal, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { Button } from '~/components/ui/button';
+import { Checkbox } from '~/components/ui/checkbox';
 import {
   Dialog,
   DialogContentExtended,
@@ -27,6 +28,7 @@ import {
 } from '~/components/ui/select';
 import { DetailedCardEntry } from '~/lib/constants';
 import {
+  buildPrintDeckCardList,
   countPrintableDeckCards,
   estimatePrintDeckLayout,
   generateDeckPdf,
@@ -41,6 +43,8 @@ interface Props {
   open: boolean;
   deckName: string;
   cards: DetailedCardEntry[];
+  sideboardCards?: DetailedCardEntry[];
+  tokenCards?: DetailedCardEntry[];
   onClose(): void;
 }
 
@@ -54,7 +58,17 @@ const PrintDeckModal: Component<Props> = props => {
   const [printing, setPrinting] = createSignal(false);
   const [progress, setProgress] = createSignal('');
 
-  const printableCount = createMemo(() => countPrintableDeckCards(props.cards));
+  const sideboardCards = () => props.sideboardCards ?? [];
+  const tokenCards = () => props.tokenCards ?? [];
+
+  const mainPrintableCount = createMemo(() => countPrintableDeckCards(props.cards));
+  const sideboardPrintableCount = createMemo(() => countPrintableDeckCards(sideboardCards()));
+  const tokenPrintableCount = createMemo(() => countPrintableDeckCards(tokenCards()));
+
+  const printableCards = createMemo(() =>
+    buildPrintDeckCardList(props.cards, sideboardCards(), tokenCards(), options()),
+  );
+  const printableCount = createMemo(() => countPrintableDeckCards(printableCards()));
   const layout = createMemo(() => estimatePrintDeckLayout(options()));
   const pageCount = createMemo(() =>
     printableCount() ? Math.ceil(printableCount() / layout().cardsPerPage) : 0,
@@ -71,7 +85,7 @@ const PrintDeckModal: Component<Props> = props => {
     setProgress('Preparing PDF...');
 
     try {
-      await generateDeckPdf(props.cards, props.deckName, options(), progressState => {
+      await generateDeckPdf(printableCards(), props.deckName, options(), progressState => {
         const label =
           progressState.phase === 'rendering'
             ? 'Rendering PDF...'
@@ -105,6 +119,19 @@ const PrintDeckModal: Component<Props> = props => {
 
               <div class='rounded-md border p-3 text-sm'>
                 <div>{printableCount()} cards</div>
+                <Show when={options().includeSideboard || options().includeTokens}>
+                  <div class='text-muted-foreground'>
+                    {mainPrintableCount()} main
+                    <Show when={options().includeSideboard && sideboardPrintableCount() > 0}>
+                      {' '}
+                      + {sideboardPrintableCount()} sideboard
+                    </Show>
+                    <Show when={options().includeTokens && tokenPrintableCount() > 0}>
+                      {' '}
+                      + {tokenPrintableCount()} tokens
+                    </Show>
+                  </div>
+                </Show>
                 <div>
                   {layout().cols} × {layout().rows} per page ({layout().cardsPerPage} cards/page)
                 </div>
@@ -114,6 +141,37 @@ const PrintDeckModal: Component<Props> = props => {
                 <div class='text-muted-foreground'>
                   Card size: {layout().cardWidthMm.toFixed(1)} × {layout().cardHeightMm.toFixed(1)} mm
                 </div>
+              </div>
+
+              <div class='grid gap-3'>
+                <Label class='flex items-center gap-2 font-normal'>
+                  <Checkbox
+                    checked={options().includeSideboard}
+                    disabled={sideboardPrintableCount() < 1}
+                    onChange={checked => updateOption('includeSideboard', checked)}
+                  />
+                  <span>
+                    Include sideboard
+                    <Show when={sideboardPrintableCount() > 0}>
+                      {' '}
+                      ({sideboardPrintableCount()} cards)
+                    </Show>
+                  </span>
+                </Label>
+                <Label class='flex items-center gap-2 font-normal'>
+                  <Checkbox
+                    checked={options().includeTokens}
+                    disabled={tokenPrintableCount() < 1}
+                    onChange={checked => updateOption('includeTokens', checked)}
+                  />
+                  <span>
+                    Include tokens
+                    <Show when={tokenPrintableCount() > 0}>
+                      {' '}
+                      ({tokenPrintableCount()} cards)
+                    </Show>
+                  </span>
+                </Label>
               </div>
 
               <div class='grid gap-4 sm:grid-cols-2'>
