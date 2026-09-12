@@ -1,4 +1,4 @@
-import { Component, createMemo, createSignal, Show } from 'solid-js';
+import { Component, createEffect, createMemo, createSignal, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { Button } from '~/components/ui/button';
 import { Checkbox } from '~/components/ui/checkbox';
@@ -55,6 +55,7 @@ const PAGE_SIZE_OPTIONS: { id: PrintPageSize; label: string }[] = [
 
 const PrintDeckModal: Component<Props> = props => {
   const [options, setOptions] = createSignal<PrintDeckOptions>(getDefaultPrintDeckOptions());
+  const [spacingInput, setSpacingInput] = createSignal(String(getDefaultPrintDeckOptions().spacingMm));
   const [printing, setPrinting] = createSignal(false);
   const [progress, setProgress] = createSignal('');
 
@@ -78,8 +79,27 @@ const PrintDeckModal: Component<Props> = props => {
     setOptions(current => ({ ...current, [key]: value }));
   }
 
+  createEffect(() => {
+    if (props.open) {
+      setSpacingInput(String(options().spacingMm));
+    }
+  });
+
+  function commitSpacingInput() {
+    const parsed = Number.parseFloat(spacingInput().trim().replace(/,/g, ''));
+    if (!Number.isFinite(parsed)) {
+      setSpacingInput(String(options().spacingMm));
+      return;
+    }
+    const clamped = Math.min(20, Math.max(0, Math.round(parsed * 10) / 10));
+    updateOption('spacingMm', clamped);
+    setSpacingInput(String(clamped));
+  }
+
   async function handlePrint() {
     if (!printableCount() || printing()) return;
+
+    commitSpacingInput();
 
     setPrinting(true);
     setProgress('Preparing PDF...');
@@ -176,22 +196,25 @@ const PrintDeckModal: Component<Props> = props => {
               </div>
 
               <div class='grid gap-4 sm:grid-cols-2'>
-                <NumberField
-                  value={options().spacingMm}
-                  minValue={0}
-                  maxValue={20}
-                  step={0.1}
-                  onChange={value => {
-                    const parsed = Number(String(value).replace(/,/g, ''));
-                    if (Number.isFinite(parsed)) updateOption('spacingMm', parsed);
-                  }}>
-                  <NumberFieldLabel>Spacing (mm)</NumberFieldLabel>
-                  <div class='relative'>
-                    <NumberFieldInput />
-                    <NumberFieldIncrementTrigger />
-                    <NumberFieldDecrementTrigger />
-                  </div>
-                </NumberField>
+                <div class='grid gap-2'>
+                  <Label for='print-spacing-mm'>Spacing (mm)</Label>
+                  <input
+                    id='print-spacing-mm'
+                    type='text'
+                    inputMode='decimal'
+                    autocomplete='off'
+                    class='h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+                    value={spacingInput()}
+                    onInput={e => setSpacingInput(e.currentTarget.value.replace(/,/g, ''))}
+                    onBlur={commitSpacingInput}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        commitSpacingInput();
+                        e.currentTarget.blur();
+                      }
+                    }}
+                  />
+                </div>
 
                 <NumberField
                   value={options().scale * 100}
