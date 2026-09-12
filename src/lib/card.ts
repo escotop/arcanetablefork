@@ -29,10 +29,9 @@ import {
   DetailedCardEntry,
 } from './constants';
 import {
-  buildPublicImageProxyUrl,
   getTextureLoadUrl,
+  getTextureLoadUrlCandidates,
   isImageProxyUrl,
-  needsTextureProxy,
   normalizeTextureUrl,
 } from './customCardArt';
 import {
@@ -826,21 +825,19 @@ async function loadTextureBitmapWithUrl(loadUrl: string): Promise<ImageBitmap> {
 }
 
 async function loadTextureBitmap(url: string): Promise<ImageBitmap> {
-  const normalized = normalizeTextureUrl(url);
-  if (!normalized) throw new Error('texture url not found');
+  const candidates = getTextureLoadUrlCandidates(url);
+  if (!candidates.length) throw new Error('texture url not found');
 
-  const loadUrl = getTextureLoadUrl(normalized) ?? normalized;
-
-  try {
-    return await loadTextureBitmapWithUrl(loadUrl);
-  } catch (error) {
-    if (!needsTextureProxy(normalized)) throw error;
-
-    const fallbackUrl = buildPublicImageProxyUrl(normalized);
-    if (!fallbackUrl || fallbackUrl === loadUrl) throw error;
-
-    return loadTextureBitmapWithUrl(fallbackUrl);
+  let lastError: Error | undefined;
+  for (const loadUrl of candidates) {
+    try {
+      return await loadTextureBitmapWithUrl(loadUrl);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
   }
+
+  throw lastError ?? new Error(`Failed to load texture: ${url}`);
 }
 
 function createCardTextureMaterial(image: ImageBitmap) {

@@ -193,6 +193,25 @@ export function needsTextureProxy(url: string): boolean {
   }
 }
 
+/** Cross-origin art that may block browser fetches (CORS) and needs weserv fallback. */
+export function needsCrossOriginImageFallback(url: string): boolean {
+  try {
+    const base =
+      typeof globalThis.location !== 'undefined' ? globalThis.location.origin : 'http://localhost';
+    const parsed = new URL(url, base);
+    if (parsed.pathname === '/image-proxy') return false;
+    if (parsed.hostname.endsWith('scryfall.io')) return false;
+    if (parsed.hostname === 'images.weserv.nl') return false;
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+    if (typeof globalThis.location !== 'undefined' && parsed.origin === globalThis.location.origin) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function getTextureLoadUrl(url: string | undefined): string | undefined {
   const normalized = normalizeTextureUrl(url);
   if (!normalized) return undefined;
@@ -218,7 +237,7 @@ export function getTextureLoadUrlCandidates(url: string | undefined): string[] {
   push(getTextureLoadUrl(normalized));
   push(normalized);
 
-  if (needsTextureProxy(normalized)) {
+  if (needsTextureProxy(normalized) || needsCrossOriginImageFallback(normalized)) {
     push(buildPublicImageProxyUrl(normalized));
   }
 
