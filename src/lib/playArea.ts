@@ -14,6 +14,7 @@ import {
   getRotationFromCardState,
   initializeCardMesh,
   loadCardTextures,
+  normalizeCardCounterModifiers,
   setCardData,
   updateModifiers,
 } from './card';
@@ -57,6 +58,7 @@ import {
   SKIP_REPLAY,
 } from './createEvents';
 import { getPlayAreaPlayerName } from './playAreaNameTag';
+import { buildCardCounterChangeLogs } from './cardCounterLogs';
 
 /** Battlefield mesh uses BoxGeometry(200, 100) centered at the origin. */
 const BATTLEFIELD_HALF_W = 100;
@@ -684,12 +686,21 @@ export class PlayArea {
     const prev = structuredClone(
       card.mesh.userData.modifiers ?? { power: 0, toughness: 0, counters: {} },
     );
-    const next = update(prev);
+    const next = normalizeCardCounterModifiers(prev, update(prev));
     if (this.isLocalPlayArea) {
       playCounterSoundForModifierChange(prev, next);
     }
     card.mesh.userData.modifiers = next;
-    this.emitEvent({ type: 'modifyCard', payload: { userData: card.mesh.userData } });
+    const counterChanges = this.isLocalPlayArea
+      ? buildCardCounterChangeLogs(card, prev, next)
+      : [];
+    this.emitEvent({
+      type: 'modifyCard',
+      payload: {
+        userData: card.mesh.userData,
+        counterChanges,
+      },
+    });
 
     updateModifiers(card);
   }

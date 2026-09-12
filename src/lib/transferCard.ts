@@ -3,12 +3,14 @@ import { Card, CardZone } from './constants';
 import {
   cardsById,
   dismissHowItPlaysHelp,
+  getLocalPlayArea,
   getLocalPlayerClientId,
   isEventCatchUpComplete,
   isHistoricalLogReplayInProgress,
   isLocalHandZone,
   sendEvent,
 } from './globals';
+import { applyLoyaltyWhenPlayingToBattlefield } from './loyaltyCounter';
 import { playDrawSound } from './sounds';
 import { Deck } from './deck';
 import { Hand } from './hand';
@@ -160,6 +162,18 @@ export async function transferCard<AddOptions extends {}>(
 
     if (toZone.zone === 'graveyard' || toZone.zone === 'exile') {
       onStackCardAdded(toZone as CardStack);
+    }
+
+    if (
+      fromZone?.zone === 'hand' &&
+      toZone.zone === 'battlefield' &&
+      isLocalHandZone(fromZone) &&
+      !isHistoricalLogReplayInProgress()
+    ) {
+      const playArea = getLocalPlayArea();
+      if (playArea?.isLocalPlayArea) {
+        void applyLoyaltyWhenPlayingToBattlefield(card, playArea);
+      }
     }
   }
 

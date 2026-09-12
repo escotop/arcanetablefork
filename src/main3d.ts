@@ -6,7 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { cancelAnimation, renderAnimations, serializeAnimation } from './lib/animations';
 import { resolveHowItPlaysAdviceForDeck } from './lib/commanderBracket';
 import { getDeckStore } from './lib/deckStore';
-import { getCardMeshTetherPoint, setCardData, setCounterLabelHoverTarget, updateTextureAnimation } from './lib/card';
+import { adjustCounterLabelHit, findCounterLabelIntersection, getCardMeshTetherPoint, resolvePtCounterSide, setCardData, setCounterLabelHoverTarget, setCounterLabelPointerHover, updateTextureAnimation } from './lib/card';
 import { clearSpanishPreview, clearSpanishPreviewForCard } from './lib/spanishCardPreview';
 import {
   CARD_STACK_OFFSET,
@@ -118,7 +118,7 @@ import { setCameraViewMode as applyCameraViewMode, setCameraViewByPlayerIndex as
 import { syncCameraDebugGuiFromActiveView } from './lib/cameraDebugGui';
 import { transferCard } from './lib/transferCard';
 import { drawCards, OPENING_HAND_SIZE } from './lib/shortcuts/commands/deck';
-import { setCounters } from './lib/ui/counterDialog';
+import { registerCustomCounter, restoreCustomCounters } from './lib/ui/counterDialog';
 import { resolveStackAnchor } from './lib/footprintOverlap';
 import { restackItemsLocally } from './lib/utils';
 import { processEvents, syncPlayAreasFromGameLog, waitForGameLogCatchUp, waitForMultiplayerGameState } from './remoteEvents';
@@ -337,6 +337,8 @@ async function finalizeReconnectedPlayArea(
   );
   initHowItPlaysAdvice(advice, playerSessionId);
 
+  restoreCustomCounters(gameId);
+
   markLoadProfile('reclaim play area ready', { joinClientId: area.clientId, cardCount: area.deck.cards.length });
   void area.loadTextures();
   renderer?.compile(scene, camera);
@@ -391,6 +393,8 @@ async function reclaimLocalPlayArea(
   );
   initHowItPlaysAdvice(advice, playerSessionId);
 
+  restoreCustomCounters(gameId);
+
   markLoadProfile('reclaim play area ready', { joinClientId, cardCount: area.deck.cards.length });
   void area.loadTextures();
   renderer?.compile(scene, camera);
@@ -428,9 +432,10 @@ export async function tryReconnectToGame(
       markLoadProfile('reconnect path', { path: 'snapshot', ok });
       return ok;
     }
+
+    await profileAsync('game log replay (snapshot fallback)', () => waitForGameLogReplay());
   }
 
-  // Solo reclamar sin replay del log como fuente de datos
   const reclaimed = await profileAsync('reclaim local play area', () =>
     reclaimLocalPlayArea(joinClientId, gameId, playerSessionId, initCardSystem, {
       maxReplayWaitMs: 5_000,
@@ -666,8 +671,6 @@ export async function loadDeckAndJoin(
   }
 
   if (existingJoinClientId !== undefined) {
-    // Solo intentar reclamar el área de juego, sin replay del log como fuente de datos
-    // El estado debe venir del snapshot o ser creado nuevo
     if (getLocalPlayArea()) {
       await profileAsync('finalize reconnected play area (join)', () =>
         finalizeReconnectedPlayArea(currentGameId, playerSessionId, initCardSystem),
@@ -675,6 +678,8 @@ export async function loadDeckAndJoin(
       markLoadProfile('join complete', { path: 'reconnect-existing' });
       return;
     }
+
+    await profileAsync('game log replay (join reclaim)', () => waitForGameLogReplay());
 
     const reclaimed = await profileAsync('reclaim local play area (join)', () =>
       reclaimLocalPlayArea(
@@ -716,7 +721,9 @@ export async function loadDeckAndJoin(
   initHowItPlaysAdvice(advice, playerSessionId);
 
   setIsIntitialized(true);
-  setCounters(existing => uniqBy([...counters, ...existing], 'id'));
+  for (const counter of counters) {
+    registerCustomCounter(counter, playArea.clientId);
+  }
 
   playArea.subscribeEvents(sendEvent);
   provider.awareness.setLocalStateField('life', settings.startingLife);
@@ -733,7 +740,7 @@ export async function loadDeckAndJoin(
     settings.playerColor ?? resolvePlayerColor({ name: settings.name }),
   );
   sendEvent({ type: 'join', payload: playArea.getLocalState() });
-  counters.forEach(counter => sendEvent({ type: 'createCounter', counter }));
+  counters.forEach(counter => sendEvent({ type: 'createCounter', payload: { counter } }));
 
   await profileAsync('opening hand', async () => {
     await drawCards(playArea, OPENING_HAND_SIZE);
@@ -910,6 +917,17 @@ function onContextMenu(event: PointerEvent) {
   let intersects = raycaster.intersectObject(scene);
 
   if (!intersects.length) return;
+
+  const counterInteraction = findCounterLabelIntersection(intersects);
+  if (counterInteraction) {
+    const ptSide =
+      counterInteraction.counterHit.counterId === 'pt'
+        ? resolvePtCounterSide(counterInteraction.counterHit.mesh, counterInteraction.point)
+        : undefined;
+    adjustCounterLabelHit(counterInteraction.counterHit, -1, ptSide);
+    return;
+  }
+
   let target = resolveContextMenuTarget(intersects[0].object);
   if (!target) return;
   if (isDeckZoneObject(target) && !isUnderLocalDeck(target)) return;
@@ -966,6 +984,16 @@ function onDocumentClick(event: PointerEvent) {
   if (dragTargets?.length) return;
 
   if (!intersects.length) return;
+
+  const counterInteraction = findCounterLabelIntersection(intersects);
+  if (counterInteraction) {
+    const ptSide =
+      counterInteraction.counterHit.counterId === 'pt'
+        ? resolvePtCounterSide(counterInteraction.counterHit.mesh, counterInteraction.point)
+        : undefined;
+    adjustCounterLabelHit(counterInteraction.counterHit, 1, ptSide);
+    return;
+  }
 
   let target = intersects[0].object;
 
@@ -1703,6 +1731,7 @@ function getCardMesh(target: THREE.Object3D | undefined) {
 
 function clearHoverSignal() {
   clearSpanishPreview();
+  setCounterLabelPointerHover(null, null, null);
   setCounterLabelHoverTarget(null);
   clearFocusPanelState();
   setHoverSignal(signal => (signal?.mouse ? { mouse: signal.mouse } : undefined));
@@ -1714,6 +1743,30 @@ function highlightHover(intersects: THREE.Intersection<THREE.Object3D<THREE.Obje
   let needsCleanup = false;
   let next;
   let target = intersects?.[0]?.object;
+  const counterInteraction = findCounterLabelIntersection(intersects);
+  let counterHoverActive = false;
+
+  if (counterInteraction) {
+    const counterCard = cardsById.get(counterInteraction.counterHit.cardId);
+    if (counterCard?.mesh) {
+      const ptSide =
+        counterInteraction.counterHit.counterId === 'pt'
+          ? resolvePtCounterSide(counterInteraction.counterHit.mesh, counterInteraction.point)
+          : null;
+      setCounterLabelPointerHover(
+        counterInteraction.counterHit.cardId,
+        counterInteraction.counterHit.counterId,
+        ptSide,
+      );
+      setCounterLabelHoverTarget(counterInteraction.counterHit.cardId);
+      target = counterCard.mesh;
+      counterHoverActive = true;
+      renderer.domElement.style.cursor = 'pointer';
+    }
+  } else {
+    setCounterLabelPointerHover(null, null, null);
+    renderer.domElement.style.cursor = '';
+  }
 
   // select top of deck
   if (target?.parent?.userData.zone === 'deck') {
@@ -1725,7 +1778,12 @@ function highlightHover(intersects: THREE.Intersection<THREE.Object3D<THREE.Obje
   }
 
   if (!intersects.length) needsCleanup = true;
-  if (target !== hover?.object) {
+  if (counterHoverActive && target) {
+    next = target;
+    if (hover?.object !== target) {
+      needsCleanup = true;
+    }
+  } else if (target !== hover?.object) {
     needsCleanup = true;
     let { isInteractive, isAnimating, location } = target?.userData ?? {};
     if (
@@ -1778,7 +1836,9 @@ function highlightHover(intersects: THREE.Intersection<THREE.Object3D<THREE.Obje
     const tether = getCardMeshTetherPoint(next);
 
     hover = { object: next, colors: [] };
-    setCounterLabelHoverTarget(next.userData?.id ?? null);
+    if (!counterHoverActive) {
+      setCounterLabelHoverTarget(next.userData?.id ?? null);
+    }
     setHoverSignal({ mesh: next, tether, mouse });
 
     hover.object.dispatchEvent({ type: 'mousein', mesh: hover.object });

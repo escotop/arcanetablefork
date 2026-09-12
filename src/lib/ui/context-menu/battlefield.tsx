@@ -6,30 +6,57 @@ import { doXTimes, selection } from '~/lib/globals';
 import { resolveInteractiveCard } from '~/lib/card';
 import { Dynamic, For, Show } from 'solid-js/web';
 import { CoreCounters } from '../cardBattlefieldMenu';
-import { counters, setIsCounterDialogOpen } from '../counterDialog';
-import {
-  NumberField,
-  NumberFieldDecrementTrigger,
-  NumberFieldIncrementTrigger,
-  NumberFieldInput,
-} from '~/components/ui/number-field';
+import { localCustomCounters, openCounterDialog } from '../counterDialog';
+import { isLoyaltyCounter, isPlaneswalkerFaceVisible } from '../../loyaltyCounter';
+import { Button } from '~/components/ui/button';
 import { createSignal, Match, Switch } from 'solid-js';
 import { useSearchParams } from '@solidjs/router';
 import CardQtyDialog from '../card-qty-dialog';
 
 export default function BattlefieldContextMenu(props: { targetMesh: Mesh; playArea: PlayArea }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [modifierTick, setModifierTick] = createSignal(0);
   const ctx = useMenuContext();
   let meshes = () =>
     selection.selectedItems.length > 0 ? selection.selectedItems : [props.targetMesh];
 
+  function getCustomCounterValue(counterId: string) {
+    modifierTick();
+    return props.targetMesh?.userData.modifiers?.counters?.[counterId];
+  }
+
   function updateCardModifiers(fn) {
     const card = resolveInteractiveCard(props.targetMesh);
     if (!card) return;
-    const prev = card.mesh.userData.modifiers ?? { power: 0, toughness: 0, counters: {} };
-    const next = fn(prev);
-    props.playArea.modifyCard(card, () => next);
+    props.playArea.modifyCard(card, fn);
+    setModifierTick(tick => tick + 1);
   }
+
+  function adjustCustomCounter(counterId: string, fn: (current: number) => number) {
+    updateCardModifiers(modifiers => {
+      const previous = modifiers.counters?.[counterId];
+      const nextValue = fn(previous ?? 0);
+      if (nextValue < 0) {
+        const { [counterId]: _removed, ...rest } = modifiers.counters ?? {};
+        return { ...modifiers, counters: rest };
+      }
+      return {
+        ...modifiers,
+        counters: {
+          ...modifiers.counters,
+          [counterId]: previous === undefined ? Math.max(1, nextValue) : nextValue,
+        },
+      };
+    });
+  }
+
+  function visibleCustomCounters() {
+    const card = resolveInteractiveCard(props.targetMesh);
+    return localCustomCounters().filter(
+      counter => !isLoyaltyCounter(counter) || (card && isPlaneswalkerFaceVisible(card)),
+    );
+  }
+
   return (
     <>
       <MoveSubMenu
@@ -45,42 +72,44 @@ export default function BattlefieldContextMenu(props: { targetMesh: Mesh; playAr
           <Dynamic component={ctx.item} closeOnSelect={false} style='font-family: monospace;'>
             <CoreCounters cardMesh={props.targetMesh} playArea={props.playArea} />
           </Dynamic>
-          <Show when={counters().length}>
+          <Show when={visibleCustomCounters().length}>
             <Dynamic component={ctx.separator} />
           </Show>
-          <For each={counters()}>
+          <For each={visibleCustomCounters()}>
             {counter => (
               <Dynamic component={ctx.item} closeOnSelect={false}>
                 <div
                   style={`--color: ${counter.color}; width: 1rem; height: 1rem; background: var(--color); margin: 0 0.25rem;`}></div>
                 <div style='margin: 0 0.25rem;'>{counter.name}</div>
                 <Dynamic component={ctx.shortcut}>
-                  <NumberField
-                    defaultValue={props.targetMesh?.userData.modifiers?.counters?.[counter.id] ?? 0}
-                    style='width: 6rem'
-                    onChange={value => {
-                      updateCardModifiers(modifiers => ({
-                        ...modifiers,
-                        counters: {
-                          ...modifiers.counters,
-                          [counter.id]: parseInt(value.replace(/\,/g, ''), 10),
-                        },
-                      }));
+                  <Button
+                    class='rounded align-middle px-2'
+                    style={`color: black; min-width: 2rem; height: 2rem; line-height: 2rem; background-color: ${counter.color}`}
+                    onClick={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      adjustCustomCounter(counter.id, value => value + 1);
+                    }}
+                    onContextMenu={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      adjustCustomCounter(counter.id, value => value - 1);
                     }}>
-                    <div class='relative'>
-                      <NumberFieldInput />
-                      <NumberFieldIncrementTrigger />
-                      <NumberFieldDecrementTrigger />
-                    </div>
-                  </NumberField>
+                    {getCustomCounterValue(counter.id) ?? 0}
+                  </Button>
                 </Dynamic>
               </Dynamic>
             )}
           </For>
-          <Show when={counters().length > 0}>
+          <Show when={visibleCustomCounters().length > 0}>
             <Dynamic component={ctx.separator} />
           </Show>
-          <Dynamic component={ctx.item} onClick={() => setIsCounterDialogOpen(true)}>
+          <Dynamic
+            component={ctx.item}
+            onClick={() => {
+              const card = resolveInteractiveCard(props.targetMesh);
+              openCounterDialog({ cardId: card?.id });
+            }}>
             Create New Counter
           </Dynamic>
         </Dynamic>

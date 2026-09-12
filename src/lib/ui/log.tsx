@@ -233,27 +233,81 @@ export function parseLogEntry(entry) {
     case 'deckSearch':
       return 'looked at his deck';
     case 'deckDraw':
+      if (entry.payload?.source === 'peek') {
+        return 'drawed a card while peeking';
+      }
       if (entry.payload?.source === 'choice') {
-        const choiceCard: Card = {
-          id: `log-draw-${entry.payload.cardName ?? 'card'}`,
-          clientId: Number(entry.clientID) || 0,
-          detail: { name: entry.payload.cardName },
-          modifiers: {} as Card['modifiers'],
-        };
-        return (
-          <>
-            drawed card at choice (
-            <LogCardLink card={choiceCard}>
-              {entry.payload.cardName} {entry.payload.deckPosition}
-            </LogCardLink>
-            )
-          </>
-        );
+        return 'drawed card at choice';
       }
       return 'drawed top card';
     case 'mulligan':
       return `mulliganed and drew ${entry.payload?.drawCount} cards`;
-    case 'createCounter':
+    case 'createCounter': {
+      const counter = entry.payload?.counter ?? entry.counter;
+      return (
+        <>
+          created counter type <strong>{counter?.name ?? 'counter'}</strong>
+        </>
+      );
+    }
+    case 'cardCustomCounter': {
+      const card = resolveLogCard(entry.payload?.userData, entry.clientID);
+      const cardName =
+        entry.payload?.cardName ??
+        card?.detail?.name ??
+        getCardNameFromLogPayload(entry.payload?.userData, card) ??
+        'a card';
+      const counterName = entry.payload?.counterName ?? 'counter';
+      const previousValue = entry.payload?.previousValue;
+      const value = entry.payload?.value;
+
+      if (value === undefined) {
+        return (
+          <>
+            removed <strong>{counterName}</strong> from{' '}
+            {renderLogCardName(card, cardName, entry.payload?.userData, entry.clientID)}
+          </>
+        );
+      }
+
+      if (previousValue === undefined) {
+        return (
+          <>
+            set <strong>{counterName}</strong> to <strong>{value}</strong> on{' '}
+            {renderLogCardName(card, cardName, entry.payload?.userData, entry.clientID)}
+          </>
+        );
+      }
+
+      return (
+        <>
+          changed <strong>{counterName}</strong> from <strong>{previousValue}</strong> to{' '}
+          <strong>{value}</strong> on{' '}
+          {renderLogCardName(card, cardName, entry.payload?.userData, entry.clientID)}
+        </>
+      );
+    }
+    case 'playerCustomCounter': {
+      const counterName = entry.payload?.counterName ?? 'counter';
+      const previousValue = entry.payload?.previousValue;
+      const value = entry.payload?.value;
+
+      if (previousValue === undefined) {
+        return (
+          <>
+            set player counter <strong>{counterName}</strong> to <strong>{value}</strong>
+          </>
+        );
+      }
+
+      return (
+        <>
+          changed player counter <strong>{counterName}</strong> from <strong>{previousValue}</strong>{' '}
+          to <strong>{value}</strong>
+        </>
+      );
+    }
+    case 'modifyCard':
       return null;
     case 'reveal':
       return (

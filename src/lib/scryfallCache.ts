@@ -73,6 +73,7 @@ export function slimCardDetail(detail: CardEntryDetail): CardEntryDetail {
     mana_cost: face.mana_cost,
     power: face.power,
     toughness: face.toughness,
+    loyalty: (face as { loyalty?: string | number }).loyalty,
     search: face.search,
     popularity: face.popularity,
   }));
@@ -92,6 +93,7 @@ export function slimCardDetail(detail: CardEntryDetail): CardEntryDetail {
     mana_cost: detail.mana_cost,
     power: detail.power,
     toughness: detail.toughness,
+    loyalty: (detail as { loyalty?: string | number }).loyalty,
     search: detail.search,
     popularity: detail.popularity,
     lang: (detail as CardEntryDetail & { lang?: string }).lang,

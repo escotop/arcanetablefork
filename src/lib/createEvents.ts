@@ -189,7 +189,8 @@ export function createDeckShuffleLogEvent() {
 export function createDeckDrawLogEvent(
   payload:
     | { source: 'top' }
-    | { source: 'choice'; cardName: string; deckPosition: number },
+    | { source: 'peek' }
+    | { source: 'choice' },
 ) {
   return {
     type: 'deckDraw',
@@ -222,6 +223,51 @@ export function createDieRollEvent(sides: number, result: number) {
   return {
     type: 'roll',
     payload: { roll: [{ sides, result }] },
+  } as const;
+}
+
+export function createCustomCounterTypeLogEvent(counter: { id: string; name: string }) {
+  return {
+    type: 'createCounter',
+    payload: { counter: { id: counter.id, name: counter.name } },
+  } as const;
+}
+
+export function createCardCustomCounterLogEvent(payload: {
+  cardId: string;
+  cardName?: string;
+  counterId: string;
+  counterName: string;
+  previousValue?: number;
+  value?: number;
+}) {
+  return {
+    type: 'cardCustomCounter',
+    payload: {
+      userData: { id: payload.cardId },
+      cardName: payload.cardName,
+      counterId: payload.counterId,
+      counterName: payload.counterName,
+      previousValue: payload.previousValue,
+      value: payload.value,
+    },
+  } as const;
+}
+
+export function createPlayerCustomCounterLogEvent(payload: {
+  counterId: string;
+  counterName: string;
+  previousValue?: number;
+  value: number;
+}) {
+  return {
+    type: 'playerCustomCounter',
+    payload: {
+      counterId: payload.counterId,
+      counterName: payload.counterName,
+      previousValue: payload.previousValue,
+      value: payload.value,
+    },
   } as const;
 }
 

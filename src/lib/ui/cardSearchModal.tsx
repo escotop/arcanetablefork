@@ -30,7 +30,13 @@ import {
 import { transferCard } from '../transferCard';
 import { getCardImage } from '../card';
 import { spawnTokenOnBattlefield } from '../playArea';
-import { logDeckDrawChoice, logDeckDrawTop, logDeckPeekMove, logDeckPeekReorder } from '../shortcuts/commands/deck';
+import {
+  logDeckDrawChoice,
+  logDeckDrawFromPeek,
+  logDeckDrawTop,
+  logDeckPeekMove,
+  logDeckPeekReorder,
+} from '../shortcuts/commands/deck';
 import { supportsCardPrintings } from '../deck';
 import { playDrawSound } from '../sounds';
 import {
@@ -72,7 +78,6 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
   const [contextMenuCard, setContextMenuCard] = createSignal<Card | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = createSignal<{ x: number; y: number } | null>(null);
   const [activeSubtypes, setActiveSubtypes] = createSignal<string[]>([]);
-  const [peekWindowSize, setPeekWindowSize] = createSignal(0);
   const [peekDragCardId, setPeekDragCardId] = createSignal<string | null>(null);
   const [peekDropTargetId, setPeekDropTargetId] = createSignal<string | null>(null);
   const PEEK_REORDER_THRESHOLD_PX = 6;
@@ -91,11 +96,17 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
   const [localCards, setLocalCards] = createSignal<Card[]>(props.cards);
 
   createEffect(() => {
+    if (!props.open || props.deckViewMode === 'peek') return;
     setLocalCards(props.cards);
-    if (props.open && props.deckViewMode === 'peek') {
-      setPeekWindowSize(props.cards.length);
-    }
   });
+
+  createEffect((prevOpen: boolean) => {
+    const open = props.open;
+    if (open && !prevOpen && props.deckViewMode === 'peek') {
+      setLocalCards([...props.cards]);
+    }
+    return open;
+  }, false);
 
   const canReorderPeek = () =>
     props.zone === 'peek' && props.deckViewMode === 'peek' && !props.readOnly;
@@ -106,11 +117,19 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     return area.deck.reorderTopCards(orderedCards.length, orderedCards);
   }
 
-  function refreshLocalPeekCards() {
+  function syncLocalPeekCardOrder() {
     const area = playArea();
-    const size = peekWindowSize();
-    if (!area || !size || !canReorderPeek()) return;
-    setLocalCards(area.deck.cards.slice(0, size));
+    if (!area || !canReorderPeek()) return;
+
+    const deckById = new Map(area.deck.cards.map(card => [card.id, card]));
+    const deckIndexById = new Map(area.deck.cards.map((card, index) => [card.id, index]));
+
+    setLocalCards(prev =>
+      prev
+        .filter(card => deckById.has(card.id))
+        .sort((a, b) => (deckIndexById.get(a.id) ?? 0) - (deckIndexById.get(b.id) ?? 0))
+        .map(card => deckById.get(card.id)!),
+    );
   }
 
   function swapPeekCards(fromIndex: number, toIndex: number) {
@@ -221,7 +240,11 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     });
 
     logDeckPeekMove(placement, card.id);
-    refreshLocalPeekCards();
+    if (placement === 'bottom') {
+      setLocalCards(prev => prev.filter(entry => entry.id !== card.id));
+    } else {
+      syncLocalPeekCardOrder();
+    }
   }
 
   function handleCardPointerDown(card: Card, event: PointerEvent) {
@@ -588,9 +611,10 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     }
     
     if (fromZone === area.deck) {
-      const deckIndex = area.deck.cards.findIndex(entry => entry.id === card.id);
-      if (props.zone === 'peek' && deckIndex >= 0) {
-        logDeckDrawChoice(card.detail.name, deckIndex + 1);
+      if (props.zone === 'peek' && props.deckViewMode === 'peek') {
+        logDeckDrawFromPeek();
+      } else if (props.zone === 'peek' && props.deckViewMode === 'search') {
+        logDeckDrawChoice();
       } else {
         logDeckDrawTop();
       }

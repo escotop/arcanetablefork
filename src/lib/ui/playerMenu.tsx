@@ -16,7 +16,9 @@ import {
   NumberFieldInput,
 } from '~/components/ui/number-field';
 import { TextField, TextFieldInput } from '~/components/ui/text-field';
-import { cardSystem, getActiveGameId, getLocalPlayerClientId, playAreas, players, provider } from '../globals';
+import { cardSystem, getActiveGameId, getLocalPlayerClientId, playAreas, players, provider, sendEvent } from '../globals';
+import { buildPlayerCustomCounterChangeLog } from '../cardCounterLogs';
+import { createPlayerCustomCounterLogEvent } from '../createEvents';
 import { DEFAULT_COMMANDER_LIFE, isMagicCardSystem } from '../constants';
 import { updateGameMetaLife } from '../gameMeta';
 import { getCommanderHealthTargets, setTrackedOpponentCommanderLife } from '../commanderTracking';
@@ -24,7 +26,7 @@ import { parseLifeInput } from '../utils';
 import { displayPlayerColor } from '../playerColor';
 import { getCameraViewIndexForClientId, getOrderedPlayAreas, setCameraViewByPlayerIndex } from '../cameraView';
 import { turnOrderState } from '../turnOrder';
-import { counters, setIsCounterDialogOpen } from './counterDialog';
+import { counters, localCustomCounters, openCounterDialog } from './counterDialog';
 import ChevronDownIcon from 'lucide-solid/icons/chevron-down';
 import ChevronUpIcon from 'lucide-solid/icons/chevron-up';
 
@@ -132,17 +134,22 @@ export const LocalPlayer: Component<{ isActiveTurn?: boolean; life?: number; com
 
   function changeCounter(counterId, callback) {
     let localState = provider.awareness.getLocalState();
+    const previousValue = localState?.counters?.[counterId];
+    const nextValue =
+      typeof callback === 'function' ? callback(previousValue ?? 0) : callback;
 
     provider.awareness.setLocalState({
       ...localState,
       counters: {
         ...localState.counters,
-        [counterId]:
-          typeof callback === 'function'
-            ? callback(localState?.counters?.[counterId] ?? 0)
-            : callback,
+        [counterId]: nextValue,
       },
     });
+
+    const change = buildPlayerCustomCounterChangeLog(counterId, previousValue, nextValue);
+    if (change) {
+      queueMicrotask(() => sendEvent(createPlayerCustomCounterLogEvent(change)));
+    }
   }
 
   return (
@@ -246,7 +253,7 @@ export const LocalPlayer: Component<{ isActiveTurn?: boolean; life?: number; com
             <DropdownMenu>
               <DropdownMenuTrigger class='mb-3'>Add Counters</DropdownMenuTrigger>
               <DropdownMenuContent>
-                <For each={counters()}>
+                <For each={localCustomCounters()}>
                   {counter => {
                     return (
                       <DropdownMenuItem closeOnSelect={false}>
@@ -273,12 +280,12 @@ export const LocalPlayer: Component<{ isActiveTurn?: boolean; life?: number; com
                     );
                   }}
                 </For>
-                <Show when={counters().length > 0}>
+                <Show when={localCustomCounters().length > 0}>
                   <DropdownMenuSeparator />
                 </Show>
                 <DropdownMenuItem
                   closeOnSelect={false}
-                  onClick={() => setIsCounterDialogOpen(true)}>
+                  onClick={() => openCounterDialog()}>
                   Create New Counter
                 </DropdownMenuItem>
               </DropdownMenuContent>

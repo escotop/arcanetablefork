@@ -58,6 +58,7 @@ export interface CardEntryDetail {
   effect?: string;
   power?: string | number | null;
   toughness?: string | number | null;
+  loyalty?: string | number | null;
   all_parts?: CardDetailPart[];
   card_faces?: CardEntryDetail[];
 }

@@ -23,7 +23,7 @@ import {
   persistJoinBinding,
   registerPlayerSession,
 } from './playerSession';
-import { setCounters } from './ui/counterDialog';
+import { resetCustomCountersForSnapshot, restoreCustomCounters } from './ui/counterDialog';
 import { syncLocalPlayerColor } from './playerColor';
 
 export const GAME_STATE_SNAPSHOT_VERSION = 1;
@@ -214,7 +214,7 @@ async function applyGameStateSnapshot(snapshot: GameStateSnapshot, gameId: strin
   setGameStateImportInProgress(true);
   try {
     resetGameSceneForReplay();
-    setCounters([]);
+    resetCustomCountersForSnapshot(gameId);
 
     const players = snapshot.players.length > 0 ? snapshot.players : snapshot.gameState.playerAwareness;
     const nextGameState = {
@@ -249,7 +249,7 @@ async function handleRemoteGameStateImport(gameId: string) {
   setGameStateImportInProgress(true);
   try {
     resetGameSceneForReplay();
-    setCounters([]);
+    resetCustomCountersForSnapshot(gameId);
     setProcessedEvents(0);
     await processEvents();
     Object.values(playAreas).forEach(area => area?.reapplyBattlefieldOrientations());

@@ -25,10 +25,12 @@ export function logDeckDrawTop() {
   dispatchGameEvent(createDeckDrawLogEvent({ source: 'top' }));
 }
 
-export function logDeckDrawChoice(cardName: string, deckPosition: number) {
-  dispatchGameEvent(
-    createDeckDrawLogEvent({ source: 'choice', cardName, deckPosition }),
-  );
+export function logDeckDrawFromPeek() {
+  dispatchGameEvent(createDeckDrawLogEvent({ source: 'peek' }));
+}
+
+export function logDeckDrawChoice() {
+  dispatchGameEvent(createDeckDrawLogEvent({ source: 'choice' }));
 }
 
 export function logDeckPeekReorder(order: string[]) {

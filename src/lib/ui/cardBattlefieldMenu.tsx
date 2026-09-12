@@ -23,7 +23,8 @@ import NumberFieldMenuItem from '~/components/ui/number-field-menu-item';
 import { cardsById, doXTimes, scene, selection } from '../globals';
 import { resolveInteractiveCard, setCardData } from '../card';
 import { PlayArea } from '../playArea';
-import { counters, setIsCounterDialogOpen } from './counterDialog';
+import { counters } from './counterDialog';
+import { isLoyaltyCounter, isPlaneswalkerFaceVisible } from '../loyaltyCounter';
 import MoveMenu from './moveMenu';
 import { shuffleItems } from '../utils';
 
@@ -31,9 +32,7 @@ const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = 
   function updateCardModifiers(fn) {
     const card = resolveInteractiveCard(props.cardMesh);
     if (!card) return;
-    const prev = card.mesh.userData.modifiers ?? { power: 0, toughness: 0, counters: {} };
-    const next = fn(prev);
-    props.playArea.modifyCard(card, () => next);
+    props.playArea.modifyCard(card, fn);
   }
 
   let meshes = () =>
@@ -47,12 +46,17 @@ const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = 
 
   let cardCounters = createMemo(() => {
     const modifiers = props.cardMesh?.userData.modifiers;
+    const card = resolveInteractiveCard(props.cardMesh);
     return counters()
       .map(counter => ({
         ...counter,
         value: modifiers?.counters?.[counter.id],
       }))
-      .filter(counter => typeof counter.value === 'number');
+      .filter(
+        counter =>
+          typeof counter.value === 'number' &&
+          (!isLoyaltyCounter(counter) || (card && isPlaneswalkerFaceVisible(card))),
+      );
   });
 
   return (
@@ -61,13 +65,18 @@ const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = 
       <div>
         <CounterRow
           onChangeCounter={(counterId, fn) => {
-            updateCardModifiers(modifiers => ({
-              ...modifiers,
-              counters: {
-                ...modifiers.counters,
-                [counterId]: fn(modifiers.counters[counterId]),
-              },
-            }));
+            updateCardModifiers(modifiers => {
+              const previous = modifiers.counters?.[counterId];
+              const nextValue = fn(previous ?? 0);
+              return {
+                ...modifiers,
+                counters: {
+                  ...modifiers.counters,
+                  [counterId]:
+                    previous === undefined ? Math.max(1, nextValue) : nextValue,
+                },
+              };
+            });
           }}
           counters={cardCounters()}
         />
@@ -89,11 +98,14 @@ function CounterRow(props: CounterRowProps) {
           <Button
             class='rounded align-middle px-2'
             style={`color: black; min-width: 2rem; height: 2rem; line-height: 2rem; background-color: ${counter.color}`}
-            onClick={() => {
+            onClick={e => {
+              e.preventDefault();
+              e.stopPropagation();
               props.onChangeCounter(counter.id, x => x + 1);
             }}
             onContextMenu={e => {
               e.preventDefault();
+              e.stopPropagation();
               props.onChangeCounter(counter.id, x => x - 1);
             }}>
             {counter.value ?? 0}

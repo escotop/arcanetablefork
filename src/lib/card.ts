@@ -41,6 +41,8 @@ import {
   cardLoadingTexture,
   cardsById,
   cardSystem,
+  getLocalPlayArea,
+  getLocalPlayerClientId,
   getProjectionVec,
   isEventCatchUpComplete,
   playAreas,
@@ -49,6 +51,7 @@ import {
   textureLoaderWorker,
 } from './globals';
 import { counters } from './ui/counterDialog';
+import { shouldRenderLoyaltyCounterOnCard, syncLoyaltyCounterForCard } from './loyaltyCounter';
 import { cancelAnimation } from './animations';
 import { cleanupFromNode, isValidMaterial } from './utils';
 import { serializeCardUserDataForLog, slimCardDetailForLog } from './gameLogEvents';
@@ -65,6 +68,241 @@ export interface CardUserData {
 let alphaMap: Texture;
 const blackMat = new MeshStandardMaterial({ color: 0x000000 });
 const NON_COUNTER_MODIFIER_MESH_KEYS = new Set(['pt', 'token', 'handMana']);
+const COUNTER_LABEL_FONT = '56px grobold';
+const COUNTER_LABEL_EMPHASIS_FONT = '68px grobold';
+
+export interface CounterLabelHit {
+  mesh: Mesh;
+  cardId: string;
+  counterId: string;
+}
+
+export type PtCounterSide = 'power' | 'toughness';
+
+export type CardModifiers = {
+  power?: number;
+  toughness?: number;
+  counters?: Record<string, number>;
+};
+
+export function normalizeCardCounterModifiers(
+  prev: CardModifiers,
+  next: CardModifiers | undefined | null,
+): CardModifiers {
+  const prevCounters = { ...(prev.counters ?? {}) };
+
+  if (!next || typeof next !== 'object') {
+    return {
+      power: prev.power ?? 0,
+      toughness: prev.toughness ?? 0,
+      counters: sanitizeCardCounterValues(prevCounters),
+    };
+  }
+
+  const incomingCounters =
+    next.counters && typeof next.counters === 'object' && !Array.isArray(next.counters)
+      ? next.counters
+      : {};
+
+  return {
+    power:
+      typeof next.power === 'number' && !Number.isNaN(next.power)
+        ? next.power
+        : (prev.power ?? 0),
+    toughness:
+      typeof next.toughness === 'number' && !Number.isNaN(next.toughness)
+        ? next.toughness
+        : (prev.toughness ?? 0),
+    counters: sanitizeCardCounterValues({ ...prevCounters, ...incomingCounters }),
+  };
+}
+
+export function sanitizeCardCounterValues(
+  counters: Record<string, unknown>,
+): Record<string, number> {
+  const sanitized: Record<string, number> = {};
+
+  for (const [id, value] of Object.entries(counters)) {
+    if (value === null || value === undefined) continue;
+    const parsed = typeof value === 'number' ? value : Number(value);
+    if (!Number.isNaN(parsed)) sanitized[id] = parsed;
+  }
+
+  return sanitized;
+}
+
+export function refreshAllCardCounterLabels() {
+  cardsById.forEach(card => {
+    if (card.mesh?.userData.modifiers?.counters) {
+      updateModifiers(card);
+    }
+  });
+}
+
+type LabelEmphasis = false | 'all' | 'left' | 'right';
+
+interface CounterLabelHoverState {
+  cardId: string;
+  counterId: string;
+  ptSide?: PtCounterSide;
+}
+
+let hoveredCounterLabel: CounterLabelHoverState | null = null;
+
+function tagCounterLabelMesh(mesh: Mesh, card: Card, counterId: string) {
+  mesh.userData.isCounterLabel = true;
+  mesh.userData.counterId = counterId;
+  mesh.userData.cardId = card.id;
+  mesh.userData.clientId = card.mesh?.userData.clientId;
+}
+
+function cleanupCounterModifierMeshes(cardMesh: Object3D) {
+  const card = cardsById.get(cardMesh.userData.id);
+  if (!card?.mesh) return;
+  for (const [counterId, mesh] of Object.entries(card.modifiers)) {
+    if (NON_COUNTER_MODIFIER_MESH_KEYS.has(counterId)) continue;
+    card.mesh.remove(mesh as Mesh);
+    delete card.modifiers[counterId];
+  }
+}
+
+function getLabelEmphasis(cardId: string, counterId: string): LabelEmphasis {
+  if (!hoveredCounterLabel) return false;
+  if (
+    hoveredCounterLabel.cardId !== cardId ||
+    hoveredCounterLabel.counterId !== counterId
+  ) {
+    return false;
+  }
+  if (counterId === 'pt') {
+    if (hoveredCounterLabel.ptSide === 'power') return 'left';
+    if (hoveredCounterLabel.ptSide === 'toughness') return 'right';
+    return false;
+  }
+  return 'all';
+}
+
+function applyCounterLabelAppearance(
+  mesh: Mesh,
+  cardId: string,
+  counterId: string,
+  labelText: string,
+) {
+  const emphasis = getLabelEmphasis(cardId, counterId);
+  const label = createLabel(labelText, true, emphasis);
+  mesh.material[4].map = label.texture;
+  mesh.material[5].map = label.texture;
+  mesh.scale.set(label.width, label.height, CARD_THICKNESS + 0.1);
+  mesh.material[4].needsUpdate = true;
+  mesh.material[5].needsUpdate = true;
+}
+
+export function resolveCounterLabelHit(object: Object3D | undefined): CounterLabelHit | undefined {
+  let current: Object3D | null | undefined = object;
+  while (current) {
+    const { isCounterLabel, counterId, cardId } = current.userData ?? {};
+    if (isCounterLabel && counterId && cardId && counterId !== 'token') {
+      return {
+        mesh: current as Mesh,
+        cardId,
+        counterId,
+      };
+    }
+    current = current.parent;
+  }
+}
+
+export function findCounterLabelIntersection(
+  intersects: { object: Object3D; point: Vector3 }[],
+) {
+  for (const hit of intersects) {
+    const counterHit = resolveCounterLabelHit(hit.object);
+    if (counterHit && canAdjustCounterLabelHit(counterHit)) {
+      return { counterHit, point: hit.point };
+    }
+  }
+}
+
+export function resolvePtCounterSide(mesh: Mesh, worldPoint: Vector3): PtCounterSide {
+  const localPoint = worldPoint.clone();
+  mesh.updateWorldMatrix(true, false);
+  mesh.worldToLocal(localPoint);
+  return localPoint.x < 0 ? 'power' : 'toughness';
+}
+
+export function canAdjustCounterLabelHit(hit: CounterLabelHit) {
+  const card = cardsById.get(hit.cardId);
+  const area = getLocalPlayArea();
+  if (!card?.mesh || !area?.isLocalPlayArea) return false;
+  if (card.mesh.userData.location !== 'battlefield') return false;
+  if (card.mesh.userData.clientId !== getLocalPlayerClientId()) return false;
+  return true;
+}
+
+export function setCounterLabelPointerHover(
+  cardId: string | null,
+  counterId: string | null,
+  ptSide?: PtCounterSide | null,
+) {
+  const next: CounterLabelHoverState | null =
+    cardId && counterId
+      ? {
+          cardId,
+          counterId,
+          ptSide: counterId === 'pt' ? ptSide ?? undefined : undefined,
+        }
+      : null;
+  if (
+    hoveredCounterLabel?.cardId === next?.cardId &&
+    hoveredCounterLabel?.counterId === next?.counterId &&
+    hoveredCounterLabel?.ptSide === next?.ptSide
+  ) {
+    return;
+  }
+
+  const cardsToRefresh = new Set<string>();
+  if (hoveredCounterLabel) cardsToRefresh.add(hoveredCounterLabel.cardId);
+  if (next) cardsToRefresh.add(next.cardId);
+  hoveredCounterLabel = next;
+
+  cardsToRefresh.forEach(id => {
+    const card = cardsById.get(id);
+    if (card) updateModifiers(card);
+  });
+}
+
+export function adjustCounterLabelHit(
+  hit: CounterLabelHit,
+  delta: number,
+  ptSide?: PtCounterSide,
+) {
+  if (!canAdjustCounterLabelHit(hit)) return;
+
+  const card = cardsById.get(hit.cardId);
+  const area = getLocalPlayArea();
+  if (!card || !area) return;
+
+  if (hit.counterId === 'pt') {
+    const side = ptSide ?? 'power';
+    area.modifyCard(card, modifiers => ({
+      ...modifiers,
+      [side]: (modifiers[side] ?? 0) + delta,
+    }));
+    return;
+  }
+
+  area.modifyCard(card, modifiers => {
+    const previous = modifiers.counters?.[hit.counterId];
+    const nextValue = (previous ?? 0) + delta;
+    return {
+      ...modifiers,
+      counters: {
+        ...modifiers.counters,
+        [hit.counterId]: previous === undefined ? Math.max(1, nextValue) : nextValue,
+      },
+    };
+  });
+}
 
 let currentSlide = 0;
 let totalSlides = 6;
@@ -829,24 +1067,20 @@ export function setCardData<Field extends keyof CardUserData>(
       setCardData(cardMesh, 'isFlipped', false);
     }
   }
-  if (
-    field === 'location' &&
-    cardMesh.userData.previousValue === 'battlefield' &&
-    value !== 'battlefield'
-  ) {
-    cleanupFromNode(cardMesh);
-    cardMesh.userData.isFlipped = false;
-    cardMesh.userData.modifiers = undefined;
-    cardMesh.userData.isTapped = false;
-  }
-
   if (field === 'location') {
     if (cardMesh.userData.location === 'hand' && value !== 'hand') {
       const card = cardsById.get(cardMesh.userData.id);
       if (card) removeHandManaOverlay(card);
       clearLocalHandFlip(cardMesh.userData.id);
     }
+    if (cardMesh.userData.location === 'battlefield' && value !== 'battlefield') {
+      cleanupCounterModifierMeshes(cardMesh);
+      cardMesh.userData.isFlipped = false;
+      cardMesh.userData.modifiers = undefined;
+      cardMesh.userData.isTapped = false;
+    }
     cardMesh.userData.previousLocation = cardMesh.userData.location;
+    modifiersNeedUpdate = true;
   }
 
   if (field === 'isPublic') {
@@ -867,6 +1101,10 @@ export function setCardData<Field extends keyof CardUserData>(
 
   if (field === 'isFlipped') {
     modifiersNeedUpdate = true;
+    if (cardMesh.userData.location === 'battlefield') {
+      const card = cardsById.get(cardMesh.userData.id);
+      if (card) void syncLoyaltyCounterForCard(card);
+    }
   }
 
   if (modifiersNeedUpdate) {
@@ -961,18 +1199,36 @@ function drawRoundedRect(
   ctx.closePath();
 }
 
-export function createLabel(text: string, badge = false) {
+export function createLabel(text: string, badge = false, emphasis: LabelEmphasis = false) {
   const ctx = textCanvas.getContext('2d', { willReadFrequently: true })!;
   const style = badge ? LABEL_STYLES.counter : LABEL_STYLES.default;
-  const font = style.font;
   const paddingX = style.paddingX;
   const paddingY = style.paddingY;
   const borderRadius = style.borderRadius;
   const textHeight = style.textHeight;
   const borderWidth = 2;
 
-  ctx.font = font;
-  const textWidth = ctx.measureText(text).width;
+  const measureWithEmphasis = (segment: string, segmentEmphasis: boolean) => {
+    ctx.font = segmentEmphasis ? COUNTER_LABEL_EMPHASIS_FONT : COUNTER_LABEL_FONT;
+    return ctx.measureText(segment).width;
+  };
+
+  let textWidth: number;
+  const ptParts = badge && text.includes(' / ') ? text.split(' / ') : null;
+
+  if (ptParts?.length === 2 && (emphasis === 'left' || emphasis === 'right')) {
+    const separator = ' / ';
+    textWidth =
+      measureWithEmphasis(ptParts[0], emphasis === 'left') +
+      measureWithEmphasis(separator, false) +
+      measureWithEmphasis(ptParts[1], emphasis === 'right');
+  } else if (emphasis === 'all') {
+    ctx.font = badge ? COUNTER_LABEL_EMPHASIS_FONT : style.font;
+    textWidth = ctx.measureText(text).width;
+  } else {
+    ctx.font = badge ? COUNTER_LABEL_FONT : style.font;
+    textWidth = ctx.measureText(text).width;
+  }
 
   const innerW = textWidth + paddingX * 2;
   const innerH = textHeight + paddingY * 2;
@@ -994,11 +1250,37 @@ export function createLabel(text: string, badge = false) {
     ctx.stroke();
   }
 
-  ctx.font = font;
   ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'middle';
-  ctx.textAlign = 'center';
-  ctx.fillText(text, textCanvas.width / 2, textCanvas.height / 2);
+  const centerY = textCanvas.height / 2;
+
+  if (ptParts?.length === 2 && (emphasis === 'left' || emphasis === 'right')) {
+    const separator = ' / ';
+    const segments = [
+      { text: ptParts[0], emphasized: emphasis === 'left' },
+      { text: separator, emphasized: false },
+      { text: ptParts[1], emphasized: emphasis === 'right' },
+    ];
+    let cursorX = (textCanvas.width - textWidth) / 2;
+    for (const segment of segments) {
+      ctx.font = segment.emphasized ? COUNTER_LABEL_EMPHASIS_FONT : COUNTER_LABEL_FONT;
+      ctx.textAlign = 'left';
+      const segmentWidth = ctx.measureText(segment.text).width;
+      ctx.fillText(segment.text, cursorX, centerY);
+      cursorX += segmentWidth;
+    }
+  } else {
+    ctx.font =
+      emphasis === 'all'
+        ? badge
+          ? COUNTER_LABEL_EMPHASIS_FONT
+          : style.font
+        : badge
+          ? COUNTER_LABEL_FONT
+          : style.font;
+    ctx.textAlign = 'center';
+    ctx.fillText(text, textCanvas.width / 2, centerY);
+  }
 
   const texture = new Texture(ctx.getImageData(0, 0, textCanvas.width, textCanvas.height));
   texture.minFilter = LinearFilter;
@@ -1051,18 +1333,14 @@ function applyCounterLayout(
 
   const labels = getCounterLabelTextures(card.id, counter.id, value, counter.name);
   const label = expanded || counter.id === 'token' ? labels.expanded : labels.compact;
-
-  mesh.material[4].map = label.texture;
-  mesh.material[5].map = label.texture;
-  mesh.scale.set(label.width, label.height, CARD_THICKNESS + 0.1);
+  const labelText = getCounterLabel(value, counter.name, expanded || counter.id === 'token');
 
   mesh.position.set(
     (CARD_WIDTH / 2 + label.width / 2) * (card.mesh.userData.isFlipped ? -1 : 1),
     CARD_HEIGHT / 2 - index * (label.height + 0.25) - 2.5,
     CARD_THICKNESS / 2 + 0.05,
   );
-  mesh.material[4].needsUpdate = true;
-  mesh.material[5].needsUpdate = true;
+  applyCounterLabelAppearance(mesh, card.id, counter.id, labelText);
 }
 
 function updateCounterLayouts(card: Card, expanded: boolean) {
@@ -1082,7 +1360,12 @@ function updateCounterLayouts(card: Card, expanded: boolean) {
       counter: countersById[counterId],
       value: card.mesh.userData.modifiers?.counters[counterId],
     }))
-    .filter(modifier => modifier.counter && modifier.value)
+    .filter(
+      modifier =>
+        modifier.counter &&
+        shouldRenderLoyaltyCounterOnCard(card, modifier.counter) &&
+        (typeof modifier.value === 'number' || modifier.value),
+    )
     .sort((a, b) => {
       if (a.value === b.value) return a.counter.name.localeCompare(b.counter.name);
       return b.value - a.value;
@@ -1093,6 +1376,14 @@ function updateCounterLayouts(card: Card, expanded: boolean) {
   });
 }
 
+function removeOrphanedCounterMeshes(card: Card, activeCounterIds: Set<string>) {
+  if (!card.mesh) return;
+  for (const [counterId, mesh] of Object.entries(card.modifiers)) {
+    if (NON_COUNTER_MODIFIER_MESH_KEYS.has(counterId) || activeCounterIds.has(counterId)) continue;
+    card.mesh.remove(mesh as Mesh);
+  }
+}
+
 function updateCounter(
   card: Card,
   counter: { id: string; name: string; color: string } | undefined,
@@ -1100,6 +1391,12 @@ function updateCounter(
   index: number,
 ) {
   if (!counter?.id || !card.mesh) return;
+  if (!shouldRenderLoyaltyCounterOnCard(card, counter)) {
+    if (card.modifiers[counter.id]) {
+      card.mesh.remove(card.modifiers[counter.id]);
+    }
+    return;
+  }
   if (!card.modifiers[counter.id]) {
     let geometry = new BoxGeometry(1, 1, 1);
     let mat = new MeshStandardMaterial({ color: 0xffffff });
@@ -1107,9 +1404,12 @@ function updateCounter(
     mesh.scale.set(1, 3, CARD_THICKNESS + 0.1);
     card.mesh.add(mesh);
     mesh.transparent = true;
+    tagCounterLabelMesh(mesh, card, counter.id);
     card.modifiers[counter.id] = mesh;
+  } else {
+    tagCounterLabelMesh(card.modifiers[counter.id] as Mesh, card, counter.id);
   }
-  if (value) {
+  if (typeof value === 'number' || value) {
     if (!card.mesh.children.includes(card.modifiers[counter.id])) {
       card.mesh.add(card.modifiers[counter.id]);
     }
@@ -1133,28 +1433,25 @@ export function updateModifiers(card: Card) {
       mesh.scale.set(7, 3, CARD_THICKNESS + 0.1);
       card.mesh.add(mesh);
       mesh.transparent = true;
+      tagCounterLabelMesh(mesh, card, 'pt');
       mesh.position.set(CARD_WIDTH / 2, -CARD_HEIGHT / 2 - 0.25, CARD_THICKNESS / 2 + 0.05);
       card.modifiers.pt = mesh;
     }
     let mesh = card.modifiers.pt as Mesh;
+    tagCounterLabelMesh(mesh, card, 'pt');
     if (!card.mesh.children.includes(mesh)) {
       card.mesh.add(mesh);
     }
-    let label = createLabel(
-      `${power > 0 ? '+' : ''}${power} / ${toughness > 0 ? '+' : ''}${toughness}`,
-      true,
-    );
-    mesh.material[4].map = label.texture;
-    mesh.material[5].map = label.texture;
-    mesh.scale.set(label.width, label.height, CARD_THICKNESS + 0.1);
-    const xPosition = (CARD_WIDTH / 2 - label.width / 2) * (card.mesh.userData.isFlipped ? -1 : 1);
+    const labelText = `${power > 0 ? '+' : ''}${power} / ${toughness > 0 ? '+' : ''}${toughness}`;
+    const layoutLabel = createLabel(labelText, true);
+    const xPosition =
+      (CARD_WIDTH / 2 - layoutLabel.width / 2) * (card.mesh.userData.isFlipped ? -1 : 1);
     mesh.position.set(
       xPosition,
       -CARD_HEIGHT / 2 - 0.25,
       CARD_THICKNESS / 2 + 0.05,
     );
-    mesh.material[4].needsUpdate = true;
-    mesh.material[5].needsUpdate = true;
+    applyCounterLabelAppearance(mesh, card.id, 'pt', labelText);
   } else if (card.modifiers.pt) {
     card.mesh.remove(card.modifiers.pt);
   }
@@ -1176,13 +1473,23 @@ export function updateModifiers(card: Card) {
         value: card.mesh.userData.modifiers?.counters[counterId],
       };
     })
-    .filter(modifier => modifier.counter);
+    .filter(
+      modifier =>
+        modifier.counter &&
+        shouldRenderLoyaltyCounterOnCard(card, modifier.counter) &&
+        (typeof modifier.value === 'number' || modifier.value),
+    );
 
   if (card.mesh.userData.isToken) {
     modifiers.push({ counter: { name: 'token', id: 'token' }, value: card.mesh.userData.isToken });
   }
 
-  if (!modifiers.length) return;
+  const activeCounterIds = new Set(modifiers.map(modifier => modifier.counter.id));
+
+  if (!modifiers.length) {
+    removeOrphanedCounterMeshes(card, activeCounterIds);
+    return;
+  }
 
   modifiers
     .sort((a, b) => {
@@ -1192,6 +1499,8 @@ export function updateModifiers(card: Card) {
     .forEach((modifier, index) => {
       updateCounter(card, modifier.counter, modifier.value, index);
     });
+
+  removeOrphanedCounterMeshes(card, activeCounterIds);
 }
 
 export function getSerializableCard(cardMesh: Object3D) {

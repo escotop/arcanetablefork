@@ -31,7 +31,7 @@ import {
   registerPlayerSession,
 } from './playerSession';
 import { getActiveJoinClientIdsFromLog, waitForGameLogCatchUp } from '../remoteEvents';
-import { setCounters } from './ui/counterDialog';
+import { resetCustomCountersForSnapshot } from './ui/counterDialog';
 import { refreshMultiplayerSyncState } from './multiplayerSync';
 import { slimPlayAreaStateForSnapshot } from './gameLogEvents';
 import { devLog } from './devLog';
@@ -262,7 +262,7 @@ export async function applyWorldSnapshot(
   snapshot: WorldSnapshot,
 ) {
   resetGameSceneForReplay();
-  setCounters([]);
+  resetCustomCountersForSnapshot(gameId);
 
   const joinClientId =
     findJoinClientIdForSession(gameLog, playerSessionId) ?? getStoredJoinBinding(gameId)?.clientId;

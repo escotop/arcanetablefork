@@ -9,6 +9,7 @@ import {
   setCardData,
   ensureCardMesh,
   loadCardTextures,
+  normalizeCardCounterModifiers,
   updateModifiers,
 } from './lib/card';
 import { Card } from './lib/constants';
@@ -45,7 +46,7 @@ import {
 import { PlayArea } from './lib/playArea';
 import { Deck } from './lib/deck';
 import { transferCard } from './lib/transferCard';
-import { setCounters } from './lib/ui/counterDialog';
+import { registerCustomCounter } from './lib/ui/counterDialog';
 import { isLogMessageStackable } from './lib/ui/log';
 import * as EventCreators from './lib/createEvents';
 import { restackItems } from './lib/utils';
@@ -528,7 +529,9 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
     event.type === 'deckSearch' ||
     event.type === 'deckShuffle' ||
     event.type === 'roll' ||
-    event.type === 'coinFlip'
+    event.type === 'coinFlip' ||
+    event.type === 'cardCustomCounter' ||
+    event.type === 'playerCustomCounter'
   ) {
     await EVENTS[event.type]?.(event, playArea);
     return;
@@ -721,17 +724,18 @@ const EVENTS = {
     const prev = structuredClone(
       card.mesh.userData.modifiers ?? { power: 0, toughness: 0, counters: {} },
     );
-    card.mesh.userData.modifiers = event.payload.userData.modifiers;
-    playCounterSoundForModifierChange(
-      prev,
-      event.payload.userData.modifiers,
-      isRemotePlayerEvent(event),
-    );
+    const incoming = event.payload?.userData?.modifiers ?? {};
+    const next = normalizeCardCounterModifiers(prev, incoming);
+    card.mesh.userData.modifiers = next;
+    playCounterSoundForModifierChange(prev, next, isRemotePlayerEvent(event));
     updateModifiers(card);
   },
   createCounter(event: Event) {
-    setCounters(counters => uniqBy([...counters, event.counter], 'id'));
+    const counter = event.payload?.counter ?? event.counter;
+    registerCustomCounter(counter, event.clientID);
   },
+  cardCustomCounter() {},
+  playerCustomCounter() {},
   animateObject(event: Event, playArea: PlayArea) {
     const target = resolveAnimationTarget(event.payload?.userData?.id, playArea);
     if (!target) return;
@@ -981,8 +985,46 @@ const EVENTS = {
   },
 };
 
+function appendCardCustomCounterLogMessages(
+  clientID: number | undefined,
+  cardId: string | undefined,
+  changes: Array<{
+    cardName?: string;
+    counterId: string;
+    counterName: string;
+    previousValue?: number;
+    value?: number;
+  }>,
+) {
+  if (!changes.length) return;
+
+  for (const change of changes) {
+    addLogMessage({
+      type: 'cardCustomCounter',
+      clientID,
+      payload: {
+        userData: cardId ? { id: cardId } : undefined,
+        cardName: change.cardName,
+        counterId: change.counterId,
+        counterName: change.counterName,
+        previousValue: change.previousValue,
+        value: change.value,
+      },
+    });
+  }
+}
+
 function addLogMessage(event) {
   if (isEphemeralEvent(event)) return;
+
+  if (event.type === 'modifyCard' && event.payload?.counterChanges?.length) {
+    appendCardCustomCounterLogMessages(
+      event.clientID,
+      event.payload?.userData?.id,
+      event.payload.counterChanges,
+    );
+    return;
+  }
 
   const { type, clientID, payload } = event;
   let count = 1;
@@ -992,6 +1034,11 @@ function addLogMessage(event) {
   }
 
   let logPayload = payload;
+  if (type === 'createCounter') {
+    logPayload = {
+      counter: payload?.counter ?? event.counter,
+    };
+  }
   if (type !== 'join') {
     if (payload?.userData) {
       logPayload = {
