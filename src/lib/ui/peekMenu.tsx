@@ -195,6 +195,7 @@ const PeekMenu: Component = props => {
                     cards={playArea()!.peekZone.cards}
                     playArea={playArea()!}
                     fromZone={playArea()!.peekZone}
+                    confirmBeforeMove
                   />
                   <Switch>
                     <Match when={viewField()}>

@@ -49,6 +49,7 @@ import SettingsOverlay from './settingsOverlay';
 import { PlayArea } from '../playArea';
 import Announcement from './announcement';
 import ContextMenuHandler from './context-menu/handler';
+import { MoveBulkConfirmDialogHost } from './moveBulkConfirmDialog';
 import PingWheel from './pingWheel';
 import CameraTiltHints from './cameraTiltHints';
 import HowItPlaysGameHelp from './howItPlaysGameHelp';
@@ -238,6 +239,7 @@ export default function Overlay() {
       <RevealMenu />
       <TokenSearchMenu />
       <ContextMenuHandler playArea={playArea()!} />
+      <MoveBulkConfirmDialogHost />
       <PingWheel />
       <CounterDialog />
       <Announcement />

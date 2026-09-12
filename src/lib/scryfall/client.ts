@@ -1,6 +1,6 @@
 import type { CardEntryDetail } from '../constants';
 
-const SCRYFALL_API = 'https://api.scryfall.com';
+const SCRYFALL_API = '/api/scryfall';
 const MIN_REQUEST_INTERVAL_MS = 110;
 
 const TYPE_ALIASES: Record<string, string> = {

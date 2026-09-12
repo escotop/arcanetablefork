@@ -507,7 +507,13 @@ let lastObservedBarrier: SyncBarrier | undefined = gameState?.get?.('syncBarrier
 export function setupSyncBarrierObserver() {
   if (!gameState) return;
 
-  gameState.observe(() => {
+  gameState.observe((event) => {
+    // Solo reaccionar si el cambio afecta 'syncBarrier'
+    const changedKeys = Array.from(event.changes.keys.keys());
+    if (!changedKeys.includes('syncBarrier')) {
+      return;
+    }
+
     syncReloadOtherTraceFromState('sync-barrier-observer');
     const barrier = gameState.get('syncBarrier') as SyncBarrier | undefined;
     logReloadOther('sync-barrier-observer-fired', {
@@ -538,7 +544,7 @@ export function setupSyncBarrierObserver() {
       });
     }
 
-    if (barrier.status === 'pending') {
+    if (barrier.status === 'pending' && barrier.id !== lastObservedBarrier?.id) {
       logReloadOther('sync-barrier-pending-publish-request', { barrierId: barrier.id });
       publishSnapshotForBarrier(barrier);
     }

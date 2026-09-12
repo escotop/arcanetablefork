@@ -1,13 +1,10 @@
 import { nanoid } from 'nanoid';
-import { MeshStandardMaterial } from 'three';
 import { Card } from './constants';
 import { cardsById } from './globals';
 import { ensureCardMesh, loadCardTextures } from './card';
 import type { CardStack } from './cardStack';
 
 export const ZONE_PRELOAD_TEXTURE_COUNT = 10;
-
-type TextureCache = Map<string, Promise<MeshStandardMaterial>>;
 
 export function cardFromDeckEntry(entry: unknown, clientId: number): Card {
   const record = entry as {
@@ -50,13 +47,13 @@ export function cardFromDeckEntry(entry: unknown, clientId: number): Card {
   return card;
 }
 
-export async function preloadStackTextures(zone: CardStack, cache: TextureCache = new Map()) {
+export async function preloadStackTextures(zone: CardStack) {
   const topCards = zone.cards.slice(-ZONE_PRELOAD_TEXTURE_COUNT).filter(card => card.mesh);
-  await Promise.all(topCards.map(card => loadCardTextures(card, cache)));
-  scheduleDeferredStackTextures(zone, cache);
+  await Promise.all(topCards.map(card => loadCardTextures(card)));
+  scheduleDeferredStackTextures(zone);
 }
 
-function scheduleDeferredStackTextures(zone: CardStack, cache: TextureCache) {
+function scheduleDeferredStackTextures(zone: CardStack) {
   const remaining = zone.cards
     .slice(0, Math.max(0, zone.cards.length - ZONE_PRELOAD_TEXTURE_COUNT))
     .filter(card => card.mesh);
@@ -67,13 +64,12 @@ function scheduleDeferredStackTextures(zone: CardStack, cache: TextureCache) {
   const loadNext = () => {
     if (index >= remaining.length) return;
     const card = remaining[index++];
-    void loadCardTextures(card, cache).finally(() => requestAnimationFrame(loadNext));
+    void loadCardTextures(card).finally(() => requestAnimationFrame(loadNext));
   };
 
   requestAnimationFrame(loadNext);
 }
 
 export function onStackCardAdded(zone: CardStack) {
-  const cache = new Map<string, Promise<MeshStandardMaterial>>();
-  void preloadStackTextures(zone, cache).finally(() => cache.clear());
+  void preloadStackTextures(zone);
 }

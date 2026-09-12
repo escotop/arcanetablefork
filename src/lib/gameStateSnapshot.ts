@@ -274,7 +274,13 @@ export async function importGameState(snapshot: GameStateSnapshot, gameId: strin
 export function setupGameStateImportObserver(getGameId: () => string | undefined) {
   lastSeenImportVersion = gameState.get('importVersion') as number | undefined;
 
-  gameState.observe(() => {
+  gameState.observe((event) => {
+    // Solo reaccionar si el cambio afecta 'importVersion'
+    const changedKeys = Array.from(event.changes.keys.keys());
+    if (!changedKeys.includes('importVersion')) {
+      return;
+    }
+
     const version = gameState.get('importVersion') as number | undefined;
     if (version === undefined || version === lastSeenImportVersion) return;
 

@@ -3,33 +3,77 @@ import solid from 'vite-plugin-solid';
 import solidSvg from 'vite-plugin-solid-svg';
 import path from 'node:path';
 import { handleImageProxyRequest } from './scripts/image-proxy-handler.mjs';
+import { handleMoxfieldProxyRequest } from './scripts/moxfield-proxy-handler.mjs';
+import { handleScryfallProxyRequest } from './scripts/scryfall-proxy-handler.mjs';
 
-function imageProxyDevPlugin() {
+function readRequestBody(req: NodeJS.ReadableStream): Promise<string | undefined> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on('data', chunk => chunks.push(Buffer.from(chunk)));
+    req.on('end', () => {
+      if (!chunks.length) {
+        resolve(undefined);
+        return;
+      }
+      resolve(Buffer.concat(chunks).toString('utf8'));
+    });
+    req.on('error', reject);
+  });
+}
+
+function proxyDevPlugin() {
   return {
-    name: 'image-proxy-dev',
+    name: 'proxy-dev',
     enforce: 'pre' as const,
     configureServer(server: { middlewares: { use: (fn: (req: any, res: any, next: () => void) => void) => void } }) {
       server.middlewares.use(async (req, res, next) => {
-        if (!req.url?.startsWith('/image-proxy')) {
-          next();
+        // Image proxy
+        if (req.url?.startsWith('/image-proxy')) {
+          const requestUrl = new URL(req.url, 'http://localhost');
+          const result = await handleImageProxyRequest(requestUrl.searchParams.get('uri'));
+          const headers = result.headers ?? { 'Content-Type': 'text/plain; charset=utf-8' };
+          res.statusCode = result.status;
+          for (const [key, value] of Object.entries(headers)) {
+            res.setHeader(key, value);
+          }
+          res.end(result.body);
           return;
         }
 
-        const requestUrl = new URL(req.url, 'http://localhost');
-        const result = await handleImageProxyRequest(requestUrl.searchParams.get('uri'));
-        const headers = result.headers ?? { 'Content-Type': 'text/plain; charset=utf-8' };
-        res.statusCode = result.status;
-        for (const [key, value] of Object.entries(headers)) {
-          res.setHeader(key, value);
+        // Moxfield proxy
+        if (req.url?.startsWith('/api/moxfield')) {
+          const result = await handleMoxfieldProxyRequest(req.url);
+          res.statusCode = result.status;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.end(JSON.stringify(result.body));
+          return;
         }
-        res.end(result.body);
+
+        // Scryfall proxy
+        if (req.url?.startsWith('/api/scryfall')) {
+          const body =
+            req.method !== 'GET' && req.method !== 'HEAD' ? await readRequestBody(req) : undefined;
+          const result = await handleScryfallProxyRequest({
+            url: req.url,
+            method: req.method,
+            body,
+          });
+          res.statusCode = result.status;
+          res.setHeader('Content-Type', result.contentType);
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.end(result.body);
+          return;
+        }
+
+        next();
       });
     },
   };
 }
 
 export default defineConfig({
-  plugins: [solid(), solidSvg(), imageProxyDevPlugin()],
+  plugins: [proxyDevPlugin(), solid(), solidSvg()],
   publicDir: path.resolve(__dirname, './public'),
   resolve: {
     alias: {

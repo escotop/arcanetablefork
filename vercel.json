@@ -6,6 +6,8 @@
   "rewrites": [
     { "source": "/image-proxy", "destination": "/api/image-proxy" },
     { "source": "/api/commander-bracket", "destination": "/api/commander-bracket" },
+    { "source": "/api/moxfield/:path*", "destination": "/api/moxfield/:path*" },
+    { "source": "/api/scryfall/:path*", "destination": "/api/scryfall/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

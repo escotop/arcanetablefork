@@ -208,7 +208,7 @@ function hasLoadedFrontTexture(card: Card, frontUrl: string) {
 
 export async function loadCardTextures(
   card: Card,
-  cache: Map<string, Promise<MeshStandardMaterial>> = new Map(),
+  cache: Map<string, Promise<MeshStandardMaterial>> = cardTextureMaterialCache,
 ) {
   if (!getCardImage(card)) {
     await ensureCardImageDetail(card);
@@ -633,6 +633,8 @@ function getFallbackTextureUrl() {
   return normalizeTextureUrl(cardSystem.fallbackImage ?? '/unknown-card-image.webp');
 }
 
+const cardTextureMaterialCache = new Map<string, Promise<MeshStandardMaterial>>();
+
 async function loadTextureMaterial(
   url: string,
   cache: Map<string, Promise<MeshStandardMaterial>>,
@@ -677,7 +679,6 @@ function syncCardFaceUrls(card: Card): [string, string | undefined] {
 }
 
 const localHandFlippedCards = new Set<string>();
-const handFaceTextureCache = new Map<string, Promise<MeshStandardMaterial>>();
 
 export function isLocalHandFlipped(cardId: string) {
   return localHandFlippedCards.has(cardId);
@@ -692,7 +693,7 @@ export async function applyHandCardFace(card: Card, faceIndex: 0 | 1) {
   );
   if (!url) return;
 
-  const mat = await loadTextureMaterial(url, handFaceTextureCache);
+  const mat = await loadTextureMaterial(url, cardTextureMaterialCache);
   card.mesh.material[4] = mat.clone();
   card.mesh.material[4].needsUpdate = true;
 }

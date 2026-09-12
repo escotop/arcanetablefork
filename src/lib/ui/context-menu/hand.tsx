@@ -30,6 +30,7 @@ export default function HandContextMenu(props: { playArea: PlayArea; targetMesh:
         cards={props.playArea.hand.cards}
         playArea={props.playArea}
         fromZone={props.playArea.hand}
+        confirmBeforeMove
       />
     </>
   );

@@ -182,5 +182,12 @@ export function initTurnOrderSync() {
   };
 
   sync();
-  gameState.observe(sync);
+  gameState.observe((event) => {
+    // Solo reaccionar si el cambio afecta 'turnOrder'
+    const changedKeys = Array.from(event.changes.keys.keys());
+    if (!changedKeys.includes('turnOrder')) {
+      return;
+    }
+    sync();
+  });
 }

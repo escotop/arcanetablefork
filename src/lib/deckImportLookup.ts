@@ -10,7 +10,7 @@ import { devLog } from './devLog';
 import { cardSystem } from './globals';
 import { setCachedCardDetailsFromRaw } from './scryfallCache';
 
-const SCRYFALL_COLLECTION_URL = 'https://api.scryfall.com/cards/collection';
+const SCRYFALL_COLLECTION_URL = '/api/scryfall/cards/collection';
 const COLLECTION_CHUNK_SIZE = 75;
 const COLLECTION_CHUNK_DELAY_MS = 120;
 const INDIVIDUAL_LOOKUP_DELAY_MS = 120;

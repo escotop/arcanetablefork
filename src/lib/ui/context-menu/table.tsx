@@ -83,6 +83,7 @@ export default function TableMenuItems(props: MenuActionsProps) {
         cards={props.playArea.battlefieldZone.cards}
         fromZone={props.playArea.battlefieldZone}
         playArea={props.playArea}
+        confirmBeforeMove
       />
       <Dynamic component={menuCtx.item} onClick={() => setSearchParams({ dialog: 'concede' })}>
         Concede

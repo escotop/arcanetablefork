@@ -1018,15 +1018,13 @@ export class PlayArea {
   }
 
   loadTextures() {
-    const cache = new Map<string, Promise<import('three').MeshStandardMaterial>>();
     const jobs = [
-      ...this.battlefieldZone.cards.filter(card => card.mesh).map(card => loadCardTextures(card, cache)),
-      ...this.hand.cards.filter(card => card.mesh).map(card => loadCardTextures(card, cache)),
-      preloadStackTextures(this.graveyardZone, cache),
-      preloadStackTextures(this.exileZone, cache),
+      ...this.battlefieldZone.cards.filter(card => card.mesh).map(card => loadCardTextures(card)),
+      ...this.hand.cards.filter(card => card.mesh).map(card => loadCardTextures(card)),
+      preloadStackTextures(this.graveyardZone),
+      preloadStackTextures(this.exileZone),
     ];
     void Promise.all(jobs).finally(() => {
-      cache.clear();
       this.reapplyBattlefieldOrientations();
     });
   }
