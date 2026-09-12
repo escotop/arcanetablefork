@@ -1,4 +1,4 @@
-import { handleScryfallProxyRequest } from '../../scripts/scryfall-proxy-handler.mjs';
+import { handleScryfallProxyRequest } from '../scripts/scryfall-proxy-handler.mjs';
 
 function readBody(req) {
   if (req.body === undefined || req.body === null) return undefined;
@@ -6,8 +6,19 @@ function readBody(req) {
   return JSON.stringify(req.body);
 }
 
-export default async function handler(req, res) {
-  const path = Array.isArray(req.query?.path) ? req.query.path.join('/') : req.query?.path;
+function getRequestPath(req) {
+  let path = req.query?.path;
+  if (Array.isArray(path)) path = path.join('/');
+  if (path) return String(path);
+
+  const rawUrl = req.url ?? '';
+  const url = rawUrl.startsWith('http') ? new URL(rawUrl) : new URL(rawUrl, 'http://localhost');
+  const pathname = url.pathname.replace(/^\/api\/scryfall\/?/, '');
+  return pathname || undefined;
+}
+
+function buildRequestUrl(req) {
+  const path = getRequestPath(req);
   const query = new URLSearchParams();
 
   for (const [key, value] of Object.entries(req.query ?? {})) {
@@ -20,9 +31,12 @@ export default async function handler(req, res) {
   }
 
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  const requestPath = `/api/scryfall/${path ?? ''}${suffix}`;
+  return `/api/scryfall/${path ?? ''}${suffix}`;
+}
+
+export default async function handler(req, res) {
   const result = await handleScryfallProxyRequest({
-    url: requestPath,
+    url: buildRequestUrl(req),
     method: req.method,
     body: readBody(req),
   });
