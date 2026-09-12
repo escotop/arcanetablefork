@@ -16,7 +16,6 @@ import { canBeCommander, isCommanderCard } from '~/lib/deckCommander';
 import { CardPrintingOption, prefetchCardPrintings, supportsCardPrintings } from '~/lib/deck';
 import { cardSystem } from '~/lib/globals';
 import { cn } from '~/lib/cnUtil';
-import PrintingSelect from './printingSelect';
 
 interface Props {
   storageKey: string;
@@ -118,18 +117,6 @@ const DeckGridCard: Component<Props> = props => {
             }}>
             <StarIcon class={cn('size-4', isCommander() && 'fill-current')} />
           </Button>
-        </div>
-      </Show>
-      <Show when={isToken() && props.card()?.qty > 0 && supportsCardPrintings()}>
-        <div
-          class='absolute bottom-2 right-2 z-20'
-          onPointerDown={e => e.stopPropagation()}
-          onClick={e => e.stopPropagation()}>
-          <PrintingSelect
-            entry={props.card()!}
-            pinnedPrintings={props.pinnedPrintings}
-            onSelect={printing => props.onChangePrinting(props.storageKey, printing)}
-          />
         </div>
       </Show>
       <div

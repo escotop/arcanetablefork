@@ -427,24 +427,19 @@ export const DeckEditor: Component<Props> = props => {
   }
 
   function changeTokenCustomArt(tokenKey: string, option: CustomCardArtOption) {
-    const previous =
-      deckTokenEntryList().find(entry => getTokenKey(entry.detail) === tokenKey) ??
-      deck.tokens?.[tokenKey];
+    const previous = getTokenDeckEntry(tokenKey);
     if (!previous) return;
 
     const nextEntry = applyCustomArtToEntry({
       ...previous,
       customArtUrl: normalizeTextureUrl(option.imageUrl) ?? option.imageUrl,
-      detail: previous.detail,
     });
 
-    updateDeck('tokens', tokenKey, { ...nextEntry, qty: 1 });
+    updateDeck('tokens', tokenKey, { ...nextEntry, qty: previous.qty ?? 1 });
   }
 
   async function changeTokenPrinting(tokenKey: string, printing: CardPrintingOption) {
-    const previous =
-      deckTokenEntryList().find(entry => getTokenKey(entry.detail) === tokenKey) ??
-      deck.tokens?.[tokenKey];
+    const previous = getTokenDeckEntry(tokenKey);
     if (!previous) return;
 
     let updated = await fetchCardInfo({
@@ -473,13 +468,13 @@ export const DeckEditor: Component<Props> = props => {
 
     updateDeck('tokens', tokenKey, {
       ...updated,
-      qty: 1,
+      qty: previous.qty ?? 1,
       categories: previous.categories ?? updated.categories ?? [],
     });
   }
 
   function openTokenPrintingPicker(tokenKey: string) {
-    const entry = deckTokenEntryList().find(item => getTokenKey(item.detail) === tokenKey);
+    const entry = getTokenDeckEntry(tokenKey);
     if (!supportsCardPrintings() || !entry) return;
     if (entry.name) prefetchCardPrintings(entry.name);
     setTokenPrintingPickerKey(tokenKey);
@@ -916,6 +911,19 @@ export const DeckEditor: Component<Props> = props => {
     return mergeTokenPrintings(resolved, deck.tokens);
   });
 
+  function getTokenDeckEntry(tokenKey: string): DetailedCardEntry | undefined {
+    const base = deckTokenEntryList().find(item => getTokenKey(item.detail) === tokenKey);
+    if (!base) return undefined;
+    const saved = deck.tokens?.[tokenKey];
+    if (!saved) return base;
+    return applyCustomArtToEntry({
+      ...base,
+      ...saved,
+      qty: saved.qty ?? base.qty ?? 1,
+      detail: saved.detail ?? base.detail,
+    });
+  }
+
   function getTokenPinnedPrintings(tokenKey: string): CardPrintingOption[] | undefined {
     const defaultEntry = getDefaultTokenEntry(tokenKey, deckTokens());
     return defaultEntry ? [entryToPrintingOption(defaultEntry)] : undefined;
@@ -993,19 +1001,8 @@ export const DeckEditor: Component<Props> = props => {
   const getPrintTokenList = createMemo(() => {
     trackDeep(deck.tokens);
     return deckTokenEntryList()
-      .map(entry => {
-        const key = getTokenKey(entry.detail);
-        const saved = deck.tokens?.[key];
-        const qty = saved?.qty ?? entry.qty ?? 1;
-        if (qty < 1) return undefined;
-        return {
-          ...entry,
-          ...saved,
-          qty,
-          detail: saved?.detail ?? entry.detail,
-        };
-      })
-      .filter((entry): entry is DetailedCardEntry => entry !== undefined);
+      .map(entry => getTokenDeckEntry(getTokenKey(entry.detail)))
+      .filter((entry): entry is DetailedCardEntry => !!entry && (entry.qty ?? 0) > 0);
   });
 
   return (
@@ -1462,7 +1459,7 @@ export const DeckEditor: Component<Props> = props => {
                                   variant='token'
                                   storageKey={tokenKey()}
                                   index={index()}
-                                  card={() => entry}
+                                  card={() => getTokenDeckEntry(tokenKey()) ?? entry}
                                   pinnedPrintings={getTokenPinnedPrintings(tokenKey())}
                                   updateDeck={updateDeck}
                                   onChangePrinting={changeTokenPrinting}
@@ -1707,17 +1704,9 @@ export const DeckEditor: Component<Props> = props => {
             }}
           />
         </Show>
-        <Show
-          when={
-            tokenPrintingPickerKey() &&
-            deckTokenEntryList().find(item => getTokenKey(item.detail) === tokenPrintingPickerKey())
-          }>
+        <Show when={tokenPrintingPickerKey() && getTokenDeckEntry(tokenPrintingPickerKey()!)}>
           <PrintingPickerModal
-            entry={
-              deckTokenEntryList().find(
-                item => getTokenKey(item.detail) === tokenPrintingPickerKey(),
-              )!
-            }
+            entry={getTokenDeckEntry(tokenPrintingPickerKey()!)!}
             pinnedPrintings={getTokenPinnedPrintings(tokenPrintingPickerKey()!)}
             onClose={() => setTokenPrintingPickerKey(undefined)}
             onSelect={printing => {

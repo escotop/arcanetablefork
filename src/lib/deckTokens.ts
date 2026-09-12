@@ -73,7 +73,7 @@ export function mergeTokenPrintings(
     if (override) {
       return applyCustomArtToEntry({
         ...override,
-        qty: 1,
+        qty: override.qty ?? 1,
         name: override.name ?? token.name,
         categories: override.categories ?? [],
         detail: override.detail ?? token,
