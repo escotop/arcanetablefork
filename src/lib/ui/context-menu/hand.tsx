@@ -2,25 +2,29 @@ import { Dynamic } from 'solid-js/web';
 import { PlayArea } from '~/lib/playArea';
 import { useMenuContext } from './context';
 import { Mesh } from 'three';
-import { cardsById } from '~/lib/globals';
-import { devLog } from '~/lib/devLog';
+import { selection } from '~/lib/globals';
+import { resolveInteractiveCard } from '~/lib/card';
 import MoveSubMenu from './move-submenu';
 
 export default function HandContextMenu(props: { playArea: PlayArea; targetMesh: Mesh }) {
   const ctx = useMenuContext();
-  const getCard = () => {
-    const card = cardsById.get(props.targetMesh.userData.id);
-    if (!card)
-      devLog.error(`card not in cardsById map`, JSON.stringify(props.targetMesh.userData));
-    return card;
+
+  let meshes = () => {
+    const selected = selection.selectedItems.filter(mesh => mesh.userData.location === 'hand');
+    return selected.length > 0 ? selected : [props.targetMesh];
   };
+
+  function selectedCards() {
+    return meshes()
+      .map(mesh => resolveInteractiveCard(mesh))
+      .filter(Boolean);
+  }
+
   return (
     <>
-      <Dynamic component={ctx.item} onClick={() => props.playArea.reveal(getCard())}>
-        Reveal
-      </Dynamic>
       <MoveSubMenu
-        cards={[getCard()].filter(Boolean)}
+        onComplete={() => selection.clearSelection()}
+        cards={selectedCards()}
         playArea={props.playArea}
         fromZone={props.playArea.hand}
       />

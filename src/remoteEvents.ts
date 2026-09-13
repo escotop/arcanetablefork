@@ -523,6 +523,7 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
     event.type === 'peekCards' ||
     event.type === 'deleteClone' ||
     event.type === 'deckPeek' ||
+    event.type === 'battlefieldPeek' ||
     event.type === 'deckPeekReorder' ||
     event.type === 'deckPeekMove' ||
     event.type === 'deckDraw' ||
@@ -924,6 +925,7 @@ const EVENTS = {
     void playArea?.deck.flipTop();
   },
   deckPeek() {},
+  battlefieldPeek() {},
   roll() {},
   coinFlip() {},
   deckPeekReorder(event: Event, playArea: PlayArea) {

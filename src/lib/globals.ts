@@ -44,7 +44,8 @@ import TextureLoaderWorker from './textureLoaderWorker?worker';
 import { type TextureLoaderWorkerType } from './textureLoaderWorker';
 import { sanitizeGameLogEvent } from './gameLogEvents';
 import { logReloadOther } from './reloadOtherPlayerDebug';
-import { cleanupFromNode, getFocusCameraPositionRelativeTo } from './utils';
+import { cleanupFromNode, canPeekFaceDownBattlefieldCardInFocusPanel, getFocusCameraPositionRelativeTo } from './utils';
+import { createBattlefieldPeekLogEvent } from './createEvents';
 import { Selection } from './selection';
 import { captureConsole } from './console-capture';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
@@ -91,6 +92,32 @@ export let camera: PerspectiveCamera;
 export let focusRenderer: WebGLRenderer;
 export let focusCamera: PerspectiveCamera;
 export let [hoverSignal, setHoverSignal] = createSignal<HoverSignal>();
+export let [focusPanelFacePeekActive, setFocusPanelFacePeekActive] = createSignal(false);
+
+let focusPanelFacePeekTargetId: string | undefined;
+
+export function syncFocusPanelFacePeekForHover(mesh?: THREE.Object3D) {
+  const id = mesh?.userData?.id as string | undefined;
+  if (id !== focusPanelFacePeekTargetId) {
+    setFocusPanelFacePeekActive(false);
+    focusPanelFacePeekTargetId = id;
+  }
+}
+
+export function toggleFocusPanelFacePeek() {
+  const mesh = hoverSignal()?.mesh;
+  if (!mesh || !canPeekFaceDownBattlefieldCardInFocusPanel(mesh)) return;
+  const willPeek = !focusPanelFacePeekActive();
+  setFocusPanelFacePeekActive(willPeek);
+  if (willPeek) {
+    dispatchGameEvent(createBattlefieldPeekLogEvent());
+  }
+}
+
+export function resetFocusPanelFacePeek() {
+  setFocusPanelFacePeekActive(false);
+  focusPanelFacePeekTargetId = undefined;
+}
 export let [contextMenuSignal, setContextMenuSignal] = createSignal<ContextMenuSignal>();
 export let [customCardSpawnScreenPoint, setCustomCardSpawnScreenPoint] = createSignal<{
   x: number;
@@ -1100,7 +1127,9 @@ export function kickPlayer(targetClientId: number, gameId: string) {
 export function updateFocusCamera(target: Object3D) {
   if (focusCamera.userData.isAnimating) return;
 
-  const { position, lookAt, up } = getFocusCameraPositionRelativeTo(target);
+  const { position, lookAt, up } = getFocusCameraPositionRelativeTo(target, {
+    facePeek: focusPanelFacePeekActive(),
+  });
 
   focusCamera.position.copy(position);
   focusCamera.up.copy(up);

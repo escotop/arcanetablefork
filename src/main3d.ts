@@ -56,6 +56,7 @@ import {
   provider,
   renderer,
   scene,
+  resetFocusPanelFacePeek,
   scrollTarget,
   selection,
   sendEvent,
@@ -67,6 +68,7 @@ import {
   setCardBackTexture,
   setContextMenuSignal,
   setHoverSignal,
+  syncFocusPanelFacePeekForHover,
   setIsIntitialized,
   setLocalPlayerClientId,
   onLocalPlayAreaChanged,
@@ -566,6 +568,7 @@ export async function localInit(gameOptions: GameOptions) {
   document.addEventListener('mousemove', onDocumentMouseMove, false);
   document.documentElement.addEventListener('mouseleave', onDocumentMouseLeave, false);
   document.addEventListener('click', onDocumentClick, false);
+  document.addEventListener('pointerup', onDocumentPointerUp, true);
   document.addEventListener('dragstart', onDocumentDragStart, false);
   document.addEventListener('dragend', onDocumentDragEnd, false);
   document.addEventListener('mouseup', onDocumentDrop, false);
@@ -921,6 +924,9 @@ function onContextMenu(event: PointerEvent) {
 
   if (!intersects.length) return;
 
+  intersects = filterEmptyStackZoneIntersections(intersects);
+  if (!intersects.length) return;
+
   const counterInteraction = findCounterLabelIntersection(intersects);
   if (counterInteraction) {
     const ptSide =
@@ -982,11 +988,14 @@ function onDocumentClick(event: PointerEvent) {
   raycaster.setFromCamera(mouse, camera);
   let intersects = raycaster.intersectObject(scene);
 
-  if (selection.onClick(event, intersects[0]?.object)) return;
+  const primaryIntersection = getPrimarySceneIntersection(intersects);
+  if (selection.onClick(event, primaryIntersection?.object)) return;
 
   if (dragTargets?.length) return;
 
-  if (!intersects.length) return;
+  if (!primaryIntersection) return;
+
+  intersects = filterEmptyStackZoneIntersections(intersects);
 
   const counterInteraction = findCounterLabelIntersection(intersects);
   if (counterInteraction) {
@@ -998,7 +1007,7 @@ function onDocumentClick(event: PointerEvent) {
     return;
   }
 
-  let target = intersects[0].object;
+  let target = primaryIntersection.object;
 
   if (!target) return;
 
@@ -1075,6 +1084,42 @@ function resolveStackTopCardMesh(zoneId: string | undefined) {
   return zone.cards[zone.cards.length - 1].mesh;
 }
 
+function resolveStackZoneFromObject(object: THREE.Object3D) {
+  let current: THREE.Object3D | null = object;
+  while (current) {
+    const ud = current.userData;
+    const zoneName = ud?.location ?? ud?.zone;
+    if (zoneName !== 'graveyard' && zoneName !== 'exile') {
+      current = current.parent;
+      continue;
+    }
+
+    const zoneId = ud?.zoneId ?? ud?.id;
+    if (!zoneId) {
+      current = current.parent;
+      continue;
+    }
+
+    const zone = zonesById.get(zoneId);
+    if (zone && 'cards' in zone) return zone;
+    return undefined;
+  }
+  return undefined;
+}
+
+function isEmptyStackZoneObject(object: THREE.Object3D) {
+  const zone = resolveStackZoneFromObject(object);
+  return zone !== undefined && zone.cards.length === 0;
+}
+
+function filterEmptyStackZoneIntersections(intersections: THREE.Intersection[]) {
+  return intersections.filter(hit => !isEmptyStackZoneObject(hit.object));
+}
+
+function getPrimarySceneIntersection(intersections: THREE.Intersection[]) {
+  return filterEmptyStackZoneIntersections(intersections)[0];
+}
+
 function resolveInteractiveTarget(object: THREE.Object3D): THREE.Object3D {
   let current: THREE.Object3D | null = object;
   while (current) {
@@ -1121,14 +1166,30 @@ function onDocumentDragStart(event: PointerEvent) {
   }
 
   let intersects = raycaster.intersectObject(scene);
+  intersects = filterEmptyStackZoneIntersections(intersects);
   if (!intersects.length) return;
 
   let intersection = intersects[0];
   let target = resolveInteractiveTarget(intersection.object);
-  let targets = [target];
 
   if (target.userData.zone === 'deck' || target.userData.location === 'deck') return;
   if (target.userData.location === 'hand' && !isUnderLocalHand(target)) return;
+
+  const isBattlefieldTarget =
+    target.userData.location === 'battlefield' || target.userData.zone === 'battlefield';
+
+  if ((event.ctrlKey || event.metaKey) && isBattlefieldTarget) {
+    setHoverSignal();
+    selection.startRectangleSelection(event);
+    event.stopPropagation();
+    return;
+  }
+
+  if (selection.isDown || selection.helper.enabled) {
+    event.preventDefault();
+    return;
+  }
+
   if (!cardsById.has(target.userData.id)) return;
 
   if (!target.userData.isInteractive) {
@@ -1136,6 +1197,8 @@ function onDocumentDragStart(event: PointerEvent) {
     selection.startRectangleSelection(event);
     return;
   }
+
+  let targets = [target];
 
   if (selection.selectedItems.length && selection.selectedItems.includes(intersection.object)) {
     targets = selection.selectedItems.slice();
@@ -1209,6 +1272,49 @@ function isPriorityStackZoneHit(intersection: THREE.Intersection) {
   return location === 'deck' || location === 'graveyard' || location === 'exile';
 }
 
+function getDraggedCloneSourceIds(dragged: THREE.Object3D[]) {
+  const ids = new Set<string>();
+  for (const target of dragged) {
+    const sourceId = target.userData.clonedFromId;
+    if (typeof sourceId === 'string' && sourceId.length > 0) {
+      ids.add(sourceId);
+    }
+  }
+  return ids;
+}
+
+function isExcludedDragRaycastHit(
+  hit: THREE.Intersection,
+  targetsById: Record<string, THREE.Object3D>,
+  excludedCloneSourceIds: Set<string>,
+) {
+  const hitId = hit.object.userData.id;
+  if (hitId && targetsById[hitId]) return true;
+  if (hitId && excludedCloneSourceIds.has(hitId)) return true;
+  return false;
+}
+
+function filterDragRaycastHits(
+  hits: THREE.Intersection[],
+  dragged: THREE.Object3D[],
+  { excludeHand = false }: { excludeHand?: boolean } = {},
+) {
+  const targetsById = Object.fromEntries(dragged.map(target => [target.userData.id, target]));
+  const excludedCloneSourceIds = getDraggedCloneSourceIds(dragged);
+  return hits.filter(hit => {
+    if (isExcludedDragRaycastHit(hit, targetsById, excludedCloneSourceIds)) return false;
+    if (excludeHand && isHandZoneHit(hit)) return false;
+    return true;
+  });
+}
+
+function isGraveyardOrExileHit(intersection: THREE.Intersection) {
+  const zone = resolveDropZone(intersection.object);
+  if (zone?.zone === 'graveyard' || zone?.zone === 'exile') return true;
+  const location = intersection.object.userData.location;
+  return location === 'graveyard' || location === 'exile';
+}
+
 
 function isDraggingOutOfHand(dragged: THREE.Object3D[]) {
   if (!dragged.every(target => target.userData.location === 'hand')) return false;
@@ -1228,12 +1334,12 @@ function getDragRestackIntersections(dragged: THREE.Object3D[]) {
     if (handIntersection) return [handIntersection];
   }
 
-  const targetsById = Object.fromEntries(dragged.map(target => [target.userData.id, target]));
-  const filtered = raycaster.intersectObject(scene).filter(hit => {
-    if (targetsById[hit.object.userData.id]) return false;
-    if (isHandZoneHit(hit)) return false;
-    return true;
-  });
+  const filtered = filterDragRaycastHits(raycaster.intersectObject(scene), dragged);
+  const draggingClone = dragged.some(target => target.userData.isClone);
+  if (draggingClone) {
+    const graveyardOrExileHit = filtered.find(hit => isGraveyardOrExileHit(hit));
+    if (graveyardOrExileHit) return [graveyardOrExileHit];
+  }
   if (filtered.length) return filtered;
 
   if (isDraggingOutOfHand(dragged)) {
@@ -1280,18 +1386,22 @@ function findDropIntersection(
   dragged: THREE.Object3D[],
   { excludeHand = false }: { excludeHand?: boolean } = {},
 ) {
-  const targetsById = Object.fromEntries(dragged.map(target => [target.userData.id, target]));
-  const sceneHits = raycaster.intersectObject(scene);
+  const sceneHits = filterDragRaycastHits(raycaster.intersectObject(scene), dragged, {
+    excludeHand,
+  });
+  const draggingClone = dragged.some(target => target.userData.isClone);
+
+  if (draggingClone) {
+    for (const hit of sceneHits) {
+      if (isGraveyardOrExileHit(hit)) return hit;
+    }
+  }
 
   for (const hit of sceneHits) {
-    if (targetsById[hit.object.userData.id]) continue;
-    if (excludeHand && isHandZoneHit(hit)) continue;
     if (isPriorityStackZoneHit(hit)) return hit;
   }
 
   for (const hit of sceneHits) {
-    if (targetsById[hit.object.userData.id]) continue;
-    if (excludeHand && isHandZoneHit(hit)) continue;
     if (resolveDropZone(hit.object)) return hit;
     if (
       hit.object.userData.isInteractive ||
@@ -1327,12 +1437,23 @@ function getBattlefieldDropPosition(
   return anchor.clone().add(offset);
 }
 
-function onDocumentDragEnd(event: DragEvent) {
-  if (!isPingWheelDragActive()) return;
+function onDocumentPointerUp(event: PointerEvent) {
+  if (event.button !== 0) return;
+  if (!selection.isDown && !selection.helper.enabled) return;
+  selection.completeRectangleSelection(event);
+}
 
-  event.preventDefault();
-  event.stopPropagation();
-  finishPingWheelInteraction(event.clientX, event.clientY);
+function onDocumentDragEnd(event: DragEvent) {
+  if (isPingWheelDragActive()) {
+    event.preventDefault();
+    event.stopPropagation();
+    finishPingWheelInteraction(event.clientX, event.clientY);
+    return;
+  }
+
+  if (selection.isDown || selection.helper.enabled) {
+    selection.completeRectangleSelection(event);
+  }
 }
 
 async function onDocumentDrop(event) {
@@ -1354,6 +1475,7 @@ async function onDocumentDrop(event) {
 
   if (selection.isDown || selection.helper.enabled) {
     selection.completeRectangleSelection(event);
+    return;
   }
   if (!dragTargets?.length) return;
 
@@ -1611,6 +1733,7 @@ function applyHoverTarget(mesh: THREE.Object3D) {
   const tether = getCardMeshTetherPoint(mesh);
   hover = { object: mesh, colors: [] };
   setCounterLabelHoverTarget(mesh.userData?.id ?? null);
+  syncFocusPanelFacePeekForHover(mesh);
   setHoverSignal({ mesh: mesh as THREE.Mesh, tether, mouse });
   focusOn(mesh);
   outlinePass.selectedObjects = [mesh];
@@ -1736,6 +1859,7 @@ function clearHoverSignal() {
   clearSpanishPreview();
   setCounterLabelPointerHover(null, null, null);
   setCounterLabelHoverTarget(null);
+  resetFocusPanelFacePeek();
   clearFocusPanelState();
   setHoverSignal(signal => (signal?.mouse ? { mouse: signal.mouse } : undefined));
   focusCamera.userData.target = undefined;
@@ -1964,6 +2088,8 @@ function render3d(delta: number) {
         return false;
       return true;
     });
+
+    intersects = filterEmptyStackZoneIntersections(intersects);
 
     highlightHover(intersects);
   }

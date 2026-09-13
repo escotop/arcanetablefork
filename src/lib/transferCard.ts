@@ -115,6 +115,12 @@ export async function transferCard<AddOptions extends {}>(
     if (card.mesh.userData.isToken) {
       addOptions.destroy = true;
     }
+    if (
+      (toZone.zone === 'graveyard' || toZone.zone === 'exile') &&
+      card.mesh.userData.isClone
+    ) {
+      addOptions.destroy = true;
+    }
     card.mesh.userData.modifiers = undefined;
     updateModifiers(card);
   }

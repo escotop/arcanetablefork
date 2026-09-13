@@ -1,4 +1,4 @@
-import { Component, createEffect, createMemo, createSignal, For, Show } from 'solid-js';
+import { Component, createEffect, createMemo, createSignal, For } from 'solid-js';
 import { Mesh, Raycaster, Vector3 } from 'three';
 import { Button } from '~/components/ui/button';
 import {
@@ -29,14 +29,15 @@ import MoveMenu from './moveMenu';
 import { shuffleItems } from '../utils';
 
 const CardBattlefieldMenu: Component<{ playArea: PlayArea; cardMesh?: Mesh }> = props => {
-  function updateCardModifiers(fn) {
-    const card = resolveInteractiveCard(props.cardMesh);
-    if (!card) return;
-    props.playArea.modifyCard(card, fn);
-  }
-
   let meshes = () =>
     selection.selectedItems.length > 0 ? selection.selectedItems : [props.cardMesh];
+
+  function updateCardModifiers(fn) {
+    for (const mesh of meshes()) {
+      const card = resolveInteractiveCard(mesh);
+      if (card) props.playArea.modifyCard(card, fn);
+    }
+  }
 
   let cardText = () => {
     let count = selection.selectedItems.length;
@@ -117,14 +118,34 @@ function CounterRow(props: CounterRowProps) {
 }
 
 export interface CoreCountersProps {
-  cardMesh: Mesh;
+  cardMesh?: Mesh;
+  cardMeshes?: Mesh[];
   playArea: PlayArea;
-  
+}
+
+function selectedMeshes(props: CoreCountersProps): Mesh[] {
+  if (props.cardMeshes?.length) return props.cardMeshes.filter(Boolean);
+  if (props.cardMesh) return [props.cardMesh];
+  return [];
 }
 
 export function CoreCounters(props: CoreCountersProps) {
-  let [power, setPower] = createSignal(props.cardMesh?.userData.modifiers?.power ?? 0);
-  let [toughness, setToughness] = createSignal(props.cardMesh?.userData?.modifiers?.toughness ?? 0);
+  const meshes = () => selectedMeshes(props);
+  let [power, setPower] = createSignal(0);
+  let [toughness, setToughness] = createSignal(0);
+
+  createEffect(() => {
+    const first = meshes()[0];
+    setPower(first?.userData.modifiers?.power ?? 0);
+    setToughness(first?.userData.modifiers?.toughness ?? 0);
+  });
+
+  function modifyAll(fn) {
+    for (const mesh of meshes()) {
+      const card = resolveInteractiveCard(mesh);
+      if (card) props.playArea.modifyCard(card, fn);
+    }
+  }
 
   return (
     <>
@@ -132,11 +153,9 @@ export function CoreCounters(props: CoreCountersProps) {
         value={power()}
         style='width: 6rem'
         onChange={rawValue => {
-          let card = resolveInteractiveCard(props.cardMesh);
-          if (!card) return;
           let value = parseInt(rawValue, 10);
           setPower(rawValue);
-          props.playArea.modifyCard(card, modifiers => ({
+          modifyAll(modifiers => ({
             ...modifiers,
             power: value,
           }));
@@ -153,11 +172,9 @@ export function CoreCounters(props: CoreCountersProps) {
           variant='ghost'
           style='width: 1rem; height:  1rem; padding: 0; margin: 0 0.5rem'
           onClick={() => {
-            let card = resolveInteractiveCard(props.cardMesh);
-            if (!card) return;
             setPower(power => parseInt(power.toString(), 10) + 1);
             setToughness(toughness => parseInt(toughness.toString(), 10) + 1);
-            props.playArea.modifyCard(card, modifiers => ({
+            modifyAll(modifiers => ({
               ...modifiers,
               power: (modifiers.power ?? 0) + 1,
               toughness: (modifiers.toughness ?? 0) + 1,
@@ -179,11 +196,9 @@ export function CoreCounters(props: CoreCountersProps) {
           variant='ghost'
           style='width: 1rem; height:  1rem; padding: 0; margin: 0 0.5rem'
           onClick={() => {
-            let card = resolveInteractiveCard(props.cardMesh);
-            if (!card) return;
             setPower(power => parseInt(power.toString(), 10) - 1);
             setToughness(toughness => parseInt(toughness.toString(), 10) - 1);
-            props.playArea.modifyCard(card, modifiers => ({
+            modifyAll(modifiers => ({
               ...modifiers,
               power: (modifiers.power ?? 0) - 1,
               toughness: (modifiers.toughness ?? 0) - 1,
@@ -206,11 +221,9 @@ export function CoreCounters(props: CoreCountersProps) {
         value={toughness()}
         style='width: 6rem'
         onChange={rawValue => {
-          let card = resolveInteractiveCard(props.cardMesh);
-          if (!card) return;
           let value = parseInt(rawValue, 10);
           setToughness(rawValue);
-          props.playArea.modifyCard(card, modifiers => ({
+          modifyAll(modifiers => ({
             ...modifiers,
             toughness: value,
           }));

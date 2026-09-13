@@ -5,7 +5,7 @@ import set from 'lodash-es/set';
 import { twMerge } from 'tailwind-merge';
 import { Box3, Euler, Intersection, Matrix4, Mesh, Object3D, Quaternion, Vector3 } from 'three';
 import { CARD_STACK_OFFSET, CARD_THICKNESS, CARD_WIDTH } from './constants';
-import { cardsById, camera, zonesById } from './globals';
+import { cardsById, camera, getLocalPlayerClientId, zonesById } from './globals';
 import { createAnimationEvent } from './createEvents';
 import { animateObject } from './animations';
 import { resolveStackAnchor } from './footprintOverlap';
@@ -93,7 +93,22 @@ export function getGlobalRotation(mesh: Object3D) {
   let euler = new Euler().setFromQuaternion(initialQuart);
   return euler;
 }
-export function getFocusCameraPositionRelativeTo(target: Object3D) {
+function canPeekFaceDownBattlefieldCardInFocusPanel(target: Object3D) {
+  const ud = target.userData;
+  return (
+    ud?.location === 'battlefield' &&
+    ud?.isFlipped === true &&
+    !ud?.isDoubleSided &&
+    ud?.clientId === getLocalPlayerClientId()
+  );
+}
+
+export { canPeekFaceDownBattlefieldCardInFocusPanel };
+
+export function getFocusCameraPositionRelativeTo(
+  target: Object3D,
+  options?: { facePeek?: boolean },
+) {
   const distance = 26;
   const box = new Box3().setFromObject(target);
   const lookAt = box.getCenter(new Vector3());
@@ -103,9 +118,14 @@ export function getFocusCameraPositionRelativeTo(target: Object3D) {
   const backNormal = frontNormal.clone().negate();
   const up = new Vector3(0, 1, 0).applyQuaternion(worldQuat).normalize();
 
-  // Face whose normal points toward the main camera is the one the player sees.
   const toCamera = camera.position.clone().sub(lookAt).normalize();
-  const faceNormal = frontNormal.dot(toCamera) >= backNormal.dot(toCamera) ? frontNormal : backNormal;
+  let faceNormal =
+    frontNormal.dot(toCamera) >= backNormal.dot(toCamera) ? frontNormal : backNormal;
+
+  if (options?.facePeek && canPeekFaceDownBattlefieldCardInFocusPanel(target)) {
+    faceNormal = frontNormal;
+  }
+
   const position = lookAt.clone().add(faceNormal.multiplyScalar(distance));
 
   return { position, lookAt, up };

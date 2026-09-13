@@ -20,15 +20,21 @@ export default function BattlefieldContextMenu(props: { targetMesh: Mesh; playAr
   let meshes = () =>
     selection.selectedItems.length > 0 ? selection.selectedItems : [props.targetMesh];
 
+  function selectedCards() {
+    return meshes()
+      .map(mesh => resolveInteractiveCard(mesh))
+      .filter(Boolean);
+  }
+
   function getCustomCounterValue(counterId: string) {
     modifierTick();
     return props.targetMesh?.userData.modifiers?.counters?.[counterId];
   }
 
   function updateCardModifiers(fn) {
-    const card = resolveInteractiveCard(props.targetMesh);
-    if (!card) return;
-    props.playArea.modifyCard(card, fn);
+    for (const card of selectedCards()) {
+      props.playArea.modifyCard(card, fn);
+    }
     setModifierTick(tick => tick + 1);
   }
 
@@ -51,9 +57,10 @@ export default function BattlefieldContextMenu(props: { targetMesh: Mesh; playAr
   }
 
   function visibleCustomCounters() {
-    const card = resolveInteractiveCard(props.targetMesh);
+    const cards = selectedCards();
     return localCustomCounters().filter(
-      counter => !isLoyaltyCounter(counter) || (card && isPlaneswalkerFaceVisible(card)),
+      counter =>
+        !isLoyaltyCounter(counter) || cards.some(card => isPlaneswalkerFaceVisible(card)),
     );
   }
 
@@ -70,7 +77,7 @@ export default function BattlefieldContextMenu(props: { targetMesh: Mesh; playAr
         <Dynamic component={ctx.trigger}>Counters</Dynamic>
         <Dynamic component={ctx.content}>
           <Dynamic component={ctx.item} closeOnSelect={false} style='font-family: monospace;'>
-            <CoreCounters cardMesh={props.targetMesh} playArea={props.playArea} />
+            <CoreCounters cardMeshes={meshes()} playArea={props.playArea} />
           </Dynamic>
           <Show when={visibleCustomCounters().length}>
             <Dynamic component={ctx.separator} />
@@ -107,8 +114,7 @@ export default function BattlefieldContextMenu(props: { targetMesh: Mesh; playAr
           <Dynamic
             component={ctx.item}
             onClick={() => {
-              const card = resolveInteractiveCard(props.targetMesh);
-              openCounterDialog({ cardId: card?.id });
+              openCounterDialog({ cardIds: selectedCards().map(card => card.id) });
             }}>
             Create New Counter
           </Dynamic>
@@ -130,7 +136,11 @@ export default function BattlefieldContextMenu(props: { targetMesh: Mesh; playAr
       <Dynamic component={ctx.menu}>
         <Dynamic component={ctx.trigger}>Clone</Dynamic>
         <Dynamic component={ctx.content}>
-          <Dynamic component={ctx.item} onClick={() => props.playArea.clone(props.targetMesh?.userData.id)}>
+          <Dynamic
+            component={ctx.item}
+            onClick={() => {
+              meshes().forEach(mesh => props.playArea.clone(mesh.userData.id));
+            }}>
             Once
             <Dynamic
               component={ctx.shortcut}
@@ -140,13 +150,17 @@ export default function BattlefieldContextMenu(props: { targetMesh: Mesh; playAr
           </Dynamic>
           <Dynamic
             component={ctx.item}
-            onClick={() =>
+            onClick={() => {
+              const selected = meshes();
               setSearchParams({
                 dialog: 'battlefield-context-clone',
-                cardId: props.targetMesh.userData.id,
-                cardName: props.targetMesh.userData.card.detail.name,
-              })
-            }>
+                cardIds: selected.map(mesh => mesh.userData.id).join(','),
+                cardName:
+                  selected.length > 1
+                    ? `${selected.length} cards`
+                    : props.targetMesh.userData.card.detail.name,
+              });
+            }}>
             X Times
           </Dynamic>
         </Dynamic>
@@ -169,14 +183,23 @@ export function BattlefieldContextDialogs(props: { playArea: PlayArea }) {
       <Match when={searchParams.dialog === 'battlefield-context-clone'}>
         <CardQtyDialog
           onSubmit={value => {
-            const cardId = searchParams.cardId as string;
-            doXTimes(value, () => props.playArea.clone(cardId));
+            const cardIds =
+              (searchParams.cardIds as string | undefined)?.split(',').filter(Boolean) ??
+              (searchParams.cardId ? [searchParams.cardId as string] : []);
+            doXTimes(value, () => {
+              cardIds.forEach(cardId => props.playArea.clone(cardId));
+            });
           }}
           verb='Clone'
           item={['Cards', 'Card', 'Cards'] as const}
           header={`Clone "${searchParams.cardName}"`}
           onClose={() =>
-            setSearchParams({ dialog: undefined, cardId: undefined, cardName: undefined })
+            setSearchParams({
+              dialog: undefined,
+              cardId: undefined,
+              cardIds: undefined,
+              cardName: undefined,
+            })
           }
         />
       </Match>

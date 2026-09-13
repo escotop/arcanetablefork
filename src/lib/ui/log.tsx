@@ -224,6 +224,8 @@ export function parseLogEntry(entry) {
           peeked at <strong>{entry.payload?.count ?? 1}</strong> top cards of the deck
         </>
       );
+    case 'battlefieldPeek':
+      return 'peeked at a card in his battlefield';
     case 'deckPeekReorder':
       return 'reordered deck while peeking';
     case 'deckPeekMove':

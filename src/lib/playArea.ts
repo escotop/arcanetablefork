@@ -905,6 +905,7 @@ export class PlayArea {
     let card = cardsById.get(id)!;
     let newCard = cloneCard(card, newId);
     setCardData(newCard.mesh, 'isClone', true);
+    setCardData(newCard.mesh, 'clonedFromId', id);
     card.mesh.parent?.add(newCard.mesh);
   }
 

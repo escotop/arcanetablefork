@@ -68,7 +68,8 @@ interface CardSearchModalProps {
 
 export const CardSearchModal: Component<CardSearchModalProps> = props => {
   const playArea = () => getLocalPlayArea();
-  const [selectedCard, setSelectedCard] = createSignal<Card | null>(null);
+  const [selectedCardIds, setSelectedCardIds] = createSignal<Set<string>>(new Set());
+  const [selectionAnchorId, setSelectionAnchorId] = createSignal<string | null>(null);
   const [viewMode, setViewMode] = createSignal<'grid' | 'list'>('grid');
   const [hoveredCard, setHoveredCard] = createSignal<Card | null>(null);
   const [flippedCardIds, setFlippedCardIds] = createSignal<Set<string>>(new Set());
@@ -110,6 +111,60 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
 
   const canReorderPeek = () =>
     props.zone === 'peek' && props.deckViewMode === 'peek' && !props.readOnly;
+
+  const canMultiSelectPeek = () => props.zone === 'peek' && !props.readOnly;
+
+  function clearPeekSelection() {
+    setSelectedCardIds(new Set());
+    setSelectionAnchorId(null);
+  }
+
+  function isCardSelected(cardId: string) {
+    return canMultiSelectPeek() && selectedCardIds().has(cardId);
+  }
+
+  function getContextMenuCards(card: Card) {
+    if (!canMultiSelectPeek()) return [card];
+    const ids = selectedCardIds();
+    if (ids.size > 0 && ids.has(card.id)) {
+      return filteredCards().filter(entry => ids.has(entry.id));
+    }
+    return [card];
+  }
+
+  function handlePeekSelectionClick(card: Card, e: MouseEvent): boolean {
+    if (!canMultiSelectPeek()) return false;
+    if (!(e.ctrlKey || e.metaKey)) return false;
+
+    e.preventDefault();
+    e.stopPropagation();
+    mouseDownCardId = null;
+    suppressNextCardClick = true;
+
+    const cards = filteredCards();
+    const cardIndex = cards.findIndex(entry => entry.id === card.id);
+    if (cardIndex === -1) return true;
+
+    if (e.shiftKey) {
+      const anchorId = selectionAnchorId();
+      const anchorIndex = anchorId ? cards.findIndex(entry => entry.id === anchorId) : cardIndex;
+      const start = Math.min(anchorIndex === -1 ? cardIndex : anchorIndex, cardIndex);
+      const end = Math.max(anchorIndex === -1 ? cardIndex : anchorIndex, cardIndex);
+      setSelectedCardIds(new Set<string>(cards.slice(start, end + 1).map(entry => entry.id)));
+      return true;
+    }
+
+    setSelectedCardIds(prev => {
+      const next = new Set(prev);
+      if (next.has(card.id)) next.delete(card.id);
+      else next.add(card.id);
+      return next;
+    });
+    setSelectionAnchorId(card.id);
+    return true;
+  }
+
+  const selectedCardClass = 'border-primary ring-2 ring-primary/80';
 
   function syncPeekOrderToDeck(orderedCards: Card[]) {
     const area = playArea();
@@ -249,9 +304,11 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
 
   function handleCardPointerDown(card: Card, event: PointerEvent) {
     if (canReorderPeek()) {
-      if (event.button === 0) {
+      if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
         mouseDownCardId = card.id;
         beginPeekReorderPointer(card, event);
+      } else if (event.button === 0) {
+        mouseDownCardId = card.id;
       }
       return;
     }
@@ -361,6 +418,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
 
   function handleCardClick(card: Card, e: MouseEvent) {
     if (props.readOnly) return;
+    if (handlePeekSelectionClick(card, e)) return;
     if (suppressNextCardClick) {
       suppressNextCardClick = false;
       return;
@@ -377,6 +435,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
       return;
     }
     drawWithoutRevealing(card);
+    clearPeekSelection();
   }
 
   function isDrawBlocked() {
@@ -507,11 +566,39 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     e.stopPropagation();
     mouseDownCardId = null;
     blockCardInteraction(500);
-    drawWithoutRevealing(card, { force: true });
+    for (const target of getContextMenuCards(card)) {
+      drawWithoutRevealing(target, { force: true });
+    }
+    clearPeekSelection();
     closeContextMenu();
   }
 
-  function moveCardToZone(card: Card, zoneName: string) {
+  function moveCardsToZone(cards: Card[], zoneName: string) {
+    if (cards.length === 0) return;
+
+    if ((zoneName === 'deck-bottom' || zoneName === 'deck-top') && canReorderPeek()) {
+      const ordered = [...cards].sort(
+        (a, b) => resolvePeekCardIndex(a.id) - resolvePeekCardIndex(b.id),
+      );
+      const sequence = zoneName === 'deck-bottom' ? [...ordered].reverse() : ordered;
+      for (const target of sequence) {
+        void movePeekCardInDeck(target, zoneName === 'deck-bottom' ? 'bottom' : 'top');
+      }
+      clearPeekSelection();
+      return;
+    }
+
+    for (const target of cards) {
+      moveCardToZone(target, zoneName, { closeMenu: false, clearSelection: false });
+    }
+    clearPeekSelection();
+  }
+
+  function moveCardToZone(
+    card: Card,
+    zoneName: string,
+    options?: { closeMenu?: boolean; clearSelection?: boolean },
+  ) {
     const area = playArea();
     if (!area) return;
 
@@ -519,7 +606,8 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
       spawnTokenOnBattlefield(area, card);
       playDrawSound();
       setLocalCards(prev => prev.filter(c => c.id !== card.id));
-      closeContextMenu();
+      if (options?.closeMenu !== false) closeContextMenu();
+      if (options?.clearSelection !== false) clearPeekSelection();
       return;
     }
 
@@ -555,7 +643,8 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     if (zoneName === 'deck-bottom' || zoneName === 'deck-top') {
       if (canReorderPeek()) {
         void movePeekCardInDeck(card, zoneName === 'deck-bottom' ? 'bottom' : 'top');
-        closeContextMenu();
+        if (options?.closeMenu !== false) closeContextMenu();
+        if (options?.clearSelection !== false) clearPeekSelection();
         return;
       }
     }
@@ -567,7 +656,8 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     }
 
     setLocalCards(prev => prev.filter(c => c.id !== card.id));
-    closeContextMenu();
+    if (options?.closeMenu !== false) closeContextMenu();
+    if (options?.clearSelection !== false) clearPeekSelection();
   }
 
   function drawWithoutRevealing(card: Card, options?: { force?: boolean }) {
@@ -629,7 +719,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
   function dismissModal() {
     setPeekFilterText('');
     setPeekTypeFilter(null);
-    setSelectedCard(null);
+    clearPeekSelection();
     
     const area = playArea();
     if (!area) return;
@@ -665,6 +755,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
       clearModalSpanishPreviews();
       setActiveSubtypes([]);
       clearPeekReorderVisuals();
+      clearPeekSelection();
     }
   });
 
@@ -974,6 +1065,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                                 : 'transition-all hover:border-primary hover:scale-105 hover:shadow-lg',
                               isDragging() && 'opacity-45 pointer-events-none',
                               isPeekSwapTarget(card.id) && peekSwapTargetClass,
+                              isCardSelected(card.id) && selectedCardClass,
                               canReorderPeek() && 'touch-none select-none',
                             )}
                             onPointerDown={event => {
@@ -1043,6 +1135,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                                 : 'transition-all hover:border-primary hover:bg-accent',
                               isDragging() && 'opacity-45 pointer-events-none',
                               isPeekSwapTarget(card.id) && peekSwapTargetClass,
+                              isCardSelected(card.id) && selectedCardClass,
                               canReorderPeek() && 'touch-none select-none',
                             )}
                             onPointerDown={event => {
@@ -1115,6 +1208,9 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
             {() => {
               const card = contextMenuCard()!;
               const pos = contextMenuPosition()!;
+              const targetCards = getContextMenuCards(card);
+              const targetCount = targetCards.length;
+              const actionSuffix = targetCount > 1 ? ` (${targetCount})` : '';
               const hasDoubleFace = card.detail?.card_faces && card.detail.card_faces.length >= 2;
               return (
                 <>
@@ -1142,7 +1238,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                       type='button'
                       class='w-full px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent'
                       onMouseDown={e => handleDrawFromMenu(e, card)}>
-                      Draw
+                      Draw{actionSuffix}
                     </button>
                     <Show when={hasDoubleFace}>
                       <button
@@ -1155,12 +1251,16 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                       </button>
                     </Show>
                     <div class='my-1 border-t border-border' />
-                    <div class='px-2 py-1 text-xs font-semibold text-muted-foreground'>Move to</div>
+                    <div class='px-2 py-1 text-xs font-semibold text-muted-foreground'>
+                      Move to{actionSuffix}
+                    </div>
                     <button
                       type='button'
                       class='w-full px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent'
                       onMouseDown={e =>
-                        handleContextMenuAction(e, () => moveCardToZone(card, 'battlefield'))
+                        handleContextMenuAction(e, () =>
+                          moveCardsToZone(targetCards, 'battlefield'),
+                        )
                       }>
                       Battlefield
                     </button>
@@ -1168,7 +1268,9 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                       type='button'
                       class='w-full px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent'
                       onMouseDown={e =>
-                        handleContextMenuAction(e, () => moveCardToZone(card, 'graveyard'))
+                        handleContextMenuAction(e, () =>
+                          moveCardsToZone(targetCards, 'graveyard'),
+                        )
                       }>
                       Graveyard
                     </button>
@@ -1176,7 +1278,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                       type='button'
                       class='w-full px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent'
                       onMouseDown={e =>
-                        handleContextMenuAction(e, () => moveCardToZone(card, 'exile'))
+                        handleContextMenuAction(e, () => moveCardsToZone(targetCards, 'exile'))
                       }>
                       Exile
                     </button>
@@ -1184,7 +1286,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                       type='button'
                       class='w-full px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent'
                       onMouseDown={e =>
-                        handleContextMenuAction(e, () => moveCardToZone(card, 'deck-top'))
+                        handleContextMenuAction(e, () => moveCardsToZone(targetCards, 'deck-top'))
                       }>
                       Deck (top)
                     </button>
@@ -1192,7 +1294,9 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                       type='button'
                       class='w-full px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent'
                       onMouseDown={e =>
-                        handleContextMenuAction(e, () => moveCardToZone(card, 'deck-bottom'))
+                        handleContextMenuAction(e, () =>
+                          moveCardsToZone(targetCards, 'deck-bottom'),
+                        )
                       }>
                       Deck (bottom)
                     </button>

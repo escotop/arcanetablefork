@@ -14,6 +14,7 @@ import {
   cardSearchModalData,
   cardSearchModalOpen,
   dispatchGameEvent,
+  focusPanelFacePeekActive,
   focusRenderer,
   getLocalPlayArea,
   getLocalPlayerClientId,
@@ -33,6 +34,7 @@ import {
   FOCUS_PANEL_BASE_HEIGHT_RATIO,
 } from '../globals';
 import { CARD_HEIGHT, CARD_WIDTH } from '../constants';
+import { canPeekFaceDownBattlefieldCardInFocusPanel } from '../utils';
 import CommandPalette from '../shortcuts/command-palette';
 import HotkeysTable from '../shortcuts/hotkeys-table';
 import CounterDialog from './counterDialog';
@@ -103,6 +105,11 @@ export default function Overlay() {
     return aspect === FOCUS_PANEL_WIDE_ASPECT ? '750 / 700' : `${CARD_WIDTH} / ${CARD_HEIGHT}`;
   };
 
+  const showFocusPanelPeekHint = () => {
+    const mesh = hoverSignal()?.mesh;
+    return mesh && canPeekFaceDownBattlefieldCardInFocusPanel(mesh) && !focusPanelFacePeekActive();
+  };
+
   let [container, setContainer] = createSignal();
 
   createEffect(() => {
@@ -148,6 +155,9 @@ export default function Overlay() {
               '--focus-panel-aspect': focusPanelAspect(),
             }}>
             <div ref={setContainer} class={styles.focusCanvasSlot} />
+            <Show when={showFocusPanelPeekHint()}>
+              <div class={styles.focusPanelPeekHint}>Press P to peek</div>
+            </Show>
             <Show
               when={isSpanishPreviewUiForCard(hoverSignal()?.mesh?.userData?.id as string | undefined)}>
               <Show

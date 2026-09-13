@@ -8,10 +8,11 @@ import {
   cardSearchModalOpen,
   dispatchGameEvent,
   zonesById,
-  cardSearchModalOpen,
+  toggleFocusPanelFacePeek,
 } from '../globals';
 import { transferCard } from '../transferCard';
 import { resolveInteractiveCard, toggleLocalHandFlip } from '../card';
+import { canPeekFaceDownBattlefieldCardInFocusPanel } from '../utils';
 import { drawCards, searchDeck } from './commands/deck';
 import { untapAll, adjustBattlefieldCardsPowerToughness, getPowerToughnessDeltaFromKey } from './commands/field';
 import { activateSpanishPreview } from '../spanishCardPreview';
@@ -200,6 +201,11 @@ export function HotKeys() {
 
     hotkeys('p', function (e) {
       e.preventDefault();
+      const mesh = hoverSignal()?.mesh;
+      if (mesh && canPeekFaceDownBattlefieldCardInFocusPanel(mesh)) {
+        toggleFocusPanelFacePeek();
+        return;
+      }
       const area = requirePlayArea();
       cards().map(card => {
         const previousZone = zonesById.get(card.mesh.userData.zoneId);

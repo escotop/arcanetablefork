@@ -18,8 +18,8 @@ import { devLog } from '../devLog';
 import { loadGameMeta } from '../gameMeta';
 
 export const [isCounterDialogOpen, setIsCounterDialogOpen] = createSignal(false);
-export const [counterDialogTargetCardId, setCounterDialogTargetCardId] = createSignal<
-  string | undefined
+export const [counterDialogTargetCardIds, setCounterDialogTargetCardIds] = createSignal<
+  string[] | undefined
 >();
 export const [counters, setCounters] = createSignal<Counter[]>([]);
 export const [counterCreatorById, setCounterCreatorById] = createSignal<Record<string, number>>({});
@@ -37,13 +37,22 @@ function rememberCounterCreator(counterId: string, clientId: number | undefined)
   setCounterCreatorById(existing => ({ ...existing, [counterId]: clientId }));
 }
 
-export function openCounterDialog(options?: { cardId?: string }) {
-  setCounterDialogTargetCardId(options?.cardId);
+export function openCounterDialog(options?: { cardId?: string; cardIds?: string[] }) {
+  const cardIds =
+    options?.cardIds?.filter(Boolean) ??
+    (options?.cardId ? [options.cardId] : undefined);
+  setCounterDialogTargetCardIds(cardIds);
   setIsCounterDialogOpen(true);
 }
 
 function clearCounterDialogTarget() {
-  setCounterDialogTargetCardId(undefined);
+  setCounterDialogTargetCardIds(undefined);
+}
+
+function applyCounterToCards(cardIds: string[], counterId: string) {
+  for (const cardId of cardIds) {
+    applyCounterToCard(cardId, counterId);
+  }
 }
 
 function applyCounterToCard(cardId: string, counterId: string) {
@@ -155,11 +164,11 @@ export function registerCustomCounter(counter: Counter, creatorClientId?: number
   refreshCardCounterLabels();
 }
 
-function createCounter(counter: Counter, targetCardId?: string) {
+function createCounter(counter: Counter, targetCardIds?: string[]) {
   registerCustomCounter(counter);
   sendEvent({ type: 'createCounter', payload: { counter } });
-  if (targetCardId) {
-    applyCounterToCard(targetCardId, counter.id);
+  if (targetCardIds?.length) {
+    applyCounterToCards(targetCardIds, counter.id);
   }
 }
 
@@ -189,8 +198,8 @@ export default function CounterDialog() {
                 name,
                 color: colorHashLight.hex(name),
               };
-              const targetCardId = counterDialogTargetCardId();
-              createCounter(counter, targetCardId);
+              const targetCardIds = counterDialogTargetCardIds();
+              createCounter(counter, targetCardIds);
               e.currentTarget.reset();
               clearCounterDialogTarget();
               setIsCounterDialogOpen(false);

@@ -64,6 +64,9 @@ export default function DeckContextMenu(props: { playArea: PlayArea }) {
       <Dynamic component={ctx.menu}>
         <Dynamic component={ctx.trigger}>Discard</Dynamic>
         <Dynamic component={ctx.content}>
+          <Dynamic component={ctx.item} onClick={() => discardFromTop(props.playArea, 1)}>
+            Discard top card
+          </Dynamic>
           <Dynamic
             component={ctx.item}
             onClick={() => setSearchParams({ dialog: 'deck-to-discard' })}>
@@ -84,6 +87,9 @@ export default function DeckContextMenu(props: { playArea: PlayArea }) {
       <Dynamic component={ctx.menu}>
         <Dynamic component={ctx.trigger}>Exile</Dynamic>
         <Dynamic component={ctx.content}>
+          <Dynamic component={ctx.item} onClick={() => exileFromTop(props.playArea, 1)}>
+            Exile top card
+          </Dynamic>
           <Dynamic
             component={ctx.item}
             onClick={() => setSearchParams({ dialog: 'deck-to-exile' })}>

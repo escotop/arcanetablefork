@@ -172,6 +172,13 @@ export function createDeckPeekLogEvent(count: number) {
   } as const;
 }
 
+export function createBattlefieldPeekLogEvent() {
+  return {
+    type: 'battlefieldPeek',
+    payload: {},
+  } as const;
+}
+
 export function createDeckSearchLogEvent() {
   return {
     type: 'deckSearch',

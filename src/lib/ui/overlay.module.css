@@ -33,6 +33,26 @@
   }
 }
 
+.focusPanelPeekHint {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  bottom: 0.65rem;
+  z-index: 3;
+  transform: translateX(-50%);
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.375rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background) / 0.82);
+  border: 1px solid hsl(var(--border) / 0.7);
+  box-shadow: 0 4px 16px hsla(0 0% 0% / 0.25);
+  text-shadow: none;
+}
+
 .spanishPreviewOverlay {
   pointer-events: none;
   position: absolute;

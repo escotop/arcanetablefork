@@ -14,6 +14,7 @@ export class Selection {
   isDown: boolean;
   justSelected: boolean;
   selectionSet: Set<Object3D>;
+  private rectangleAdditive = false;
 
   constructor(renderer: WebGLRenderer, camera: PerspectiveCamera, scene: Scene) {
     this.selectionBox = new SelectionBox(camera, scene);
@@ -36,7 +37,7 @@ export class Selection {
       this.justSelected = false;
       return true;
     }
-    if (this.enabled) return false;
+    if (this.isDown || this.enabled) return true;
     if (target && isSelectable(target)) {
       if (event.ctrlKey || event.metaKey) {
         this.toggleSelection(target);
@@ -59,11 +60,16 @@ export class Selection {
       this.selectionSet.add(object);
       setMeshEmissivity(object, SELECTED_EMISSIVE_COLOR);
     }
-    this._setSelectedItems(this.selectionSet.values().toArray());
+    this._setSelectedItems([...this.selectionSet]);
+  }
+
+  private syncSelectedItems() {
+    this._setSelectedItems([...this.selectionSet]);
   }
 
   startRectangleSelection(event: PointerEvent) {
     this.justSelected = false;
+    this.rectangleAdditive = event.metaKey || event.ctrlKey || event.shiftKey;
     this.isDown = true;
     this.helper.enabled = true;
     this.helper.onPointerDown(event);
@@ -100,11 +106,12 @@ export class Selection {
       );
 
       const allSelected = new Set(this.selectionBox.select().filter(isSelectable));
+      const additive = this.rectangleAdditive || event.metaKey || event.ctrlKey;
 
-      if (event.metaKey || event.ctrlKey) {
-        let intersection = this.selectionSet.intersection(allSelected);
+      if (additive) {
+        const intersection = setIntersection(this.selectionSet, allSelected);
         intersection.forEach(item => setMeshEmissivity(item, 0x000000));
-        let difference = this.selectionSet.symmetricDifference(allSelected);
+        const difference = setSymmetricDifference(this.selectionSet, allSelected);
         difference.forEach(item => setMeshEmissivity(item, SELECTED_EMISSIVE_COLOR));
       } else {
         for (const selected of allSelected) {
@@ -115,6 +122,8 @@ export class Selection {
   }
 
   completeRectangleSelection(event: PointerEvent) {
+    if (!this.isDown && !this.helper.enabled) return;
+
     this.helper.onPointerUp();
     if (this.helper.enabled && this.isDown) {
       this.justSelected = true;
@@ -131,15 +140,16 @@ export class Selection {
         }
       }
       let allSelected = new Set(this.selectionBox.select().filter(isSelectable));
+      const additive = this.rectangleAdditive || event.metaKey || event.ctrlKey;
 
-      if (event.metaKey || event.ctrlKey) {
-        let exclusions = this.selectionSet.intersection(allSelected);
+      if (additive) {
+        const exclusions = setIntersection(this.selectionSet, allSelected);
         exclusions.forEach(item => {
           setMeshEmissivity(item, 0x000000);
           this.selectionSet.delete(item);
         });
-        allSelected = allSelected.difference(exclusions);
-      } else if (event.shiftKey) {
+        allSelected = setDifference(allSelected, exclusions);
+      } else if (event.shiftKey || this.rectangleAdditive) {
       } else {
         this.clearSelection();
       }
@@ -152,11 +162,12 @@ export class Selection {
     }
     this.isDown = false;
     this.helper.enabled = false;
+    this.rectangleAdditive = false;
   }
 
   addSelectedItems(items: Mesh[] | Set<Mesh>) {
     items.forEach(item => this.selectionSet.add(item));
-    this._setSelectedItems(this.selectionSet.values().toArray());
+    this.syncSelectedItems();
   }
 
   private clearSelectionHighlight() {
@@ -172,6 +183,18 @@ export class Selection {
   }
 
   destroy() {}
+}
+
+function setIntersection(a: Set<Object3D>, b: Set<Object3D>) {
+  return new Set([...a].filter(item => b.has(item)));
+}
+
+function setDifference(a: Set<Object3D>, b: Set<Object3D>) {
+  return new Set([...a].filter(item => !b.has(item)));
+}
+
+function setSymmetricDifference(a: Set<Object3D>, b: Set<Object3D>) {
+  return new Set([...a, ...b].filter(item => a.has(item) !== b.has(item)));
 }
 
 function setMeshEmissivity(mesh: Mesh, color: number) {
