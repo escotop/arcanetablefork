@@ -10,31 +10,14 @@ import { Deck } from '~/lib/constants';
 import { createDeckStore } from '~/lib/deckStore';
 import { getDeckCoverMetadata } from '~/lib/deck';
 import { DeckEditor } from '~/lib/ui/deckEditor';
-import { compareDecksByBracket, getBracketColor, getBracketTagLabel } from '~/lib/commanderBracket';
+import { compareDecksByBracket } from '~/lib/commanderBracket';
 import BracketEstimateTag from '~/lib/ui/bracketEstimateTag';
+import { DeckBracketFilterBar, matchesBracketFilter, type BracketFilter } from '~/lib/ui/deckBracketFilter';
 import { ManageDecksDropdown } from '~/lib/ui/manageDecksButton';
 import PencilIcon from 'lucide-solid/icons/pencil';
 
 function deckCardCount(deck: Deck) {
   return Object.values(deck.cards).reduce((sum, card) => sum + (card.qty ?? 1), 0);
-}
-
-type BracketFilter = 'all' | 'none' | 1 | 2 | 3 | 4 | 5;
-
-const BRACKET_FILTER_OPTIONS: { value: BracketFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 1, label: getBracketTagLabel(1)! },
-  { value: 2, label: getBracketTagLabel(2)! },
-  { value: 3, label: getBracketTagLabel(3)! },
-  { value: 4, label: getBracketTagLabel(4)! },
-  { value: 5, label: getBracketTagLabel(5)! },
-  { value: 'none', label: 'Unestimated' },
-];
-
-function matchesBracketFilter(deck: Deck, filter: BracketFilter) {
-  if (filter === 'all') return true;
-  if (filter === 'none') return deck.bracketEstimate == null;
-  return deck.bracketEstimate === filter;
 }
 
 function listDeckIds(store: { decks: Record<string, Deck>; systems: Record<string, string[]> }) {
@@ -138,26 +121,11 @@ const LandingPage: Component = () => {
                     No decks yet. Create one by importing a card list.
                   </p>
                 }>
-                <div class='mb-4 flex flex-wrap items-center gap-2'>
-                  <span class='text-sm text-muted-foreground'>Bracket</span>
-                  <For each={BRACKET_FILTER_OPTIONS}>
-                    {option => (
-                      <Button
-                        type='button'
-                        size='sm'
-                        variant={bracketFilter() === option.value ? 'default' : 'outline'}
-                        class='h-7 px-2.5 text-xs'
-                        style={
-                          bracketFilter() === option.value && option.value !== 'all' && option.value !== 'none'
-                            ? { 'background-color': getBracketColor(option.value), 'border-color': getBracketColor(option.value) }
-                            : undefined
-                        }
-                        onClick={() => setBracketFilter(option.value)}>
-                        {option.label}
-                      </Button>
-                    )}
-                  </For>
-                </div>
+                <DeckBracketFilterBar
+                  class='mb-4'
+                  value={bracketFilter()}
+                  onChange={setBracketFilter}
+                />
                 <Show
                   when={filteredDecks().length > 0}
                   fallback={

@@ -60,13 +60,19 @@ export const LifeField: Component<{
 }> = props => {
   const [draft, setDraft] = createSignal<string | null>(null);
   const displayValue = () => draft() ?? String(props.life);
+  const fieldHeightClass = () => (props.compact ? 'h-9' : 'h-11');
   const fieldClass = () =>
     props.compact
-      ? 'h-7 pr-7 text-sm'
-      : 'h-10 pr-8';
-  const buttonTopClass = () => (props.compact ? 'right-2 top-0.5' : 'right-3 top-1.5');
-  const buttonBottomClass = () => (props.compact ? 'bottom-0.5 right-2' : 'bottom-1.5 right-3');
-  const fieldWidth = () => (props.compact ? '3.75rem' : '5rem');
+      ? `${fieldHeightClass()} mt-0 px-2 py-0 text-center text-sm focus-visible:ring-0 focus-visible:ring-offset-0`
+      : `${fieldHeightClass()} mt-0 px-2 py-0 text-center focus-visible:ring-0 focus-visible:ring-offset-0`;
+  const buttonColumnClass = () =>
+    props.compact
+      ? `flex w-6 shrink-0 flex-col overflow-hidden rounded-md border border-input ${fieldHeightClass()}`
+      : `flex w-7 shrink-0 flex-col overflow-hidden rounded-md border border-input ${fieldHeightClass()}`;
+  const iconSizeClass = () => (props.compact ? 'size-3' : 'size-3.5');
+  const fieldWidth = () => (props.compact ? '3.25rem' : '4.25rem');
+  const buttonClass =
+    'flex min-h-0 flex-1 items-center justify-center border-0 border-b border-input bg-background cursor-pointer rounded-none hover:bg-muted/60 active:bg-muted last:border-b-0';
 
   function commit() {
     const raw = draft();
@@ -82,7 +88,7 @@ export const LifeField: Component<{
   }
 
   return (
-    <div class='relative rounded-md focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2'>
+    <div class='flex items-center gap-1'>
       <TextField
         style={{ width: fieldWidth() }}
         value={displayValue()}
@@ -103,18 +109,22 @@ export const LifeField: Component<{
           }}
         />
       </TextField>
-      <button
-        type='button'
-        class={`absolute inline-flex size-4 items-center justify-center cursor-pointer ${buttonTopClass()}`}
-        onClick={() => adjust(1)}>
-        <ChevronUpIcon class='size-4' />
-      </button>
-      <button
-        type='button'
-        class={`absolute inline-flex size-4 items-center justify-center cursor-pointer ${buttonBottomClass()}`}
-        onClick={() => adjust(-1)}>
-        <ChevronDownIcon class='size-4' />
-      </button>
+      <div class={buttonColumnClass()}>
+        <button
+          type='button'
+          class={buttonClass}
+          aria-label='Increase life'
+          onClick={() => adjust(1)}>
+          <ChevronUpIcon class={iconSizeClass()} />
+        </button>
+        <button
+          type='button'
+          class={buttonClass}
+          aria-label='Decrease life'
+          onClick={() => adjust(-1)}>
+          <ChevronDownIcon class={iconSizeClass()} />
+        </button>
+      </div>
     </div>
   );
 };

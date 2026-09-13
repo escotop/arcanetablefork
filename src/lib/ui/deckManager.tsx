@@ -1,4 +1,4 @@
-import { Component, createSignal, For, JSX, Show } from 'solid-js';
+import { Component, createEffect, createMemo, createSignal, For, JSX, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { toast } from 'solid-sonner';
 import { Button } from '~/components/ui/button';
@@ -17,7 +17,7 @@ import { exportAllDecksZip, mergeImportedDecks, parseDecksZip } from '../deckBul
 import PencilIcon from 'lucide-solid/icons/pencil';
 import { DeckEditor } from './deckEditor';
 import BracketEstimateTag from './bracketEstimateTag';
-import styles from './deckPicker.module.css';
+import { DeckBracketFilterBar, matchesBracketFilter, type BracketFilter } from './deckBracketFilter';
 import { Deck } from '../constants';
 import { produce, unwrap } from 'solid-js/store';
 
@@ -41,6 +41,49 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
   const [selectedDeckId, setSelectedDeckId] = createSignal(
     props.selectedDeckId ?? deckStore?.systems[cardSystemStore.system]?.[0],
   );
+  const [bracketFilter, setBracketFilter] = createSignal<BracketFilter>('all');
+
+  function allDeckIds() {
+    const ids = new Set<string>();
+    for (const deckIds of Object.values(deckStore.systems)) {
+      for (const id of deckIds ?? []) {
+        if (deckStore.decks[id]) ids.add(id);
+      }
+    }
+    for (const id of Object.keys(deckStore.decks)) {
+      ids.add(id);
+    }
+    return [...ids];
+  }
+
+  function filterDeckIds(deckIds: string[]) {
+    return deckIds.filter(id => matchesBracketFilter(deckStore.decks[id], bracketFilter()));
+  }
+
+  const hasMatchingDecks = createMemo(() =>
+    allDeckIds().some(id => matchesBracketFilter(deckStore.decks[id], bracketFilter())),
+  );
+
+  createEffect(() => {
+    if (!props.onSelectDeck) return;
+
+    bracketFilter();
+    const selected = currentSelection();
+    if (selected && matchesBracketFilter(deckStore.decks[selected], bracketFilter())) return;
+
+    const next = allDeckIds().find(id => matchesBracketFilter(deckStore.decks[id], bracketFilter()));
+    if (next) {
+      handleSelect(next);
+      return;
+    }
+
+    if (!selected) return;
+    if (props.selectedDeckId === undefined) {
+      setSelectedDeckId('');
+    } else {
+      props.onSelectDeck('');
+    }
+  });
 
   function shouldShowSystem(system: string) {
     if (!cardSystemStore) return false;
@@ -136,51 +179,38 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
       </Show>
       <Show when={!editingDeck()}>
         <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-          <DialogContent class='max-w-3xl' hideClose={props.hideClose}>
-            <DialogHeader>
+          <DialogContent
+            class='flex h-[min(90vh,900px)] max-h-[min(90vh,900px)] max-w-3xl flex-col overflow-hidden p-0'
+            hideClose={props.hideClose}>
+            <DialogHeader class='shrink-0 px-6 pt-6'>
               <DialogTitle>{props.title ?? 'Your Decks'}</DialogTitle>
             </DialogHeader>
-            <div class='flex flex-col gap-5'>
-              <div>
-                <h2>{cardSystemStore?.systems?.[cardSystemStore.system]?.name}</h2>
-                <div class='grid grid-cols-3 gap-4 my-2'>
-                  <For each={deckStore.systems[cardSystemStore?.system] ?? []}>
-                    {deckId => {
-                      let deck = () => deckStore.decks[deckId];
-                      return (
-                        <Show when={deck()}>
-                          <DeckOption
-                            deck={deck()!}
-                            isSelected={
-                              props.onSelectDeck ? deck()!.id === currentSelection() : false
-                            }
-                            onSelect={() => handleSelect(deck()!.id)}
-                            onEdit={() => setEditingDeck(deck())}
-                            selectable={!!props.onSelectDeck}
-                          />
-                        </Show>
-                      );
-                    }}
-                  </For>
-                </div>
-
-                <For each={Object.entries(deckStore.systems)}>
-                  {([system, deckIds]) => (
-                    <Show when={shouldShowSystem(system) && deckIds.length > 0}>
-                      <h2>{cardSystemStore.systems[system]?.name ?? system}</h2>
+            <div class='flex min-h-0 flex-1 flex-col px-6 pt-2'>
+              <DeckBracketFilterBar class='shrink-0 pb-4' value={bracketFilter()} onChange={setBracketFilter} />
+              <div class='min-h-0 flex-1 overflow-y-auto p-1 pb-4'>
+                <Show
+                  when={hasMatchingDecks()}
+                  fallback={
+                    <p class='text-sm text-muted-foreground'>
+                      No decks match this bracket filter.
+                    </p>
+                  }>
+                  <div>
+                    <Show when={filterDeckIds(deckStore.systems[cardSystemStore?.system] ?? []).length > 0}>
+                      <h2>{cardSystemStore?.systems?.[cardSystemStore.system]?.name}</h2>
                       <div class='grid grid-cols-3 gap-4 my-2'>
-                        <For each={deckIds}>
+                        <For each={filterDeckIds(deckStore.systems[cardSystemStore?.system] ?? [])}>
                           {deckId => {
-                            let deck = deckStore.decks[deckId];
+                            let deck = () => deckStore.decks[deckId];
                             return (
-                              <Show when={deck}>
+                              <Show when={deck()}>
                                 <DeckOption
-                                  deck={deck}
+                                  deck={deck()!}
                                   isSelected={
-                                    props.onSelectDeck ? deck.id === currentSelection() : false
+                                    props.onSelectDeck ? deck()!.id === currentSelection() : false
                                   }
-                                  onSelect={() => handleSelect(deck.id)}
-                                  onEdit={() => setEditingDeck(deck)}
+                                  onSelect={() => handleSelect(deck()!.id)}
+                                  onEdit={() => setEditingDeck(deck())}
                                   selectable={!!props.onSelectDeck}
                                 />
                               </Show>
@@ -189,10 +219,39 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
                         </For>
                       </div>
                     </Show>
-                  )}
-                </For>
+
+                    <For each={Object.entries(deckStore.systems)}>
+                      {([system, deckIds]) => (
+                        <Show when={shouldShowSystem(system) && filterDeckIds(deckIds).length > 0}>
+                          <h2>{cardSystemStore.systems[system]?.name ?? system}</h2>
+                          <div class='grid grid-cols-3 gap-4 my-2'>
+                            <For each={filterDeckIds(deckIds)}>
+                              {deckId => {
+                                let deck = deckStore.decks[deckId];
+                                return (
+                                  <Show when={deck}>
+                                    <DeckOption
+                                      deck={deck}
+                                      isSelected={
+                                        props.onSelectDeck ? deck.id === currentSelection() : false
+                                      }
+                                      onSelect={() => handleSelect(deck.id)}
+                                      onEdit={() => setEditingDeck(deck)}
+                                      selectable={!!props.onSelectDeck}
+                                    />
+                                  </Show>
+                                );
+                              }}
+                            </For>
+                          </div>
+                        </Show>
+                      )}
+                    </For>
+                  </div>
+                </Show>
               </div>
-              <DialogFooter class='flex-wrap gap-2 sm:justify-between'>
+            </div>
+            <DialogFooter class='shrink-0 flex-wrap gap-2 border-t border-border bg-background px-6 py-4 sm:justify-between'>
                 <div class='flex flex-wrap gap-2 mr-auto'>
                   <Button variant='ghost' type='button' onClick={onExportAll}>
                     Export all
@@ -227,7 +286,6 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
                   )}
                 </div>
               </DialogFooter>
-            </div>
           </DialogContent>
         </Dialog>
       </Show>
@@ -247,18 +305,17 @@ function DeckOption(props: DeckOptionProps) {
   return (
     <div
       style='position: relative; aspect-ratio: 626/457;'
-      class='relative rounded-lg overflow-hidden shadow-lg'
-      classList={{ [styles.selectedRadioItem]: props.isSelected }}>
+      class='relative rounded-lg overflow-hidden shadow-lg'>
       <button
         style='width: 100%; height: 100%;'
         type='button'
         onClick={() => props.selectable && props.onSelect()}
         disabled={!props.selectable}>
         <div
-          class='bg-cover'
+          class='bg-cover bg-center'
           style={`background-image: url(${getDeckPreviewImageUrl(props.deck)}); height: 100%;`}></div>
         <div class='absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent py-4 px-2 text-left'>
-          <h3 class='text-white text-xl font-semibold'>{props.deck?.name}</h3>
+          <h3 class='text-white text-xl font-semibold'>{props.deck?.name || 'Untitled'}</h3>
           <div class='flex flex-row gap-2 pt-2 flex-wrap'>
             <BracketEstimateTag bracket={props.deck.bracketEstimate} />
             <For each={props.deck.tags}>
@@ -273,7 +330,13 @@ function DeckOption(props: DeckOptionProps) {
           </div>
         </div>
       </button>
-      <div class='absolute top-2 right-2'>
+      <Show when={props.isSelected}>
+        <div
+          class='pointer-events-none absolute inset-0 z-10 rounded-lg border-[3px] border-primary'
+          aria-hidden='true'
+        />
+      </Show>
+      <div class='absolute top-2 right-2 z-20'>
         <button type='button' style='cursor: pointer;' onClick={props.onEdit}>
           <PencilIcon style='color: white; filter: drop-shadow(2px 4px 6px black);' />
         </button>
