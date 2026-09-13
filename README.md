@@ -36,20 +36,23 @@ Las funciones en `functions/` replican los proxies de Vercel (no hace falta env 
 
 `public/_redirects` envía el resto de rutas a `index.html` (SPA). Las funciones se ejecutan **antes** que los redirects estáticos.
 
-### Configuración en el dashboard de Cloudflare Pages
+### Configuración en Cloudflare (Workers Builds)
+
+Este repo usa **Workers Builds** (Git → Worker), no el CI clásico de Pages. El deploy command **no puede quedar vacío**; es normal.
 
 | Campo | Valor |
 |-------|-------|
-| Build command | `bun run build` |
-| Build output directory | `dist` |
-| Deploy command | **vacío** (recomendado) **o** `bun run deploy:cloudflare` |
+| Build command | `bun install && bun run build:cloudflare` |
+| Deploy command (rama `main`) | `npx wrangler deploy` |
+| Non-production branch deploy command | `npx wrangler versions upload` |
+| Root directory | `/` |
 
-**No uses** `wrangler deploy` solo: es para Workers y no incluye las Pages Functions de `/functions`.
+El build compila Vite (`dist/`) y las Pages Functions de `/functions` en `worker/` (ver `wrangler.toml`). **No uses** `wrangler pages deploy` aquí: el token de Workers Builds no suele tener permiso Pages Edit y falla con auth error 10000.
 
 Deploy manual:
 
 ```bash
-bun run build
+bun run build:cloudflare
 bun run deploy:cloudflare
 ```
 

@@ -9,7 +9,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",
-    "deploy:cloudflare": "wrangler pages deploy dist"
+    "build:worker": "wrangler pages functions build --outdir=./worker",
+    "build:cloudflare": "bun run build && bun run build:worker",
+    "deploy:cloudflare": "wrangler deploy"
   },
   "dependencies": {
     "@kobalte/core": "^0.13.12",
