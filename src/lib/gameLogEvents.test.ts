@@ -44,6 +44,20 @@ test('slimCardDetailForLog removes bulky Scryfall fields', () => {
   expect(slim?.prices).toBeUndefined();
 });
 
+test('slimCardDetailForLog keeps token all_parts for reload token search', () => {
+  const slim = slimCardDetailForLog({
+    name: 'Krenko, Mob Boss',
+    all_parts: [
+      { name: 'Goblin', component: 'token', id: 'token-id', uri: 'https://example.com/token' },
+      { name: 'Combo', component: 'combo_piece', id: 'combo-id', uri: 'https://example.com/combo' },
+    ],
+  });
+
+  expect(slim?.all_parts).toEqual([
+    { name: 'Goblin', component: 'token', id: 'token-id', uri: 'https://example.com/token' },
+  ]);
+});
+
 test('sanitizeGameLogEvent keeps toggleTokenMenu encodable by Yjs', () => {
   const nested = { name: 'Face', image_uris: { normal: 'face.webp' } };
   let deep: Record<string, unknown> = nested;

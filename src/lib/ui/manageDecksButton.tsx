@@ -58,7 +58,7 @@ export const ManageDecksDropdown: Component<{ onNewDeck: () => void }> = props =
         <DropdownMenuContent align='end'>
           <DropdownMenuItem onSelect={() => props.onNewDeck()}>New deck</DropdownMenuItem>
           <DropdownMenuItem disabled={importing()} onSelect={() => importInput?.click()}>
-            {importing() ? 'Importing…' : 'Import decks (JSON)'}
+            {importing() ? 'Importing…' : 'Import zip'}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={onExportAll}>Export all decks</DropdownMenuItem>
         </DropdownMenuContent>

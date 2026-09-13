@@ -133,6 +133,7 @@ import {
 } from './lib/worldSnapshot';
 import { getDeckStore } from './lib/deckStore';
 import { loadGameMeta, saveGameMeta } from './lib/gameMeta';
+import { restorePlayAreaTokenPrintings } from './lib/deckTokens';
 import { refreshMultiplayerSyncState } from './lib/multiplayerSync';
 import { initReloadOtherPlayerDebug, logReloadOther } from './lib/reloadOtherPlayerDebug';
 import { unwrap } from 'solid-js/store';
@@ -338,6 +339,7 @@ async function finalizeReconnectedPlayArea(
   initHowItPlaysAdvice(advice, playerSessionId);
 
   restoreCustomCounters(gameId);
+  restorePlayAreaTokenPrintings(area, gameId);
 
   markLoadProfile('reclaim play area ready', { joinClientId: area.clientId, cardCount: area.deck.cards.length });
   void area.loadTextures();
@@ -394,6 +396,7 @@ async function reclaimLocalPlayArea(
   initHowItPlaysAdvice(advice, playerSessionId);
 
   restoreCustomCounters(gameId);
+  restorePlayAreaTokenPrintings(area, gameId);
 
   markLoadProfile('reclaim play area ready', { joinClientId, cardCount: area.deck.cards.length });
   void area.loadTextures();

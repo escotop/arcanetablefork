@@ -15,3 +15,22 @@ export function formatDeckListLine(card: CardEntry | DetailedCardEntry) {
   if (collectorNumber) parts.push(`#${collectorNumber}`);
   return parts.join(' ');
 }
+
+export function formatDeckExportContent(deck: {
+  cards: Record<string, DetailedCardEntry>;
+  sideboard?: Record<string, DetailedCardEntry>;
+}): string {
+  let mainLines = Object.values(deck.cards)
+    .filter(card => card.qty)
+    .map(card => formatDeckListLine(card));
+
+  const sideboardLines = Object.values(deck.sideboard ?? {})
+    .filter(card => card.qty)
+    .map(card => formatDeckListLine(card));
+
+  if (sideboardLines.length > 0) {
+    mainLines = [...mainLines, '', 'SIDEBOARD:', ...sideboardLines];
+  }
+
+  return mainLines.join('\n');
+}

@@ -45,7 +45,7 @@ import { getCardKey, hydrateDeck } from './deckStore';
 import { cardFromDeckEntry, preloadStackTextures } from './cardLoading';
 import { Deck as DeckData, DetailedCardEntry } from './constants';
 import { profileAsync } from './loadProfile';
-import { collectTokenPartIds, appendSavedTokenPrintings, mergeTokenPrintings, resolveTokensByIds } from './deckTokens';
+import { collectTokenPartIds, appendSavedTokenPrintings, mergeTokenPrintings, resolveTokensByIds, restorePlayAreaTokenPrintings } from './deckTokens';
 import {
   createCreateCardEvent,
   createDeckDrawLogEvent,
@@ -120,6 +120,7 @@ interface State {
   hand?: RemoteZoneState;
   deck?: RemoteZoneState;
   cards: CardReference[];
+  tokenPrintings?: Record<string, DetailedCardEntry>;
 }
 
 export class PlayArea {
@@ -561,6 +562,8 @@ export class PlayArea {
 
     if (!this.availableTokens?.length) {
       const merged = await resolveAvailableTokens();
+      if (!merged.length) return;
+
       this.availableTokens = merged.map(entry => ({ ...entry.detail, clientId: this.clientId }));
 
       // Para el jugador local, usar el modal 2D
@@ -972,6 +975,9 @@ export class PlayArea {
         detail: slimCardDetailForLog(card.detail as Record<string, unknown> | undefined),
         customArtUrl: card.customArtUrl,
       })),
+      ...(this.tokenPrintings && Object.keys(this.tokenPrintings).length > 0
+        ? { tokenPrintings: this.tokenPrintings }
+        : {}),
       index: this.index,
     };
 
@@ -1074,7 +1080,7 @@ export class PlayArea {
   static fromWorldSnapshot(
     clientId: number,
     state: State,
-    options: { isLocalPlayer?: boolean } = {},
+    options: { isLocalPlayer?: boolean; gameId?: string } = {},
   ) {
     const mergedState = {
       ...state,
@@ -1099,6 +1105,11 @@ export class PlayArea {
     // NO restaurar peekZone ni tokenSearchZone - siempre deben empezar vacíos
     // para evitar que aparezcan búsquedas 3D antiguas al recargar
     restoreSerializedBattlefieldCards(playArea.battlefieldZone, battlefield, clientId);
+    restorePlayAreaTokenPrintings(
+      playArea,
+      options.gameId,
+      state.tokenPrintings as Record<string, DetailedCardEntry> | undefined,
+    );
     playArea.updatePositions();
     playArea.loadTextures();
     return playArea;

@@ -1,6 +1,9 @@
 import uniqBy from 'lodash-es/uniqBy';
 import { CardEntryDetail, DetailedCardEntry } from './constants';
 import { applyCustomArtToEntry } from './customCardArt';
+import { getDeckStore } from './deckStore';
+import { loadGameMeta } from './gameMeta';
+import type { PlayArea } from './playArea';
 import { getCardById } from './scryfall/client';
 
 type TokenSource = { detail?: { all_parts?: CardEntryDetail['all_parts'] } };
@@ -117,4 +120,23 @@ export function appendSavedTokenPrintings(
   }
 
   return merged.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function restorePlayAreaTokenPrintings(
+  playArea: PlayArea,
+  gameId?: string,
+  snapshotTokens?: Record<string, DetailedCardEntry>,
+) {
+  const merged: Record<string, DetailedCardEntry> = {};
+
+  if (gameId) {
+    const deckId = loadGameMeta(gameId)?.deckId;
+    const deckTokens = deckId ? getDeckStore().decks[deckId]?.tokens : undefined;
+    if (deckTokens) Object.assign(merged, deckTokens);
+  }
+
+  if (snapshotTokens) Object.assign(merged, snapshotTokens);
+  if (playArea.tokenPrintings) Object.assign(merged, playArea.tokenPrintings);
+
+  playArea.tokenPrintings = Object.keys(merged).length > 0 ? merged : undefined;
 }

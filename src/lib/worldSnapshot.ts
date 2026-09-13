@@ -276,6 +276,7 @@ export async function applyWorldSnapshot(
 
     const area = PlayArea.fromWorldSnapshot(entry.clientId, entry.state, {
       isLocalPlayer: isSelf,
+      gameId: isSelf ? gameId : undefined,
     });
     area.playerSessionId = entry.playerSessionId;
     area.index = entry.state.index ?? 0;

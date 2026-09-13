@@ -36,7 +36,7 @@ import {
   CardPrintingOption,
   entryToPrintingOption,
   fetchCardInfo,
-  formatDeckListLine,
+  formatDeckExportContent,
   getPrintingPreviewUrl,
   populateCardInfo,
   prefetchCardPrintings,
@@ -841,20 +841,7 @@ export const DeckEditor: Component<Props> = props => {
   const deckExportContent = createMemo(() => {
     trackDeep(deck.cards);
     trackDeep(deck.sideboard);
-
-    let mainLines = Object.values(deck.cards)
-      .filter(card => card.qty)
-      .map(card => formatDeckListLine(card));
-
-    const sideboardLines = Object.values(deck.sideboard ?? {})
-      .filter(card => card.qty)
-      .map(card => formatDeckListLine(card));
-
-    if (sideboardLines.length > 0) {
-      mainLines = [...mainLines, '', 'SIDEBOARD:', ...sideboardLines];
-    }
-
-    return mainLines.join('\n');
+    return formatDeckExportContent(deck);
   });
   createEffect(() => {
     typeFilter();

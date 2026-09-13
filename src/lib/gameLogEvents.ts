@@ -54,6 +54,27 @@ function pickImageUris(imageUris: Record<string, string> | undefined) {
   return Object.keys(picked).length > 0 ? picked : undefined;
 }
 
+function slimTokenParts(allParts: unknown) {
+  if (!Array.isArray(allParts)) return undefined;
+
+  const parts = allParts
+    .filter(
+      (part): part is Record<string, unknown> =>
+        !!part &&
+        typeof part === 'object' &&
+        part.component === 'token' &&
+        typeof part.id === 'string',
+    )
+    .map(part => ({
+      id: part.id,
+      name: part.name,
+      component: part.component,
+      uri: part.uri,
+    }));
+
+  return parts.length > 0 ? parts : undefined;
+}
+
 /** Keep only fields needed to render cards when replaying the game log. */
 export function slimCardDetailForLog(
   detail: Record<string, unknown> | undefined,
@@ -76,6 +97,9 @@ export function slimCardDetailForLog(
       .map(face => slimCardDetailForLog(face as Record<string, unknown>, depth + 1))
       .filter((face): face is Record<string, unknown> => !!face);
   }
+
+  const tokenParts = slimTokenParts(detail.all_parts);
+  if (tokenParts) slim.all_parts = tokenParts;
 
   return slim;
 }
@@ -193,7 +217,30 @@ export function slimPlayAreaStateForSnapshot(state: Record<string, unknown>) {
     battlefield: slimSerializedZone(state.battlefield),
     peekZone: slimSerializedZone(state.peekZone),
     tokenSearchZone: slimSerializedZone(state.tokenSearchZone),
+    tokenPrintings: slimTokenPrintingsForSnapshot(state.tokenPrintings),
   };
+}
+
+function slimTokenPrintingsForSnapshot(tokenPrintings: unknown) {
+  if (!tokenPrintings || typeof tokenPrintings !== 'object') return undefined;
+
+  const slim: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(tokenPrintings as Record<string, unknown>)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const token = entry as Record<string, unknown>;
+    slim[key] = {
+      id: token.id,
+      name: token.name,
+      qty: token.qty,
+      set: token.set,
+      collector_number: token.collector_number,
+      customArtUrl: token.customArtUrl,
+      categories: token.categories,
+      detail: slimCardDetailForLog(token.detail as Record<string, unknown> | undefined),
+    };
+  }
+
+  return Object.keys(slim).length > 0 ? slim : undefined;
 }
 
 function sanitizePayload(event: Record<string, unknown>, payload: Record<string, unknown>) {

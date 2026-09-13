@@ -57,6 +57,7 @@ import {
 } from '../globals';
 import { createPassTurnEvent } from '../createEvents';
 import { getPlayAreaPlayerName } from '../playAreaNameTag';
+import { copyPlayerDeckToClipboard } from '../deckExport';
 import { computeResetTurnOrderState, getActivePlayAreaClientIds, turnOrderState } from '../turnOrder';
 
 export default function SettingsOverlay(props: {
@@ -180,6 +181,23 @@ export default function SettingsOverlay(props: {
     }
   }
 
+  async function handleCopyDeck(clientId: number, name: string) {
+    const gameId = params.gameId;
+    if (!gameId) return;
+
+    try {
+      const copied = await copyPlayerDeckToClipboard(clientId, gameId);
+      if (copied) {
+        toast.success(`${name}'s deck copied to clipboard`);
+      } else {
+        toast.error(`No deck list available for ${name}`);
+      }
+    } catch (error) {
+      devLog.error(error);
+      toast.error('Could not copy deck to clipboard');
+    }
+  }
+
   function requestResetTurnOrder() {
     if (getActivePlayAreaClientIds().length === 0) {
       toast.error('No players at the table yet');
@@ -298,8 +316,15 @@ export default function SettingsOverlay(props: {
                             {player.isLocal ? ' (you)' : ''}
                           </p>
                         </div>
-                        <Show when={!player.isLocal}>
-                          <div class='flex shrink-0 items-center gap-2'>
+                        <div class='flex shrink-0 items-center gap-2'>
+                          <Button
+                            type='button'
+                            variant='outline'
+                            size='sm'
+                            onClick={() => handleCopyDeck(player.clientId, player.name)}>
+                            Copy deck
+                          </Button>
+                          <Show when={!player.isLocal}>
                             <Button
                               type='button'
                               variant='outline'
@@ -314,8 +339,8 @@ export default function SettingsOverlay(props: {
                               onClick={() => requestKickPlayer(player.clientId, player.name)}>
                               Kick
                             </Button>
-                          </div>
-                        </Show>
+                          </Show>
+                        </div>
                       </li>
                     )}
                   </For>
