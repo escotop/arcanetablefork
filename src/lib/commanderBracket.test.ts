@@ -151,3 +151,9 @@ test('compareDecksByBracket sorts by bracket then name', () => {
     'No bracket',
   ]);
 });
+
+test('compareDecksByBracket handles missing deck names', () => {
+  expect(
+    [{ bracketEstimate: 2 }, { name: 'Named', bracketEstimate: 2 }].sort(compareDecksByBracket),
+  ).toEqual([{ bracketEstimate: 2 }, { name: 'Named', bracketEstimate: 2 }]);
+});

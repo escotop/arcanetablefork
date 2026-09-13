@@ -226,17 +226,19 @@ export function getBracketTagLabel(bracket: number | undefined) {
 }
 
 export function compareDecksByBracket(
-  left: { bracketEstimate?: number; name: string },
-  right: { bracketEstimate?: number; name: string },
+  left: { bracketEstimate?: number; name?: string },
+  right: { bracketEstimate?: number; name?: string },
 ) {
   const leftBracket = left.bracketEstimate;
   const rightBracket = right.bracketEstimate;
+  const leftName = left.name ?? '';
+  const rightName = right.name ?? '';
 
-  if (leftBracket == null && rightBracket == null) return left.name.localeCompare(right.name);
+  if (leftBracket == null && rightBracket == null) return leftName.localeCompare(rightName);
   if (leftBracket == null) return 1;
   if (rightBracket == null) return -1;
   if (leftBracket !== rightBracket) return leftBracket - rightBracket;
-  return left.name.localeCompare(right.name);
+  return leftName.localeCompare(rightName);
 }
 
 export function isSuccessfulBracketEstimate(result: CommanderBracketEstimate) {
