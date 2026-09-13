@@ -34,7 +34,7 @@ Las funciones en `functions/` replican los proxies de Vercel (no hace falta env 
 | `/api/commander-bracket` | Proxy a CommanderBracket |
 | `/image-proxy` | Proxy de imágenes custom |
 
-`public/_redirects` envía el resto de rutas a `index.html` (SPA). Las funciones se ejecutan **antes** que los redirects estáticos.
+`wrangler.toml` usa `not_found_handling = "single-page-application"` para el fallback SPA (no hace falta `public/_redirects`; con Workers provoca bucle infinito en deploy). Las rutas `/api/*` e `/image-proxy` las atiende el Worker compilado desde `/functions`.
 
 ### Configuración en Cloudflare (Workers Builds)
 
