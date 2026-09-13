@@ -52,7 +52,7 @@ export const ManageDecksDropdown: Component<{ onNewDeck: () => void }> = props =
     <>
       <DropdownMenu>
         <DropdownMenuTrigger as={Button<'button'>} variant='outline' size='sm' class='gap-1.5'>
-          Manage Decks
+          Add/Manage Decks
           <ChevronDownIcon class='size-4 opacity-60' />
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end'>

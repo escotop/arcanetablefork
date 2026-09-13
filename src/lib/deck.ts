@@ -30,6 +30,7 @@ import {
 import { applyCustomArtToEntry, normalizeTextureUrl } from './customCardArt';
 import { slimCardDetailForLog } from './gameLogEvents';
 import { parseImportedCardList } from './deckParser';
+import { isCommanderCard } from './deckCommander';
 import { getCardCollectorNumber } from './deckListFormat';
 import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
 import {
@@ -912,18 +913,28 @@ function cardPopularity(card: DetailedCardEntry) {
 }
 
 export function getDeckCoverCard(deck: StoredDeck): DetailedCardEntry | undefined {
-  let best: DetailedCardEntry | undefined;
+  const pool: DetailedCardEntry[] = [];
 
-  const consider = (card: DetailedCardEntry) => {
-    if ((card.qty ?? 0) <= 0) return;
+  const push = (card: DetailedCardEntry) => {
+    if ((card.qty ?? 0) > 0) pool.push(card);
+  };
+
+  Object.values(deck.inPlay ?? {}).forEach(push);
+  Object.values(deck.cards ?? {}).forEach(push);
+
+  const commanders = pool.filter(isCommanderCard);
+  if (commanders.length) {
+    return [...commanders].sort((left, right) => cardPopularity(left) - cardPopularity(right))[0];
+  }
+
+  let best: DetailedCardEntry | undefined;
+  for (const card of pool) {
     if (!best || cardPopularity(card) < cardPopularity(best)) {
       best = card;
     }
-  };
+  }
 
-  Object.values(deck.inPlay ?? {}).forEach(consider);
-  Object.values(deck.cards ?? {}).forEach(consider);
-  return best ?? Object.values(deck.cards ?? {}).find(card => (card.qty ?? 0) > 0);
+  return best ?? pool[0];
 }
 
 function cardHasFullArt(detail: CardEntryDetail | undefined) {
@@ -950,14 +961,16 @@ export function getDeckCoverMetadata(
   deck: StoredDeck,
 ): Pick<StoredDeck, 'coverImage' | 'coverImageFullArt'> {
   const card = getDeckCoverCard(deck);
-  if (!card?.detail) return {};
+  if (!card) return {};
 
-  const coverImage = normalizeTextureUrl(getCardArtImage(card)) ?? getCardArtImage(card);
-  if (!coverImage) return { coverImageFullArt: cardHasFullArt(card.detail) };
+  const coverImage = getDeckCoverArtUrl(card);
+  if (!coverImage) {
+    return card.detail ? { coverImageFullArt: cardHasFullArt(card.detail) } : {};
+  }
 
   return {
     coverImage,
-    coverImageFullArt: cardHasFullArt(card.detail),
+    coverImageFullArt: card.detail ? cardHasFullArt(card.detail) : true,
   };
 }
 
@@ -971,32 +984,29 @@ function scryfallCardImageUrl(card: DetailedCardEntry, version: 'normal' | 'art_
   return undefined;
 }
 
-export function getDeckPreviewImageUrl(deck: StoredDeck) {
-  const card = getDeckCoverCard(deck);
-  if (!card) return deck.coverImage ?? DEFAULT_DECK_PREVIEW;
-
+function getDeckCoverArtUrl(card: DetailedCardEntry): string | undefined {
   if (card.customArtUrl) {
     return normalizeTextureUrl(card.customArtUrl) ?? card.customArtUrl;
   }
 
-  const useArtPreview = deck.coverImageFullArt === true || cardHasFullArt(card.detail);
+  return (
+    normalizeTextureUrl(getCardArtImage(card)) ?? scryfallCardImageUrl(card, 'art_crop')
+  );
+}
 
-  if (useArtPreview) {
-    const art =
-      normalizeTextureUrl(getCardArtImage(card)) ??
-      deck.coverImage ??
-      scryfallCardImageUrl(card, 'art_crop');
-    if (art) return art;
-  }
+export function getDeckPreviewImageUrl(deck: StoredDeck) {
+  const card = getDeckCoverCard(deck);
+  if (!card) return deck.coverImage ?? DEFAULT_DECK_PREVIEW;
 
-  if (deck.coverImage && deck.coverImageFullArt === true && !card.detail?.image_uris) {
-    return deck.coverImage;
-  }
+  const artUrl = getDeckCoverArtUrl(card);
+  if (artUrl) return artUrl;
+
+  if (deck.coverImage) return deck.coverImage;
 
   const fromDetail = getCardImage(card);
   if (fromDetail) return fromDetail;
 
-  return scryfallCardImageUrl(card) ?? deck.coverImage ?? DEFAULT_DECK_PREVIEW;
+  return scryfallCardImageUrl(card) ?? DEFAULT_DECK_PREVIEW;
 }
 
 /** @deprecated use getDeckCoverCard */

@@ -141,7 +141,6 @@ interface Props {
   deck: Deck;
 }
 
-const NEW_DECK_PRINTING_TIP_KEY = 'mtgplayer-deck-editor-printing-tip-seen';
 
 export const DeckEditor: Component<Props> = props => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -163,7 +162,7 @@ export const DeckEditor: Component<Props> = props => {
   const [bracketError, setBracketError] = createSignal<string>();
   const [bracketResult, setBracketResult] = createSignal<CommanderBracketEstimate>();
   const [bracketShareUrl, setBracketShareUrl] = createSignal<string>();
-  const [newDeckTipOpen, setNewDeckTipOpen] = createSignal(false);
+  const [postImportSetupOpen, setPostImportSetupOpen] = createSignal(false);
   const [typeFilter, setTypeFilter] = createSignal('deck');
   const [activeSubtypes, setActiveSubtypes] = createSignal<string[]>([]);
   let formRef: HTMLFormElement;
@@ -206,18 +205,14 @@ export const DeckEditor: Component<Props> = props => {
   );
 
   onMount(async () => {
-    if (!props.deck?.id && !localStorage.getItem(NEW_DECK_PRINTING_TIP_KEY)) {
-      setNewDeckTipOpen(true);
-    }
     await setCardSystem(deck.system ?? MTG_CARD_SYSTEM.id);
     if (props.deck?.id || Object.keys(deck.cards ?? {}).length > 0) {
       await rehydrateDeck(deck);
     }
   });
 
-  function closeNewDeckTip() {
-    localStorage.setItem(NEW_DECK_PRINTING_TIP_KEY, '1');
-    setNewDeckTipOpen(false);
+  function closePostImportSetup() {
+    setPostImportSetupOpen(false);
   }
 
   createEffect(
@@ -1720,6 +1715,7 @@ export const DeckEditor: Component<Props> = props => {
               }
               setIsDirty(true);
               closeImportDialog();
+              setPostImportSetupOpen(true);
             }}
           />
         </Show>
@@ -1740,18 +1736,17 @@ export const DeckEditor: Component<Props> = props => {
             onClose={closeExportDialog}
           />
         </Show>
-        <Show when={newDeckTipOpen()}>
-          <EditorOverlayDialog onClose={closeNewDeckTip}>
+        <Show when={postImportSetupOpen()}>
+          <EditorOverlayDialog onClose={closePostImportSetup}>
             <DialogHeader>
-              <DialogTitle>Choosing card art</DialogTitle>
+              <DialogTitle>Next steps</DialogTitle>
             </DialogHeader>
-            <p>
-Mark your commander card with the star icon in the card.
-Right click an added card to choose an official impression or community ones.
-
-            </p>
+            <ol class='list-decimal space-y-3 pl-5 text-sm leading-relaxed'>
+              <li>Mark with the Star icon the commander card</li>
+              <li>Estimate deck (right upper corner)</li>
+            </ol>
             <DialogFooter>
-              <Button type='button' onClick={closeNewDeckTip}>
+              <Button type='button' onClick={closePostImportSetup}>
                 Got it
               </Button>
             </DialogFooter>

@@ -10,13 +10,31 @@ import { Deck } from '~/lib/constants';
 import { createDeckStore } from '~/lib/deckStore';
 import { getDeckCoverMetadata } from '~/lib/deck';
 import { DeckEditor } from '~/lib/ui/deckEditor';
-import { compareDecksByBracket } from '~/lib/commanderBracket';
+import { compareDecksByBracket, getBracketColor, getBracketTagLabel } from '~/lib/commanderBracket';
 import BracketEstimateTag from '~/lib/ui/bracketEstimateTag';
 import { ManageDecksDropdown } from '~/lib/ui/manageDecksButton';
 import PencilIcon from 'lucide-solid/icons/pencil';
 
 function deckCardCount(deck: Deck) {
   return Object.values(deck.cards).reduce((sum, card) => sum + (card.qty ?? 1), 0);
+}
+
+type BracketFilter = 'all' | 'none' | 1 | 2 | 3 | 4 | 5;
+
+const BRACKET_FILTER_OPTIONS: { value: BracketFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 1, label: getBracketTagLabel(1)! },
+  { value: 2, label: getBracketTagLabel(2)! },
+  { value: 3, label: getBracketTagLabel(3)! },
+  { value: 4, label: getBracketTagLabel(4)! },
+  { value: 5, label: getBracketTagLabel(5)! },
+  { value: 'none', label: 'Unestimated' },
+];
+
+function matchesBracketFilter(deck: Deck, filter: BracketFilter) {
+  if (filter === 'all') return true;
+  if (filter === 'none') return deck.bracketEstimate == null;
+  return deck.bracketEstimate === filter;
 }
 
 function listDeckIds(store: { decks: Record<string, Deck>; systems: Record<string, string[]> }) {
@@ -41,19 +59,18 @@ const LandingPage: Component = () => {
   const [, { initCardSystem }] = useCardSystemContext();
   const [deckStore, setDeckStore] = createDeckStore();
   const [editingDeck, setEditingDeck] = createSignal<Deck>();
+  const [bracketFilter, setBracketFilter] = createSignal<BracketFilter>('all');
 
   const decks = createMemo(() => listDeckIds(deckStore));
+  const filteredDecks = createMemo(() =>
+    decks().filter(deck => matchesBracketFilter(deck, bracketFilter())),
+  );
 
   onMount(() => {
     setGameUrl(`/game/${nanoid()}`);
     void initCardSystem();
 
     for (const deck of decks()) {
-      const hasDetail = [...Object.values(deck.cards), ...Object.values(deck.inPlay ?? {})].some(
-        card => card.detail?.image_uris || card.detail?.card_faces?.length,
-      );
-      if (!hasDetail) continue;
-
       const metadata = getDeckCoverMetadata(deck);
       if (
         metadata.coverImage !== deck.coverImage ||
@@ -92,7 +109,7 @@ const LandingPage: Component = () => {
 
   return (
     <div class='min-h-screen bg-background text-foreground'>
-      <main class='mx-auto max-w-5xl px-6 py-8'>
+      <main class='mx-auto max-w-6xl px-6 py-8'>
         <header class='mb-8'>
           <h1 class='text-xl font-semibold tracking-tight'>Untapped Table</h1>
           <p class='mt-1 text-sm text-muted-foreground'>
@@ -113,7 +130,7 @@ const LandingPage: Component = () => {
               <ManageDecksDropdown onNewDeck={() => setEditingDeck({} as Deck)} />
             </div>
 
-            <div class='min-h-80 max-h-160 overflow-y-auto px-6 py-6'>
+            <div class='px-6 py-6'>
               <Show
                 when={decks().length > 0}
                 fallback={
@@ -121,48 +138,81 @@ const LandingPage: Component = () => {
                     No decks yet. Create one by importing a card list.
                   </p>
                 }>
-                <ul>
-                  <For each={decks()}>
-                    {deck => (
-                      <li class='flex items-center justify-between gap-5 border-b border-border py-5 last:border-b-0'>
-                        <div class='flex min-w-0 items-center gap-4'>
-                          <img
-                            src={getDeckPreviewImageUrl(deck)}
-                            alt=''
-                            class='size-14 shrink-0 rounded-md border border-border object-cover'
-                            loading='lazy'
-                          />
-                          <div class='min-w-0'>
-                            <div class='flex min-w-0 items-center gap-2.5'>
-                              <p class='truncate text-base font-medium'>{deck.name || 'Untitled'}</p>
-                              <div class='flex shrink-0 flex-wrap items-center gap-1.5'>
-                                <BracketEstimateTag bracket={deck.bracketEstimate} />
-                                <Show when={deck.tags?.length}>
-                                  <For each={deck.tags}>
-                                    {tag => (
-                                      <span class='rounded bg-white px-2 py-0.5 text-xs leading-none text-black'>
-                                        {tag.name}
-                                      </span>
-                                    )}
-                                  </For>
-                                </Show>
-                              </div>
-                            </div>
-                            <p class='mt-1 text-sm text-muted-foreground'>{deckCardCount(deck)} cards</p>
-                          </div>
-                        </div>
-                        <Button
-                          variant='outline'
-                          type='button'
-                          class='shrink-0 gap-1.5'
-                          onClick={() => setEditingDeck(deck)}>
-                          <PencilIcon class='size-4' />
-                          Edit
-                        </Button>
-                      </li>
+                <div class='mb-4 flex flex-wrap items-center gap-2'>
+                  <span class='text-sm text-muted-foreground'>Bracket</span>
+                  <For each={BRACKET_FILTER_OPTIONS}>
+                    {option => (
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant={bracketFilter() === option.value ? 'default' : 'outline'}
+                        class='h-7 px-2.5 text-xs'
+                        style={
+                          bracketFilter() === option.value && option.value !== 'all' && option.value !== 'none'
+                            ? { 'background-color': getBracketColor(option.value), 'border-color': getBracketColor(option.value) }
+                            : undefined
+                        }
+                        onClick={() => setBracketFilter(option.value)}>
+                        {option.label}
+                      </Button>
                     )}
                   </For>
-                </ul>
+                </div>
+                <Show
+                  when={filteredDecks().length > 0}
+                  fallback={
+                    <p class='text-sm text-muted-foreground'>
+                      No decks match this bracket filter.
+                    </p>
+                  }>
+                  <div class='grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4'>
+                    <For each={filteredDecks()}>
+                    {deck => (
+                      <article class='group relative aspect-[626/457] overflow-hidden rounded-lg shadow-md'>
+                        <button
+                          type='button'
+                          class='block size-full text-left'
+                          onClick={() => setEditingDeck(deck)}>
+                          <div
+                            class='absolute inset-0 bg-cover bg-center'
+                            style={{
+                              'background-image': `url(${getDeckPreviewImageUrl(deck)})`,
+                            }}
+                          />
+                          <div class='absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/10' />
+                          <div class='absolute inset-x-0 bottom-0 p-3'>
+                            <p class='truncate text-base font-semibold text-white'>
+                              {deck.name || 'Untitled'}
+                            </p>
+                            <p class='mt-0.5 text-xs text-white/75'>{deckCardCount(deck)} cards</p>
+                            <div class='mt-2 flex flex-wrap items-center gap-1.5'>
+                              <BracketEstimateTag bracket={deck.bracketEstimate} />
+                              <Show when={deck.tags?.length}>
+                                <For each={deck.tags}>
+                                  {tag => (
+                                    <span class='rounded bg-white/90 px-2 py-0.5 text-xs leading-none text-black'>
+                                      {tag.name}
+                                    </span>
+                                  )}
+                                </For>
+                              </Show>
+                            </div>
+                          </div>
+                        </button>
+                        <Button
+                          variant='ghost'
+                          type='button'
+                          size='icon'
+                          class='absolute right-2 top-2 size-8 bg-black/35 text-white hover:bg-black/55 hover:text-white'
+                          aria-label={`Edit ${deck.name || 'Untitled'}`}
+                          onClick={() => setEditingDeck(deck)}>
+                          <PencilIcon class='size-4' />
+                        </Button>
+                      </article>
+                    )}
+                  </For>
+                </div>
+                </Show>
               </Show>
             </div>
           </section>
