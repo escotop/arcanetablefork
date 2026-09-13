@@ -73,8 +73,14 @@ async function fetchMoxfield(path) {
   const fetched = await fetchMoxfieldViaFetch(path);
   const body = fetched.body;
 
-  if (
+  const canUseCurlFallback =
+    typeof process !== 'undefined' &&
+    process.versions?.node &&
     !process.env.VERCEL &&
+    !process.env.CF_PAGES;
+
+  if (
+    canUseCurlFallback &&
     typeof body === 'object' &&
     body &&
     'error' in body &&

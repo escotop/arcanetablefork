@@ -47,7 +47,7 @@ export async function handleImageProxyRequest(uri) {
       return { status: 400, body: 'Upstream response is not an image' };
     }
 
-    const body = Buffer.from(await upstream.arrayBuffer());
+    const body = await upstream.arrayBuffer();
     return {
       status: 200,
       headers: {

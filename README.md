@@ -19,7 +19,24 @@ Abre `http://localhost:3001`.
 bun run build
 ```
 
-Salida en `dist/`. `vercel.json` incluye rewrite SPA y `/image-proxy` para arte custom.
+Salida en `dist/`. `vercel.json` incluye rewrite SPA y proxies de API.
+
+## Cloudflare Pages
+
+Build: `bun run build` · Output: `dist/`
+
+Las funciones en `functions/` replican los proxies de Vercel (no hace falta env var de Scryfall):
+
+| Ruta | Función |
+|------|---------|
+| `/api/scryfall/*` | Proxy a api.scryfall.com |
+| `/api/moxfield/*` | Proxy a api.moxfield.com |
+| `/api/commander-bracket` | Proxy a CommanderBracket |
+| `/image-proxy` | Proxy de imágenes custom |
+
+`public/_redirects` envía el resto de rutas a `index.html` (SPA). Las funciones se ejecutan **antes** que los redirects estáticos.
+
+Opcional en el dashboard de Cloudflare: `VITE_YJS_WS_URL`, `VITE_SITE_URL`.
 
 ## Scryfall
 
