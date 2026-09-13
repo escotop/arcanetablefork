@@ -10,10 +10,12 @@ import {
 } from '~/components/ui/dropdown-menu';
 import { exportAllDecksZip, mergeImportedDecks, parseDecksZip } from '~/lib/deckBulkTransfer';
 import { createDeckStore } from '~/lib/deckStore';
+import { MoxfieldImportModal } from '~/lib/ui/moxfieldImportModal';
 
 export const ManageDecksDropdown: Component<{ onNewDeck: () => void }> = props => {
   const [deckStore, setDeckStore] = createDeckStore();
   const [importing, setImporting] = createSignal(false);
+  const [moxfieldImportOpen, setMoxfieldImportOpen] = createSignal(false);
   let importInput: HTMLInputElement | undefined;
 
   function onExportAll() {
@@ -60,6 +62,9 @@ export const ManageDecksDropdown: Component<{ onNewDeck: () => void }> = props =
           <DropdownMenuItem disabled={importing()} onSelect={() => importInput?.click()}>
             {importing() ? 'Importing…' : 'Import zip'}
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setMoxfieldImportOpen(true)}>
+            Import from Moxfield
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={onExportAll}>Export all decks</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -73,6 +78,7 @@ export const ManageDecksDropdown: Component<{ onNewDeck: () => void }> = props =
           if (file) void onImportFile(file);
         }}
       />
+      <MoxfieldImportModal open={moxfieldImportOpen()} onOpenChange={setMoxfieldImportOpen} />
     </>
   );
 };
