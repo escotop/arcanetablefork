@@ -36,6 +36,23 @@ Las funciones en `functions/` replican los proxies de Vercel (no hace falta env 
 
 `public/_redirects` envía el resto de rutas a `index.html` (SPA). Las funciones se ejecutan **antes** que los redirects estáticos.
 
+### Configuración en el dashboard de Cloudflare Pages
+
+| Campo | Valor |
+|-------|-------|
+| Build command | `bun run build` |
+| Build output directory | `dist` |
+| Deploy command | **vacío** (recomendado) **o** `bun run deploy:cloudflare` |
+
+**No uses** `wrangler deploy` solo: es para Workers y no incluye las Pages Functions de `/functions`.
+
+Deploy manual:
+
+```bash
+bun run build
+bun run deploy:cloudflare
+```
+
 Opcional en el dashboard de Cloudflare: `VITE_YJS_WS_URL`, `VITE_SITE_URL`.
 
 ## Scryfall

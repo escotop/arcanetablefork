@@ -1,3 +1,5 @@
 name = "untapped-table"
 compatibility_date = "2024-09-23"
+
+# Cloudflare Pages: Vite build output + /functions API proxies
 pages_build_output_dir = "dist"
