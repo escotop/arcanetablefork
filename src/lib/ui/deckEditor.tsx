@@ -169,7 +169,14 @@ export const DeckEditor: Component<Props> = props => {
   const [deck, setDeck] = createStore<Deck>(
     props.deck?.id
       ? structuredClone(unwrap(props.deck))
-      : { cards: {}, inPlay: {}, sideboard: {}, tokens: {}, system: MTG_CARD_SYSTEM.id },
+      : {
+          id: nanoid(),
+          cards: {},
+          inPlay: {},
+          sideboard: {},
+          tokens: {},
+          system: MTG_CARD_SYSTEM.id,
+        },
   );
 
   const getDeckList = createMemo(() => {
@@ -519,7 +526,9 @@ export const DeckEditor: Component<Props> = props => {
         howItPlaysAdvice: persistedDeck.howItPlaysAdvice,
       });
       setIsDirty(true);
-      props.onChange(persistedDeck);
+      if (isEditing()) {
+        props.onChange(persistedDeck);
+      }
     } catch (error) {
       const message =
         error instanceof CommanderBracketApiError
@@ -634,6 +643,7 @@ export const DeckEditor: Component<Props> = props => {
     }
 
     const serializedDeck = serializeDeck(unwrap(deck));
+    if (!serializedDeck.id) return;
 
     props.onChange(serializedDeck);
     props.onClose();
@@ -1091,7 +1101,7 @@ export const DeckEditor: Component<Props> = props => {
           </div>
           <div class={styles.formContainer}>
             <div class={styles.formSidebarMain}>
-            <input type='hidden' value={props?.deck?.id ?? nanoid()} name='id' />
+            <input type='hidden' value={deck.id} name='id' />
             <TextField
               class='px-4'
               value={deck?.name ?? ''}

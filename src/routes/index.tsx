@@ -24,11 +24,11 @@ function listDeckIds(store: { decks: Record<string, Deck>; systems: Record<strin
   const ids = new Set<string>();
   for (const deckIds of Object.values(store.systems)) {
     for (const id of deckIds ?? []) {
-      if (store.decks[id]) ids.add(id);
+      if (id && store.decks[id]) ids.add(id);
     }
   }
   for (const id of Object.keys(store.decks)) {
-    ids.add(id);
+    if (id) ids.add(id);
   }
   return [...ids]
     .map(id => store.decks[id])
@@ -65,14 +65,20 @@ const LandingPage: Component = () => {
   });
 
   function saveDeck(updatedDeck: Deck) {
+    if (!updatedDeck.id) return;
+
     const fromSystem = unwrap(editingDeck()?.system) || 'unsorted';
     const toSystem = updatedDeck.system || 'unsorted';
 
-    setDeckStore('systems', fromSystem, (entries = []) => entries.filter(id => id !== updatedDeck.id));
-    setDeckStore('systems', 'unsorted', (entries = []) => entries.filter(id => id !== updatedDeck.id));
+    setDeckStore('systems', fromSystem, (entries = []) =>
+      entries.filter(id => id && id !== updatedDeck.id),
+    );
+    setDeckStore('systems', 'unsorted', (entries = []) =>
+      entries.filter(id => id && id !== updatedDeck.id),
+    );
     setDeckStore('systems', toSystem, (entries = []) => [
       updatedDeck.id,
-      ...entries.filter(id => id !== updatedDeck.id),
+      ...entries.filter(id => id && id !== updatedDeck.id),
     ]);
     setDeckStore('decks', {
       [updatedDeck.id]: { ...updatedDeck, ...getDeckCoverMetadata(updatedDeck) },

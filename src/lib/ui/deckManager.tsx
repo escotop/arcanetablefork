@@ -143,20 +143,22 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
               onClose={() => setEditingDeck()}
               deck={structuredClone(unwrap(deck))}
               onChange={updatedDeck => {
+                if (!updatedDeck.id) return;
+
                 let fromSystem = unwrap(editingDeck()?.system) || 'unsorted';
                 let toSystem = updatedDeck.system || 'unsorted';
 
                 setDeckStore('systems', fromSystem, (entries = []) =>
-                  entries.filter(id => id !== deck.id),
+                  entries.filter(id => id && id !== updatedDeck.id),
                 );
 
                 setDeckStore('systems', 'unsorted', (entries = []) =>
-                  entries.filter(id => id !== deck.id),
+                  entries.filter(id => id && id !== updatedDeck.id),
                 );
 
                 setDeckStore('systems', toSystem, (entries = []) => [
                   updatedDeck.id,
-                  ...entries.filter(id => id !== updatedDeck.id),
+                  ...entries.filter(id => id && id !== updatedDeck.id),
                 ]);
                 setDeckStore('decks', { [updatedDeck.id]: updatedDeck });
               }}

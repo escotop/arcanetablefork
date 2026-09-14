@@ -67,7 +67,7 @@ export function getDeckStore(): DeckStore {
   if (Array.isArray(store.decks)) {
     let deckEntries = store.decks.map<[string, Deck]>(deck => {
       const id = deck.id ?? nanoid();
-      return [deck.id ?? nanoid(), { ...deck, id }];
+      return [id, { ...deck, id }];
     });
     store.decks = Object.fromEntries(deckEntries);
     store.systems ??= { unsorted: [] };
@@ -109,6 +109,29 @@ export function getDeckStore(): DeckStore {
     ];
     delete store.systems[legacyId];
     migrated = true;
+  }
+
+  if (migrated) {
+    localStorage.setItem('mtgplayer-decks', JSON.stringify(store));
+  }
+
+  for (const system of Object.keys(store.systems ?? {})) {
+    const deduped = [...new Set((store.systems[system] ?? []).filter(Boolean))];
+    if (deduped.length !== (store.systems[system] ?? []).length) {
+      store.systems[system] = deduped;
+      migrated = true;
+    }
+  }
+
+  for (const id of Object.keys(store.decks ?? {})) {
+    if (!id || id === 'undefined') {
+      delete store.decks[id];
+      migrated = true;
+    }
+  }
+
+  for (const system of Object.keys(store.systems ?? {})) {
+    store.systems[system] = (store.systems[system] ?? []).filter(id => Boolean(id) && store.decks[id]);
   }
 
   if (migrated) {
