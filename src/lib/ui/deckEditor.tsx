@@ -31,7 +31,7 @@ import {
   TextFieldLabel,
 } from '~/components/ui/text-field';
 import { getCardImage } from '../card';
-import { DetailedCardEntry, Deck, FORMATS, CardSystem } from '../constants';
+import { DetailedCardEntry, Deck, FORMATS } from '../constants';
 import {
   CardPrintingOption,
   entryToPrintingOption,
@@ -47,7 +47,6 @@ import { devLog } from '../devLog';
 import { searchCards } from '../scryfall/client';
 import { cn } from '../utils';
 import styles from './deckEditor.module.css';
-import CardList from './deckEditor/cardList';
 import DeckGridCard from './deckEditor/deckGridCard';
 import PrintingPickerModal from './deckEditor/printingPickerModal';
 import { CustomCardArtOption, applyCustomArtToEntry, normalizeTextureUrl } from '~/lib/customCardArt';
@@ -145,7 +144,7 @@ interface Props {
 export const DeckEditor: Component<Props> = props => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchResults, setSearchResults] = createSignal<DetailedCardEntry[]>();
-  const [cardSystemStore, { setCardSystem }] = useCardSystemContext();
+  const [, { setCardSystem }] = useCardSystemContext();
   const [isDirty, setIsDirty] = createSignal(false);
   const [printingPickerKey, setPrintingPickerKey] = createSignal<string>();
   const [printingPickerSection, setPrintingPickerSection] = createSignal<'cards' | 'sideboard'>(
@@ -1090,7 +1089,8 @@ export const DeckEditor: Component<Props> = props => {
             </Button>
             </div>
           </div>
-          <div class={`gap-5 pt-4 ${styles.formContainer}`}>
+          <div class={styles.formContainer}>
+            <div class={styles.formSidebarMain}>
             <input type='hidden' value={props?.deck?.id ?? nanoid()} name='id' />
             <TextField
               class='px-4'
@@ -1099,31 +1099,6 @@ export const DeckEditor: Component<Props> = props => {
               <TextFieldLabel for='name'>Deck Name</TextFieldLabel>
               <TextFieldInput required type='text' id='name' name='name' placeholder='deck name' />
             </TextField>
-
-            <Select
-              value={cardSystem}
-              class='px-4'
-              name='system'
-              optionValue='id'
-              optionTextValue='name'
-              onChange={async system => {
-                await setCardSystem(system?.id);
-                updateDeck('system', system?.id);
-              }}
-              options={(() =>
-                Object.values(cardSystemStore.systems).sort((a, b) =>
-                  a.name.localeCompare(b.name),
-                ))()}
-              itemComponent={props => (
-                <SelectItem item={props.item}>{props.item.rawValue?.name}</SelectItem>
-              )}>
-              <SelectHiddenSelect />
-              <label>Card System</label>
-              <SelectTrigger aria-label='system'>
-                <SelectValue<CardSystem>>{state => state.selectedOption()?.name}</SelectValue>
-              </SelectTrigger>
-              <SelectContent />
-            </Select>
 
             <div class='px-4'>
               <label class={cn(labelVariants())}>Deck Tags</label>
@@ -1181,18 +1156,9 @@ export const DeckEditor: Component<Props> = props => {
                 <ComboboxContent style='max-height: 50lvh; overflow: auto;' />
               </Combobox>
             </div>
-            <Show when={getDeckList()}>
-              <CardList
-                entries={getDeckList()}
-                addCard={entry => {
-                  updateDeckCards('cards', getCardKey(entry), 'qty', number => number + 1);
-                }}
-                removeCard={entry =>
-                  updateDeckCards('cards', getCardKey(entry), 'qty', number => Math.max(number - 1, 0))
-                }
-              />
-            </Show>
+            </div>
 
+            <div class={styles.formSidebarFooter}>
             <div class='px-4'>
               <label class={cn(labelVariants())}>Start in play</label>
               <div class='text-muted-foreground'>
@@ -1248,16 +1214,17 @@ export const DeckEditor: Component<Props> = props => {
               </Combobox>
             </div>
 
-            <div class='flex gap-4 justify-end px-2 pb-4'>
+            <div class='flex flex-wrap items-center justify-between gap-2 px-2'>
               <Button variant='ghost' type='button' onClick={openImportDialog}>
                 Import Card List
               </Button>
-              <Button type='submit'>{isEditing() ? 'Update Deck' : 'Create Deck'}</Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger as={Button<'button'>} variant='ghost'>
-                  <OverflowMenuIcon />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent class='w-48'>
+              <div class='flex items-center gap-1'>
+                <Button type='submit'>{isEditing() ? 'Update Deck' : 'Create Deck'}</Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger as={Button<'button'>} variant='ghost' size='icon'>
+                    <OverflowMenuIcon />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent class='w-48'>
                   <DropdownMenuItem
                     disabled={Object.values(deck.cards).filter(card => card.qty).length < 1}
                     onClick={openExportDialog}>
@@ -1285,6 +1252,8 @@ export const DeckEditor: Component<Props> = props => {
                   </Show>
                 </DropdownMenuContent>
               </DropdownMenu>
+              </div>
+            </div>
             </div>
           </div>
           <div class={styles.cardListScrollContainer} aria-hidden='false'>
