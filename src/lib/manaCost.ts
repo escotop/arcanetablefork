@@ -41,7 +41,7 @@ function phyrexianBucket(raw: string): Exclude<ManaBucket, 'C'> | 'C' | undefine
   return match ? (match[1] as Exclude<ManaBucket, 'C'>) : undefined;
 }
 
-const MANA_COLORS: Record<ManaBucket, { color: string; textColor: string }> = {
+export const MANA_COLORS: Record<ManaBucket, { color: string; textColor: string }> = {
   W: { color: '#f8f6d8', textColor: '#1a1a1a' },
   U: { color: '#0e68ab', textColor: '#ffffff' },
   B: { color: '#403c39', textColor: '#ffffff' },
@@ -185,6 +185,88 @@ export function expandManaCostForDisplay(manaCost: string): ManaDisplayItem[] {
   }
 
   return items;
+}
+
+/** Mana colors / colorless symbols present in a cost string (hybrids count as each color). */
+export function getManaBucketsInCost(manaCost: string): Set<ManaBucket> {
+  const present = new Set<ManaBucket>();
+  if (!manaCost) return present;
+
+  const pattern = /\{([^}]+)\}/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(manaCost))) {
+    const raw = match[1];
+
+    if (/^\d+$/.test(raw) || raw === 'X' || raw === 'Y' || raw === 'Z') {
+      present.add('C');
+      continue;
+    }
+
+    if (NON_MANA_SYMBOLS.has(raw)) continue;
+
+    const phyrexian = phyrexianBucket(raw);
+    if (phyrexian) {
+      present.add(phyrexian);
+      continue;
+    }
+
+    if (raw.includes('/')) {
+      for (const part of raw.split('/')) {
+        if (/^\d+$/.test(part)) {
+          present.add('C');
+        } else if (COLORED_MANA.has(part)) {
+          present.add(part as ManaBucket);
+        } else if (part === 'C') {
+          present.add('C');
+        }
+      }
+      continue;
+    }
+
+    if (raw in MANA_COLORS) {
+      present.add(raw as ManaBucket);
+    }
+  }
+
+  return present;
+}
+
+export function getManaBucketsInEntry(entry?: { detail?: CardEntryDetail }): Set<ManaBucket> {
+  const present = new Set<ManaBucket>();
+  if (!entry?.detail) return present;
+
+  const costs: string[] = [];
+  if (entry.detail.mana_cost) costs.push(entry.detail.mana_cost);
+  for (const face of entry.detail.card_faces ?? []) {
+    if (face.mana_cost) costs.push(face.mana_cost);
+  }
+
+  for (const cost of costs) {
+    for (const bucket of getManaBucketsInCost(cost)) {
+      present.add(bucket);
+    }
+  }
+
+  return present;
+}
+
+export function entryMatchesManaFilter(
+  entry: { detail?: CardEntryDetail; qty?: number } | undefined,
+  selected: ManaBucket[],
+): boolean {
+  if (!selected.length) return true;
+  if (!entry || entry.qty === 0) return false;
+
+  const present = getManaBucketsInEntry(entry);
+  const selectedSet = new Set(selected);
+
+  for (const bucket of present) {
+    if (bucket === 'C') continue;
+    if (!selectedSet.has(bucket)) return false;
+  }
+
+  return true;
 }
 
 type DetailWithMana = CardEntryDetail & { mana_cost?: string };

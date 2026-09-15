@@ -101,6 +101,8 @@ import {
   tabSupportsSubtypeFilter,
 } from './deckEditor/cardSubtypes';
 import SubtypeFilter from './deckEditor/subtypeFilter';
+import ManaFilter from './deckEditor/manaFilter';
+import { entryMatchesManaFilter, type ManaBucket } from '../manaCost';
 import CommanderBracketModal from './deckEditor/commanderBracketModal';
 import BracketEstimateTag from './bracketEstimateTag';
 import {
@@ -164,6 +166,7 @@ export const DeckEditor: Component<Props> = props => {
   const [postImportSetupOpen, setPostImportSetupOpen] = createSignal(false);
   const [typeFilter, setTypeFilter] = createSignal('deck');
   const [activeSubtypes, setActiveSubtypes] = createSignal<string[]>([]);
+  const [activeManaFilters, setActiveManaFilters] = createSignal<ManaBucket[]>([]);
   let formRef: HTMLFormElement;
 
   const [deck, setDeck] = createStore<Deck>(
@@ -698,10 +701,11 @@ export const DeckEditor: Component<Props> = props => {
     const hasTextSearch = searchQuery().length > 0;
     const hasTypeFilter = hasCatalogTypeFilter();
     const hasSubtypeFilter = activeSubtypes().length > 0;
+    const hasManaFilter = activeManaFilters().length > 0;
     if (isCatalogTab() || isSideboardTab()) {
-      return hasTextSearch || hasTypeFilter || hasSubtypeFilter;
+      return hasTextSearch || hasTypeFilter || hasSubtypeFilter || hasManaFilter;
     }
-    return hasTextSearch || hasSubtypeFilter;
+    return hasTextSearch || hasSubtypeFilter || hasManaFilter;
   };
   const searchPlaceholder = () =>
     isCatalogTab() ? 'Search all MTG cards...' : 'Search in this tab...';
@@ -851,10 +855,15 @@ export const DeckEditor: Component<Props> = props => {
     typeFilter();
     catalogTypeFilter();
     setActiveSubtypes([]);
+    setActiveManaFilters([]);
   });
 
   function entryPassesFilters(entry: DetailedCardEntry | undefined) {
-    return entryMatchesSearch(entry) && entryMatchesSubtypeFilter(entry, activeSubtypes());
+    return (
+      entryMatchesSearch(entry) &&
+      entryMatchesSubtypeFilter(entry, activeSubtypes()) &&
+      entryMatchesManaFilter(entry, activeManaFilters())
+    );
   }
 
   const cardGrouping = useCardGrouping(cardSystem.types ?? [], getDeckList);
@@ -884,8 +893,11 @@ export const DeckEditor: Component<Props> = props => {
   const filteredSearchResults = createMemo(() => {
     const results = searchResults();
     if (!results) return results;
-    if (!activeSubtypes().length) return results;
-    return results.filter(card => entryMatchesSubtypeFilter(card, activeSubtypes()));
+    return results.filter(
+      card =>
+        entryMatchesSubtypeFilter(card, activeSubtypes()) &&
+        entryMatchesManaFilter(card, activeManaFilters()),
+    );
   });
 
   const deckTokenPartIds = createMemo(() => {
@@ -1321,6 +1333,7 @@ export const DeckEditor: Component<Props> = props => {
                     value={activeSubtypes()}
                     onChange={setActiveSubtypes}
                   />
+                  <ManaFilter value={activeManaFilters()} onChange={setActiveManaFilters} />
                 </Show>
               </div>
             </div>
