@@ -77,7 +77,9 @@ function cloneJson<T>(value: T): T {
   }
 }
 
-function deepSanitize(value: unknown, seen = new WeakSet()): unknown {
+function deepSanitize(value: unknown, seen = new WeakSet(), depth = 0): unknown {
+  const MAX_DEPTH = 64;
+  if (depth > MAX_DEPTH) return undefined;
   if (value === null || value === undefined) return value;
   if (typeof value !== 'object') return value;
   
@@ -89,7 +91,7 @@ function deepSanitize(value: unknown, seen = new WeakSet()): unknown {
   seen.add(value as object);
   
   if (Array.isArray(value)) {
-    return value.map(item => deepSanitize(item, seen));
+    return value.map(item => deepSanitize(item, seen, depth + 1));
   }
   
   const result: Record<string, unknown> = {};
@@ -102,7 +104,7 @@ function deepSanitize(value: unknown, seen = new WeakSet()): unknown {
     if (typeof val === 'function') {
       continue;
     }
-    result[key] = deepSanitize(val, seen);
+    result[key] = deepSanitize(val, seen, depth + 1);
   }
   return result;
 }
@@ -163,9 +165,10 @@ function getStoredWorldSnapshot(): WorldSnapshot | undefined {
     return undefined;
   }
   if (snapshot.logLength > gameLog.length) {
-    console.log('[worldSnapshot] Snapshot too new', {
+    console.log('[worldSnapshot] Snapshot ahead of local log (may sync soon)', {
       snapshotLogLength: snapshot.logLength,
       currentLogLength: gameLog.length,
+      barrierId: snapshot.barrierId,
     });
     return undefined;
   }
@@ -173,13 +176,51 @@ function getStoredWorldSnapshot(): WorldSnapshot | undefined {
     logLength: snapshot.logLength,
     currentLogLength: gameLog.length,
     playAreas: snapshot.playAreas.length,
+    barrierId: snapshot.barrierId,
   });
+  return snapshot;
+}
+
+async function waitUntilLogCoversSnapshot(snapshot: WorldSnapshot, maxWaitMs = 12_000): Promise<boolean> {
+  if (snapshot.logLength <= gameLog.length) return true;
+
+  const deadline = performance.now() + maxWaitMs;
+  while (performance.now() < deadline) {
+    await waitForGameLogCatchUp({
+      maxWaitMs: Math.max(250, deadline - performance.now()),
+    });
+    if (gameLog.length >= snapshot.logLength) return true;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+
+  return gameLog.length >= snapshot.logLength;
+}
+
+async function resolveStoredWorldSnapshot(maxWaitMs = 12_000): Promise<WorldSnapshot | undefined> {
+  let snapshot = getStoredWorldSnapshot();
+  if (snapshot) return snapshot;
+
+  const raw = gameState.get('worldSnapshot') as WorldSnapshot | undefined;
+  if (!raw?.playAreas?.length || raw.logLength <= gameLog.length) {
+    return undefined;
+  }
+
+  console.log('[worldSnapshot] Waiting for game log before applying snapshot', {
+    snapshotLogLength: raw.logLength,
+    currentLogLength: gameLog.length,
+  });
+  const ready = await waitUntilLogCoversSnapshot(raw, maxWaitMs);
+  if (!ready) {
+    console.log('[worldSnapshot] Timed out waiting for log to cover snapshot');
+    return undefined;
+  }
+  snapshot = getStoredWorldSnapshot();
   return snapshot;
 }
 
 async function tryApplyStoredWorldSnapshot(gameId: string, playerSessionId: string): Promise<boolean> {
   console.log('[worldSnapshot] Trying to apply stored snapshot');
-  const snapshot = getStoredWorldSnapshot();
+  const snapshot = await resolveStoredWorldSnapshot();
   if (!snapshot) {
     console.log('[worldSnapshot] No stored snapshot available');
     return false;
@@ -354,15 +395,31 @@ function releaseSyncBarrier(barrierId: string) {
       logReloadOther('release-barrier-cleanup-start', { barrierId });
       const current = gameState.get('syncBarrier') as SyncBarrier | undefined;
       if (current?.id !== barrierId) return;
+      const snapshot = gameState.get('worldSnapshot') as WorldSnapshot | undefined;
+      if (snapshot?.barrierId === barrierId) {
+        gameState.delete('worldSnapshot');
+        logReloadOther('release-barrier-cleanup-removed-barrier-snapshot', { barrierId });
+      }
       gameState.delete('syncBarrier');
-      gameState.delete('worldSnapshot');
       logReloadOther('release-barrier-cleanup-done', { barrierId });
       endReloadOtherTrace('barrier-released');
     });
+    if (isSyncHost()) {
+      publishPersistentWorldSnapshot();
+    }
   }, 300);
 }
 
-function detectCircularRefsInSnapshot(obj: unknown, path = '', seen = new WeakSet()): string | null {
+function detectCircularRefsInSnapshot(
+  obj: unknown,
+  path = '',
+  seen = new WeakSet(),
+  depth = 0,
+): string | null {
+  const MAX_DEPTH = 64;
+  if (depth > MAX_DEPTH) {
+    return `Max depth exceeded at: ${path}`;
+  }
   if (obj === null || obj === undefined) return null;
   if (typeof obj !== 'object') return null;
   
@@ -378,12 +435,17 @@ function detectCircularRefsInSnapshot(obj: unknown, path = '', seen = new WeakSe
   
   if (Array.isArray(obj)) {
     for (let i = 0; i < obj.length; i++) {
-      const result = detectCircularRefsInSnapshot(obj[i], `${path}[${i}]`, seen);
+      const result = detectCircularRefsInSnapshot(obj[i], `${path}[${i}]`, seen, depth + 1);
       if (result) return result;
     }
   } else {
     for (const [key, value] of Object.entries(obj)) {
-      const result = detectCircularRefsInSnapshot(value, path ? `${path}.${key}` : key, seen);
+      const result = detectCircularRefsInSnapshot(
+        value,
+        path ? `${path}.${key}` : key,
+        seen,
+        depth + 1,
+      );
       if (result) return result;
     }
   }
@@ -575,6 +637,8 @@ export async function acquireWorldSnapshot(
   }
 
   console.log('[worldSnapshot] Game needs snapshot sync (reconnecting player)');
+
+  await waitForGameLogCatchUp({ maxWaitMs: 10_000 });
   
   if (await tryApplyStoredWorldSnapshot(gameId, playerSessionId)) {
     console.log('[worldSnapshot] Used stored snapshot successfully');

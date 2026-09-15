@@ -824,7 +824,17 @@ export function startSpectating() {
   });
 }
 
-function detectCircularRefs(obj: unknown, path = '', seen = new WeakSet()): string | null {
+const MAX_CIRCULAR_REF_DEPTH = 64;
+
+function detectCircularRefs(
+  obj: unknown,
+  path = '',
+  seen = new WeakSet(),
+  depth = 0,
+): string | null {
+  if (depth > MAX_CIRCULAR_REF_DEPTH) {
+    return `Max depth exceeded at: ${path}`;
+  }
   if (obj === null || obj === undefined) return null;
   if (typeof obj !== 'object') return null;
   
@@ -840,12 +850,12 @@ function detectCircularRefs(obj: unknown, path = '', seen = new WeakSet()): stri
   
   if (Array.isArray(obj)) {
     for (let i = 0; i < obj.length; i++) {
-      const result = detectCircularRefs(obj[i], `${path}[${i}]`, seen);
+      const result = detectCircularRefs(obj[i], `${path}[${i}]`, seen, depth + 1);
       if (result) return result;
     }
   } else {
     for (const [key, value] of Object.entries(obj)) {
-      const result = detectCircularRefs(value, path ? `${path}.${key}` : key, seen);
+      const result = detectCircularRefs(value, path ? `${path}.${key}` : key, seen, depth + 1);
       if (result) return result;
     }
   }

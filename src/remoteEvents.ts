@@ -243,6 +243,13 @@ async function drainProcessEvents() {
     return;
   }
   if (processedEvents() > gameLog.length) {
+    logReloadOther('process-events-log-behind-processed', {
+      processed: processedEvents(),
+      logLength: gameLog.length,
+    });
+    await waitForGameLogCatchUp({ maxWaitMs: 3_000 });
+  }
+  if (processedEvents() > gameLog.length) {
     logReloadOther('process-events-reset-replay', {
       processed: processedEvents(),
       logLength: gameLog.length,
