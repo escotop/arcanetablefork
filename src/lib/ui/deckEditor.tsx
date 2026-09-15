@@ -380,14 +380,18 @@ export const DeckEditor: Component<Props> = props => {
     entry: DetailedCardEntry,
     printing: CardPrintingOption,
   ): DetailedCardEntry {
-    if (getCardImage(entry) || !getPrintingPreviewUrl(printing)) return entry;
+    const withoutCustom: DetailedCardEntry = { ...entry, customArtUrl: undefined };
+
+    if (!getPrintingPreviewUrl(printing)) {
+      return withoutCustom;
+    }
 
     return {
-      ...entry,
+      ...withoutCustom,
       detail: {
-        ...entry.detail,
-        image_uris: printing.image_uris ?? entry.detail?.image_uris,
-        card_faces: printing.card_faces ?? entry.detail?.card_faces,
+        ...withoutCustom.detail,
+        image_uris: printing.image_uris ?? withoutCustom.detail?.image_uris,
+        card_faces: printing.card_faces ?? withoutCustom.detail?.card_faces,
       },
     };
   }
@@ -474,6 +478,7 @@ export const DeckEditor: Component<Props> = props => {
       ...updated,
       qty: previous.qty ?? 1,
       categories: previous.categories ?? updated.categories ?? [],
+      customArtUrl: undefined,
     });
   }
 
@@ -585,10 +590,11 @@ export const DeckEditor: Component<Props> = props => {
 
     if (!updated?.id) return;
 
-    const nextEntry = {
+    const nextEntry: DetailedCardEntry = {
       ...updated,
       qty,
       categories: previous.categories ?? updated.categories ?? [],
+      customArtUrl: undefined,
     };
     updateDeck(section, storageKey, nextEntry);
     if (section === 'cards') {

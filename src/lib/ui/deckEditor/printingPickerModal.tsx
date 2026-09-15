@@ -68,6 +68,7 @@ const PrintingPickerModal: Component<Props> = props => {
   const [customLoading, setCustomLoading] = createSignal(false);
 
   const selectedId = () => props.entry.id;
+  const usingCustomArt = () => !!props.entry.customArtUrl;
   const selectedImageUrl = () => getCardImage(props.entry);
 
   const savedCustomOptions = createMemo(() =>
@@ -244,7 +245,8 @@ const PrintingPickerModal: Component<Props> = props => {
               style={{ 'grid-template-columns': `repeat(${colsPerRow()}, minmax(0, 1fr))` }}>
               <For each={visiblePrintings()}>
                 {printing => {
-                  const isSelected = () => printing.id === selectedId();
+                  const isSelected = () =>
+                    !usingCustomArt() && printing.id === selectedId();
                   return (
                     <button
                       type='button'
