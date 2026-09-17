@@ -112,6 +112,12 @@ function isCommentLine(trimmed: string) {
   return trimmed.startsWith('//') || trimmed.startsWith('==');
 }
 
+/** Moxfield and similar exports use this placeholder when a slot has custom art only. */
+function isImportPlaceholderEntry(entry: Pick<CardEntry, 'name' | 'set' | 'collector_number' | 'id'>) {
+  const name = entry.name.trim().toLowerCase();
+  return name === 'custom card' && !entry.set && !entry.collector_number && !entry.id;
+}
+
 export interface ParsedImportedCardList {
   cards: CardEntry[];
   sideboard: CardEntry[];
@@ -155,6 +161,7 @@ export function parseImportedCardList(cardList: string): ParsedImportedCardList 
 
     const parsed = card.run(rawLine).result;
     if (!parsed?.name?.length) continue;
+    if (isImportPlaceholderEntry(parsed as CardEntry)) continue;
 
     if (section === 'sideboard') {
       sideboard.push(parsed as CardEntry);

@@ -458,6 +458,15 @@ test('arena format deck with paren set and bare collector number', () => {
   ]);
 });
 
+test('parseImportedCardList skips Moxfield custom art placeholder', () => {
+  const result = parseImportedCardList(`1 Sol Ring [frc] #21
+1 Custom Card
+1 Arcane Signet [frc] #20`);
+
+  expect(result.cards).toHaveLength(2);
+  expect(result.cards.map(card => card.name)).toEqual(['Sol Ring', 'Arcane Signet']);
+});
+
 test('parseImportedCardList ignores Deck and marks Commander for start in play', () => {
   const result = parseImportedCardList(`Deck
 4 Lightning Bolt

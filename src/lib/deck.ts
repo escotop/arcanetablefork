@@ -28,6 +28,7 @@ import {
   DetailedCardEntry,
 } from './constants';
 import { applyCustomArtToEntry, normalizeTextureUrl } from './customCardArt';
+import { devLog } from './devLog';
 import { slimCardDetailForLog } from './gameLogEvents';
 import { parseImportedCardList } from './deckParser';
 import { isCommanderCard } from './deckCommander';

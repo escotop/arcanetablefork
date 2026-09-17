@@ -378,7 +378,14 @@ export async function fetchCardInfoForImport(
       await delay(INDIVIDUAL_LOOKUP_DELAY_MS);
     }
 
-    const card = await fetchCardInfo(entry, cache);
+    let card: DetailedCardEntry;
+    try {
+      card = await fetchCardInfo(entry, cache);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Card lookup failed';
+      devLog.warn('[deck import] Lookup threw for', entry.name, message);
+      card = notFoundEntry(entry, message);
+    }
     cards[getCardKey(card)] = card;
 
     if (individualKeys.has(getCardKey(entry))) {
