@@ -70,41 +70,57 @@ export interface WorldSnapshot {
 
 function cloneJson<T>(value: T): T {
   try {
-    return JSON.parse(JSON.stringify(value));
+    // Primero sanitizar para evitar stack overflow en JSON.stringify
+    const sanitized = deepSanitize(value);
+    return JSON.parse(JSON.stringify(sanitized)) as T;
   } catch (error) {
-    console.error('[worldSnapshot] cloneJson failed, attempting deep sanitize', error);
+    console.error('[worldSnapshot] cloneJson failed even after sanitize', error);
+    // Último recurso: devolver el sanitizado sin stringify
     return deepSanitize(value) as T;
   }
 }
 
 function deepSanitize(value: unknown, seen = new WeakSet(), depth = 0): unknown {
-  const MAX_DEPTH = 64;
+  const MAX_DEPTH = 32;  // Reducir profundidad máxima para prevenir stack overflow
   if (depth > MAX_DEPTH) return undefined;
   if (value === null || value === undefined) return value;
   if (typeof value !== 'object') return value;
   
   // Detectar referencias circulares
   if (seen.has(value as object)) {
-    console.warn('[worldSnapshot] Circular reference detected and removed');
-    return undefined;
+    return undefined;  // Sin log para evitar spam en partidas largas
   }
   seen.add(value as object);
   
+  // Detectar y omitir objetos Three.js temprano
+  const obj = value as Record<string, unknown>;
+  if ('isObject3D' in obj || 'isMaterial' in obj || 'isTexture' in obj || 
+      'isVector3' in obj || 'isQuaternion' in obj || 'isMatrix4' in obj) {
+    return undefined;
+  }
+  
   if (Array.isArray(value)) {
-    return value.map(item => deepSanitize(item, seen, depth + 1));
+    // Limitar arrays muy grandes para prevenir problemas de memoria
+    const MAX_ARRAY_LENGTH = 10000;
+    const items = value.slice(0, MAX_ARRAY_LENGTH);
+    return items.map(item => deepSanitize(item, seen, depth + 1)).filter(item => item !== undefined);
   }
   
   const result: Record<string, unknown> = {};
-  for (const [key, val] of Object.entries(value)) {
-    // Omitir campos que son meshes de Three.js
-    if (val && typeof val === 'object' && 'isObject3D' in val) {
-      continue;
+  let keyCount = 0;
+  const MAX_KEYS = 1000;  // Limitar objetos muy grandes
+  
+  for (const [key, val] of Object.entries(obj)) {
+    if (keyCount++ > MAX_KEYS) break;
+    
+    // Omitir funciones y valores problemáticos
+    if (typeof val === 'function') continue;
+    if (val && typeof val === 'object' && 'isObject3D' in val) continue;
+    
+    const sanitized = deepSanitize(val, seen, depth + 1);
+    if (sanitized !== undefined) {
+      result[key] = sanitized;
     }
-    // Omitir funciones
-    if (typeof val === 'function') {
-      continue;
-    }
-    result[key] = deepSanitize(val, seen, depth + 1);
   }
   return result;
 }
@@ -416,7 +432,7 @@ function detectCircularRefsInSnapshot(
   seen = new WeakSet(),
   depth = 0,
 ): string | null {
-  const MAX_DEPTH = 64;
+  const MAX_DEPTH = 32;  // Reducir para prevenir stack overflow
   if (depth > MAX_DEPTH) {
     return `Max depth exceeded at: ${path}`;
   }
@@ -428,18 +444,25 @@ function detectCircularRefsInSnapshot(
   }
   seen.add(obj as object);
   
+  const record = obj as Record<string, unknown>;
+  
   // Check for Three.js objects
-  if ('isObject3D' in obj || 'isMaterial' in obj || 'isTexture' in obj || 'isVector3' in obj) {
-    return `Three.js object at: ${path} (keys: ${Object.keys(obj).slice(0, 5).join(', ')})`;
+  if ('isObject3D' in record || 'isMaterial' in record || 'isTexture' in record || 
+      'isVector3' in record || 'isQuaternion' in record || 'isMatrix4' in record) {
+    return `Three.js object at: ${path}`;
   }
   
   if (Array.isArray(obj)) {
-    for (let i = 0; i < obj.length; i++) {
+    // Solo revisar primeros elementos de arrays muy grandes
+    const checkLimit = Math.min(obj.length, 100);
+    for (let i = 0; i < checkLimit; i++) {
       const result = detectCircularRefsInSnapshot(obj[i], `${path}[${i}]`, seen, depth + 1);
       if (result) return result;
     }
   } else {
-    for (const [key, value] of Object.entries(obj)) {
+    let keyCount = 0;
+    for (const [key, value] of Object.entries(record)) {
+      if (keyCount++ > 100) break;  // Limitar chequeo en objetos grandes
       const result = detectCircularRefsInSnapshot(
         value,
         path ? `${path}.${key}` : key,
@@ -693,10 +716,17 @@ export function setupPersistentSnapshotPublisher() {
 
   let lastPublishedLogLength = 0;
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  const MIN_LOG_GROWTH = 50;  // Publicar solo después de 50+ eventos nuevos
 
   const publishIfNeeded = () => {
-    logReloadOther('persistent-publisher-gamelog-observe', { gameLogLength: gameLog.length });
     const currentLogLength = gameLog.length;
+    const growth = currentLogLength - lastPublishedLogLength;
+    
+    // No publicar si el crecimiento es muy pequeño
+    if (growth < MIN_LOG_GROWTH && currentLogLength > 0) {
+      return;
+    }
+    
     if (currentLogLength === lastPublishedLogLength) return;
 
     if (debounceTimer) clearTimeout(debounceTimer);
@@ -709,14 +739,20 @@ export function setupPersistentSnapshotPublisher() {
 
       const length = gameLog.length;
       if (length === lastPublishedLogLength) return;
+      
+      const actualGrowth = length - lastPublishedLogLength;
+      if (actualGrowth < MIN_LOG_GROWTH && length > 0) {
+        return;
+      }
 
       logReloadOther('persistent-publisher-scheduled', {
         from: lastPublishedLogLength,
         to: length,
+        growth: actualGrowth,
       });
       lastPublishedLogLength = length;
       publishPersistentWorldSnapshot();
-    }, 150);
+    }, 500);  // Aumentar debounce de 150ms a 500ms
   };
 
   gameLog.observe(publishIfNeeded);
