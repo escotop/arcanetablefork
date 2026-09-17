@@ -1,9 +1,10 @@
 import { useNavigate } from '@solidjs/router';
 import { nanoid } from 'nanoid';
-import { Component, createMemo, createSignal, For, onMount, Show } from 'solid-js';
+import { Component, createEffect, createMemo, createSignal, For, onMount, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { produce, unwrap } from 'solid-js/store';
 import { Button } from '~/components/ui/button';
+import { resetDocumentScroll } from '~/lib/documentScrollLock';
 import { getDeckPreviewImageUrl } from '~/lib/deck';
 import { useCardSystemContext } from '~/lib/cardSystemContext';
 import { Deck } from '~/lib/constants';
@@ -49,7 +50,14 @@ const LandingPage: Component = () => {
     decks().filter(deck => matchesBracketFilter(deck, bracketFilter())),
   );
 
+  createEffect(() => {
+    if (!editingDeck()) {
+      resetDocumentScroll();
+    }
+  });
+
   onMount(() => {
+    resetDocumentScroll();
     setGameUrl(`/game/${nanoid()}`);
     void initCardSystem();
 

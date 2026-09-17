@@ -44,6 +44,7 @@ import {
 } from '../deck';
 import { cardSystem, colorHashDark } from '../globals';
 import { devLog } from '../devLog';
+import { lockDocumentScroll, unlockDocumentScroll } from '../documentScrollLock';
 import { searchCards } from '../scryfall/client';
 import { cn } from '../utils';
 import styles from './deckEditor.module.css';
@@ -629,16 +630,9 @@ export const DeckEditor: Component<Props> = props => {
   });
 
   onMount(() => {
-    const html = document.documentElement;
-    const body = document.body;
-    const previousHtmlOverflow = html.style.overflow;
-    const previousBodyOverflow = body.style.overflow;
-    html.style.overflow = 'hidden';
-    body.style.overflow = 'hidden';
-
+    lockDocumentScroll();
     onCleanup(() => {
-      html.style.overflow = previousHtmlOverflow;
-      body.style.overflow = previousBodyOverflow;
+      unlockDocumentScroll();
     });
   });
 

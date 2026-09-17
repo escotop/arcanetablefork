@@ -16,6 +16,7 @@ import {
   loadCardTextures,
   normalizeCardCounterModifiers,
   setCardData,
+  stripCardIdentityForHiddenHand,
   updateModifiers,
 } from './card';
 import { CardArea } from './cardArea';
@@ -1094,8 +1095,12 @@ export class PlayArea {
       clientId,
       clientID: clientId,
     });
-    restoreSerializedZoneCards(playArea.hand, state.hand, clientId, card =>
-      playArea.hand.addCard(card, { skipAnimation: true }),
+    restoreSerializedZoneCards(
+      playArea.hand,
+      state.hand,
+      clientId,
+      card => playArea.hand.addCard(card, { skipAnimation: true }),
+      !playArea.isLocalPlayArea,
     );
     restoreSerializedZoneCards(playArea.graveyardZone, state.graveyard, clientId, card =>
       playArea.graveyardZone.addCard(card, { skipAnimation: true }),
@@ -1122,11 +1127,12 @@ function restoreSerializedZoneCards(
   serialized?: { cards?: Array<Record<string, unknown>> },
   clientId?: number,
   addCard?: (card: Card) => void,
+  hideHandFaces = false,
 ) {
   if (!serialized?.cards?.length || !addCard || clientId === undefined) return;
 
   for (const entry of serialized.cards) {
-    const card = cardFromSerializable(entry, clientId);
+    const card = cardFromSerializable(entry, clientId, hideHandFaces);
     addCard(card);
   }
 }
@@ -1148,7 +1154,11 @@ function restoreSerializedBattlefieldCards(
   }
 }
 
-function cardFromSerializable(serialized: Record<string, unknown>, clientId: number): Card {
+function cardFromSerializable(
+  serialized: Record<string, unknown>,
+  clientId: number,
+  hideHandFaces = false,
+): Card {
   const userData = serialized.userData as Record<string, unknown> | undefined;
   const embedded = userData?.card as Card | undefined;
   const base: Card = {
@@ -1158,6 +1168,9 @@ function cardFromSerializable(serialized: Record<string, unknown>, clientId: num
     customArtUrl: embedded?.customArtUrl,
     modifiers: (embedded?.modifiers ?? {}) as Card['modifiers'],
   };
+  if (hideHandFaces) {
+    stripCardIdentityForHiddenHand(base);
+  }
   const card = initializeCardMesh(base, clientId);
   let deferredIsPublic: boolean | undefined;
   if (userData) {

@@ -10,6 +10,7 @@ import {
   ensureCardMesh,
   loadCardTextures,
   normalizeCardCounterModifiers,
+  stripCardIdentityForHiddenHand,
   updateModifiers,
 } from './lib/card';
 import { Card } from './lib/constants';
@@ -884,6 +885,10 @@ const EVENTS = {
     let p = event.payload?.addOptions?.position;
     if (p) {
       options.position = new Vector3(p.x, p.y, p.z);
+    }
+
+    if (zone?.zone === 'hand' && !playArea.isLocalPlayArea) {
+      stripCardIdentityForHiddenHand(card);
     }
 
     zone?.addCard(card, options);

@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { URL } from 'node:url';
 import { handleImageProxyRequest } from './scripts/image-proxy-handler.mjs';
+import { bodyForNodeResponse } from './scripts/node-response-body.mjs';
 
 const port = Number(process.env.IMAGE_PROXY_PORT ?? 3001);
 
@@ -15,7 +16,7 @@ const server = http.createServer(async (req, res) => {
   const result = await handleImageProxyRequest(requestUrl.searchParams.get('uri'));
   const headers = result.headers ?? { 'Content-Type': 'text/plain; charset=utf-8' };
   res.writeHead(result.status, headers);
-  res.end(result.body);
+  res.end(bodyForNodeResponse(result.body));
 });
 
 server.listen(port, '127.0.0.1', () => {

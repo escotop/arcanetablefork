@@ -44,10 +44,12 @@ import {
   getLocalPlayerClientId,
   getProjectionVec,
   isEventCatchUpComplete,
+  isLocalHandZone,
   playAreas,
   scene,
   textureLoader,
   textureLoaderWorker,
+  zonesById,
 } from './globals';
 import { counters } from './ui/counterDialog';
 import { shouldRenderLoyaltyCounterOnCard, syncLoyaltyCounterForCard } from './loyaltyCounter';
@@ -439,14 +441,110 @@ function hasLoadedFrontTexture(card: Card, frontUrl: string) {
 
   const mat = mesh.material[4] as MeshStandardMaterial | undefined;
   if (!mat?.map || mat.map === cardLoadingTexture) return false;
+  if (mat.map === cardBackTexture) return false;
 
   return true;
+}
+
+/** Opponent hand cards stay face-down; other clients must not fetch or show the art. */
+export function isOpponentPrivateHandCard(card: Card): boolean {
+  const mesh = card.mesh;
+  if (!mesh || mesh.userData.location !== 'hand') return false;
+  if (mesh.userData.isPublic) return false;
+
+  const localClientId = getLocalPlayerClientId();
+  const ownerClientId = mesh.userData.clientId ?? card.clientId;
+  if (localClientId !== undefined && ownerClientId !== undefined) {
+    return Number(ownerClientId) !== Number(localClientId);
+  }
+
+  const zoneId = mesh.userData.zoneId as string | undefined;
+  if (!zoneId) return false;
+
+  const zone = zonesById.get(zoneId);
+  if (!zone || zone.zone !== 'hand') return false;
+  return !isLocalHandZone(zone);
+}
+
+/** Hidden-hand sync strips images; restore from mesh userData (e.g. transfer events) before loading. */
+export function restoreCardDetailIfStripped(card: Card) {
+  if (getCardImage(card)) return;
+
+  const embedded = card.mesh?.userData?.card as Card | undefined;
+  if (!embedded?.detail) return;
+
+  const embeddedImage = getCardImage(embedded as Card);
+  if (!embeddedImage && !embedded.detail.image_uris) return;
+
+  card.detail = { ...embedded.detail, ...card.detail, ...embedded.detail };
+  if (embedded.customArtUrl) {
+    card.customArtUrl = embedded.customArtUrl;
+  }
+
+  if (card.mesh) {
+    const shared = card.mesh.userData.card as Card | undefined;
+    if (shared) {
+      shared.detail = card.detail;
+      shared.customArtUrl = card.customArtUrl;
+    }
+  }
+}
+
+export function stripCardIdentityForHiddenHand(card: Card) {
+  card.customArtUrl = undefined;
+
+  const detail = card.detail;
+  if (detail) {
+    card.detail = {
+      id: detail.id,
+      name: detail.name,
+      oracle_id: detail.oracle_id,
+      layout: detail.layout,
+      type_line: detail.type_line,
+      search: detail.search ?? '',
+    };
+  }
+
+  if (card.mesh) {
+    card.mesh.userData.card_face_urls = [];
+    const embedded = card.mesh.userData.card as Card | undefined;
+    if (embedded) {
+      embedded.customArtUrl = undefined;
+      embedded.detail = card.detail;
+    }
+  }
+}
+
+export function applyOpponentHiddenHandFace(card: Card) {
+  if (!card.mesh || !isOpponentPrivateHandCard(card)) return;
+
+  ensureDoubleSidedCardMaterials(card.mesh);
+  const backTemplate =
+    (card.mesh.userData.publicCardBack as MeshStandardMaterial | undefined) ??
+    new MeshStandardMaterial({ map: cardBackTexture, transparent: true });
+  card.mesh.material[4] = backTemplate.clone();
+  card.mesh.material[4].needsUpdate = true;
+
+  if (card.mesh.userData.isDoubleSided) {
+    const privateBack = card.mesh.userData.cardBack as MeshStandardMaterial | undefined;
+    if (privateBack) {
+      card.mesh.material[5] = privateBack.clone();
+      card.mesh.material[5].needsUpdate = true;
+    }
+  }
 }
 
 export async function loadCardTextures(
   card: Card,
   cache: Map<string, Promise<MeshStandardMaterial>> = cardTextureMaterialCache,
 ) {
+  if (isOpponentPrivateHandCard(card)) {
+    applyOpponentHiddenHandFace(card);
+    return;
+  }
+
+  restoreCardDetailIfStripped(card);
+
   if (!getCardImage(card)) {
     await ensureCardImageDetail(card);
   }
@@ -921,6 +1019,10 @@ export function isLocalHandFlipped(cardId: string) {
 
 export async function applyHandCardFace(card: Card, faceIndex: 0 | 1) {
   if (!card.mesh) return;
+  if (isOpponentPrivateHandCard(card)) {
+    applyOpponentHiddenHandFace(card);
+    return;
+  }
 
   await loadCardTextures(card);
   const url = normalizeTextureUrl(
@@ -1069,6 +1171,9 @@ export function setCardData<Field extends keyof CardUserData>(
       const card = cardsById.get(cardMesh.userData.id);
       if (card) removeHandManaOverlay(card);
       clearLocalHandFlip(cardMesh.userData.id);
+      if (card) {
+        restoreCardDetailIfStripped(card);
+      }
     }
     if (cardMesh.userData.location === 'battlefield' && value !== 'battlefield') {
       cleanupCounterModifierMeshes(cardMesh);
@@ -1093,6 +1198,17 @@ export function setCardData<Field extends keyof CardUserData>(
   }
 
   set(cardMesh.userData, field, value);
+
+  if (field === 'isPublic' && cardMesh.userData.location === 'hand') {
+    const card = cardsById.get(cardMesh.userData.id);
+    if (card) {
+      if (value) {
+        void loadCardTextures(card);
+      } else if (isOpponentPrivateHandCard(card)) {
+        applyOpponentHiddenHandFace(card);
+      }
+    }
+  }
 
   // after setting value
 

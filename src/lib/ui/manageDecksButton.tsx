@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
 import { exportAllDecksZip, mergeImportedDecks, parseDecksZip } from '~/lib/deckBulkTransfer';
+import { resetDocumentScroll } from '~/lib/documentScrollLock';
 import { createDeckStore } from '~/lib/deckStore';
 import { MoxfieldImportModal } from '~/lib/ui/moxfieldImportModal';
 
@@ -78,7 +79,13 @@ export const ManageDecksDropdown: Component<{ onNewDeck: () => void }> = props =
           if (file) void onImportFile(file);
         }}
       />
-      <MoxfieldImportModal open={moxfieldImportOpen()} onOpenChange={setMoxfieldImportOpen} />
+      <MoxfieldImportModal
+        open={moxfieldImportOpen()}
+        onOpenChange={open => {
+          setMoxfieldImportOpen(open);
+          if (!open) resetDocumentScroll();
+        }}
+      />
     </>
   );
 };

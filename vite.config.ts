@@ -5,6 +5,7 @@ import path from 'node:path';
 import { handleImageProxyRequest } from './scripts/image-proxy-handler.mjs';
 import { handleMoxfieldProxyRequest } from './scripts/moxfield-proxy-handler.mjs';
 import { handleScryfallProxyRequest } from './scripts/scryfall-proxy-handler.mjs';
+import { bodyForNodeResponse } from './scripts/node-response-body.mjs';
 
 function readRequestBody(req: NodeJS.ReadableStream): Promise<string | undefined> {
   return new Promise((resolve, reject) => {
@@ -36,7 +37,7 @@ function proxyDevPlugin() {
           for (const [key, value] of Object.entries(headers)) {
             res.setHeader(key, value);
           }
-          res.end(result.body);
+          res.end(bodyForNodeResponse(result.body));
           return;
         }
 
@@ -62,7 +63,7 @@ function proxyDevPlugin() {
           res.statusCode = result.status;
           res.setHeader('Content-Type', result.contentType);
           res.setHeader('Access-Control-Allow-Origin', '*');
-          res.end(result.body);
+          res.end(bodyForNodeResponse(result.body));
           return;
         }
 
