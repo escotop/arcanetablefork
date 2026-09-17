@@ -242,17 +242,12 @@ export class PlayArea {
     this.nameTagPivot.add(this.nameTagObject);
     this.applyNameTagOrientation();
 
-    if (state?.battlefield?.cards) {
-      state.battlefield.cards.forEach(serialized => {
-        let card = initializeCardMesh(serialized.userData.card, clientId);
-        setCardData(card.mesh, 'isTapped', serialized.userData.isTapped ?? false);
-        setCardData(card.mesh, 'isFlipped', serialized.userData.isFlipped ?? false);
-        setCardData(card.mesh, 'isPublic', true);
-        this.battlefieldZone.addCard(card, {
-          skipAnimation: true,
-          positionArray: serialized.position,
-        });
-      });
+    if (state?.battlefield?.cards?.length) {
+      restoreSerializedBattlefieldCards(
+        this.battlefieldZone,
+        state.battlefield as { cards?: Array<Record<string, unknown>> },
+        clientId,
+      );
     }
   }
 

@@ -98,6 +98,7 @@ import {
 } from './lib/playerSession';
 import { Hand } from './lib/hand';
 import { PlayArea } from './lib/playArea';
+import { ensureLoyaltyCountersOnBattlefield } from './lib/loyaltyCounter';
 import { getPlayAreaPlayerName } from './lib/playAreaNameTag';
 import { resolvePlayerColor } from './lib/playerColor';
 import { handlePingAwarenessChanges, isCardPingTarget, publishTablePingFromHit } from './lib/pingSync';
@@ -745,6 +746,7 @@ export async function loadDeckAndJoin(
     'color',
     settings.playerColor ?? resolvePlayerColor({ name: settings.name }),
   );
+  await ensureLoyaltyCountersOnBattlefield(playArea);
   sendEvent({ type: 'join', payload: playArea.getLocalState() });
   counters.forEach(counter => sendEvent({ type: 'createCounter', payload: { counter } }));
 

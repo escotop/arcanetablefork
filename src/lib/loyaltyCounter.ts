@@ -131,6 +131,14 @@ export async function ensureLoyaltyCounterOnCard(card: Card, playArea: PlayArea)
   }));
 }
 
+/** Planeswalkers placed on the battlefield at game start (deck inPlay) skip hand→battlefield transfer. */
+export async function ensureLoyaltyCountersOnBattlefield(playArea: PlayArea) {
+  if (!playArea.isLocalPlayArea) return;
+  await Promise.all(
+    playArea.battlefieldZone.cards.map(card => ensureLoyaltyCounterOnCard(card, playArea)),
+  );
+}
+
 export async function syncLoyaltyCounterForCard(card: Card) {
   const playArea = playAreas[card.clientId];
   if (!playArea?.isLocalPlayArea || !card.mesh) return;
