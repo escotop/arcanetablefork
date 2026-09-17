@@ -1,5 +1,80 @@
 import { CardEntry, CardEntryDetail } from './constants';
 
+export type PrintingsLookupSource = { name: string; detail?: CardEntryDetail };
+
+type ScryfallPrintingCandidate = {
+  name?: string;
+  oracle_id?: string;
+  card_faces?: Array<{ name?: string }>;
+};
+
+/** Deck lists often use "Face A / Face B"; Scryfall uses "Face A // Face B". */
+export function normalizeDoubleFacedCardName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.includes(' // ')) return trimmed;
+  const parts = trimmed.split(/\s+\/\s+/).map(part => part.trim()).filter(Boolean);
+  if (parts.length >= 2) return parts.join(' // ');
+  return trimmed;
+}
+
+export function resolvePrintingsLookupName(source: PrintingsLookupSource): string {
+  const detail = source.detail;
+  if (detail?.name) return normalizeDoubleFacedCardName(detail.name);
+
+  const faces = detail?.card_faces;
+  if (faces && faces.length >= 2) {
+    const front = faces[0]?.name?.trim();
+    const back = faces[1]?.name?.trim();
+    if (front && back) return `${front} // ${back}`;
+  }
+
+  return normalizeDoubleFacedCardName(source.name);
+}
+
+export function resolvePrintingsLookup(source: PrintingsLookupSource) {
+  const detail = source.detail as (CardEntryDetail & { oracle_id?: string }) | undefined;
+  return {
+    deckName: source.name,
+    scryfallName: resolvePrintingsLookupName(source),
+    oracleId: detail?.oracle_id,
+  };
+}
+
+export function printingsLookupCacheKey(source: PrintingsLookupSource): string {
+  const lookup = resolvePrintingsLookup(source);
+  return lookup.oracleId ?? lookup.scryfallName;
+}
+
+export function scryfallCardMatchesPrintingsLookup(
+  card: ScryfallPrintingCandidate,
+  lookup: ReturnType<typeof resolvePrintingsLookup>,
+): boolean {
+  if (lookup.oracleId && card.oracle_id === lookup.oracleId) return true;
+
+  const cardName = normalizeDoubleFacedCardName(card.name ?? '');
+  const scryfallName = normalizeDoubleFacedCardName(lookup.scryfallName);
+  const deckName = normalizeDoubleFacedCardName(lookup.deckName);
+
+  if (cardName && (cardName === scryfallName || cardName === deckName)) return true;
+
+  const frontFaceName = card.card_faces?.[0]?.name ?? cardName.split(' // ')[0];
+  if (frontFaceName) {
+    const normalizedFront = normalizeDoubleFacedCardName(frontFaceName);
+    if (normalizedFront === deckName || normalizedFront === scryfallName) return true;
+  }
+
+  return false;
+}
+
+export function buildDefaultPrintingsSearchQuery(lookup: ReturnType<typeof resolvePrintingsLookup>): string {
+  if (lookup.oracleId) {
+    return `oracle_id:${lookup.oracleId} unique:prints`;
+  }
+  const quoted = lookup.scryfallName.replace(/"/g, '\\"');
+  return `!"${quoted}" unique:prints`;
+}
+
 function normalizeSetCode(set?: string) {
   return set?.trim().toLowerCase() || undefined;
 }

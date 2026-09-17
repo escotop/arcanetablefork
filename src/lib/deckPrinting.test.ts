@@ -1,6 +1,13 @@
 import { expect, test } from 'vitest';
 import { CardEntryDetail } from './constants';
-import { printingMatchesRequest } from './deckPrinting';
+import {
+  buildDefaultPrintingsSearchQuery,
+  normalizeDoubleFacedCardName,
+  printingMatchesRequest,
+  resolvePrintingsLookup,
+  resolvePrintingsLookupName,
+  scryfallCardMatchesPrintingsLookup,
+} from './deckPrinting';
 
 const entry = {
   name: 'Swiftfoot Boots',
@@ -47,4 +54,44 @@ test('printingMatchesRequest normalizes leading-zero collector numbers', () => {
       { ...entry, collector_number: '078' },
     ),
   ).toBe(true);
+});
+
+test('normalizeDoubleFacedCardName converts single-slash deck names', () => {
+  expect(
+    normalizeDoubleFacedCardName('Nicol Bolas, the Ravager / Nicol Bolas, the Arisen'),
+  ).toBe('Nicol Bolas, the Ravager // Nicol Bolas, the Arisen');
+});
+
+test('scryfallCardMatchesPrintingsLookup accepts Scryfall name when deck uses slash', () => {
+  const lookup = resolvePrintingsLookup({
+    name: 'Nicol Bolas, the Ravager / Nicol Bolas, the Arisen',
+  });
+  expect(
+    scryfallCardMatchesPrintingsLookup(
+      { name: 'Nicol Bolas, the Ravager // Nicol Bolas, the Arisen' },
+      lookup,
+    ),
+  ).toBe(true);
+});
+
+test('buildDefaultPrintingsSearchQuery uses oracle_id when available', () => {
+  const lookup = resolvePrintingsLookup({
+    name: 'Wrong Name',
+    detail: {
+      name: 'Nicol Bolas, the Ravager // Nicol Bolas, the Arisen',
+      oracle_id: 'abc-123',
+    } as CardEntryDetail,
+  });
+  expect(buildDefaultPrintingsSearchQuery(lookup)).toBe('oracle_id:abc-123 unique:prints');
+});
+
+test('resolvePrintingsLookupName builds from card_faces when detail.name missing', () => {
+  expect(
+    resolvePrintingsLookupName({
+      name: 'Nicol Bolas, the Ravager / Nicol Bolas, the Arisen',
+      detail: {
+        card_faces: [{ name: 'Nicol Bolas, the Ravager' }, { name: 'Nicol Bolas, the Arisen' }],
+      } as CardEntryDetail,
+    }),
+  ).toBe('Nicol Bolas, the Ravager // Nicol Bolas, the Arisen');
 });

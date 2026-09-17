@@ -2,6 +2,7 @@ import { createSignal } from 'solid-js';
 import { Card } from './constants';
 import { createCardFrontMaterial } from './card';
 import { fetchCardPrintings, getPrintingPreviewUrl, supportsCardPrintings } from './deck';
+import { scryfallCardMatchesPrintingsLookup, resolvePrintingsLookup } from './deckPrinting';
 import { cardsById, textureLoaderWorker } from './globals';
 
 export const SPANISH_PREVIEW_NOT_FOUND_MESSAGE = 'No esta en spanish. Haber estudiao';
@@ -24,12 +25,14 @@ export async function fetchSpanishPrintingImageUrl(card: Card): Promise<string |
 
   const name = card.detail.name;
   const set = getCardSet(card);
+  const lookup = resolvePrintingsLookup({ name: card.name, detail: card.detail });
   const result = await fetchCardPrintings(
-    name,
+    card.name,
     1,
     `lang:es !"${name.replace(/"/g, '\\"')}" unique:prints`,
+    card.detail,
   );
-  const prints = result.data.filter(entry => entry.name === name);
+  const prints = result.data.filter(entry => scryfallCardMatchesPrintingsLookup(entry, lookup));
   const match =
     (set ? prints.find(entry => entry.set?.toLowerCase() === set.toLowerCase()) : undefined) ??
     prints[0];

@@ -82,8 +82,9 @@ const DeckGridCard: Component<Props> = props => {
       }}
       onMouseDown={e => {
         if (e.button !== 2 || !supportsCardPrintings() || !(props.card()?.qty > 0)) return;
-        const name = props.card()?.name;
-        if (name) prefetchCardPrintings(name);
+        const card = props.card();
+        const name = card?.name;
+        if (name) prefetchCardPrintings(name, 1, undefined, card?.detail);
       }}>
       <img
         src={

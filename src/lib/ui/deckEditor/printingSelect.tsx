@@ -37,7 +37,7 @@ export default function PrintingSelect(props: Props) {
     if (loading()) return;
     setLoading(true);
     try {
-      const result = await fetchCardPrintings(props.entry.name, nextPage);
+      const result = await fetchCardPrintings(props.entry.name, nextPage, undefined, props.entry.detail);
       setPrintings(append ? [...printings(), ...result.data] : result.data);
       setPage(result.page);
       setTotalPages(result.total_pages);

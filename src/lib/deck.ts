@@ -33,7 +33,14 @@ import { slimCardDetailForLog } from './gameLogEvents';
 import { parseImportedCardList } from './deckParser';
 import { isCommanderCard } from './deckCommander';
 import { getCardCollectorNumber } from './deckListFormat';
-import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
+import {
+  buildDefaultPrintingsSearchQuery,
+  hasRequestedPrinting,
+  printingsLookupCacheKey,
+  printingMatchesRequest,
+  resolvePrintingsLookup,
+  scryfallCardMatchesPrintingsLookup,
+} from './deckPrinting';
 import {
   getCachedCardById,
   getCachedCardDetail,
@@ -1087,23 +1094,27 @@ const printingsInflight = new Map<string, Promise<CardPrintingsResponse>>();
 
 export { printingsCacheKey } from './scryfallCache';
 
-export function prefetchCardPrintings(name: string, page = 1, query?: string) {
-  void fetchCardPrintings(name, page, query);
+export function prefetchCardPrintings(
+  name: string,
+  page = 1,
+  query?: string,
+  detail?: CardEntryDetail,
+) {
+  void fetchCardPrintings(name, page, query, detail);
 }
 
 async function loadCardPrintings(
   name: string,
   page: number,
   query?: string,
+  detail?: CardEntryDetail,
 ): Promise<CardPrintingsResponse> {
-  const body = await searchCards(
-    query ?? `!"${name.replace(/"/g, '\\"')}" unique:prints`,
-    { page },
-  );
+  const lookup = resolvePrintingsLookup({ name, detail });
+  const body = await searchCards(query ?? buildDefaultPrintingsSearchQuery(lookup), { page });
 
   const data = await enrichPrintingOptions(
     body.data
-      .filter(card => card.name === name)
+      .filter(card => scryfallCardMatchesPrintingsLookup(card, lookup))
       .map(card => ({
         id: card.id!,
         name: card.name,
@@ -1129,8 +1140,10 @@ export async function fetchCardPrintings(
   name: string,
   page = 1,
   query?: string,
+  detail?: CardEntryDetail,
 ): Promise<CardPrintingsResponse> {
-  const key = printingsCacheKey(name, page, query);
+  const cacheName = printingsLookupCacheKey({ name, detail });
+  const key = printingsCacheKey(cacheName, page, query);
   const cached = printingsCache.get(key);
   if (cached) return cached;
 
@@ -1143,7 +1156,7 @@ export async function fetchCardPrintings(
   const inflight = printingsInflight.get(key);
   if (inflight) return inflight;
 
-  const promise = loadCardPrintings(name, page, query).then(result => {
+  const promise = loadCardPrintings(name, page, query, detail).then(result => {
     printingsCache.set(key, result);
     printingsInflight.delete(key);
     void setCachedPrintings(key, result);

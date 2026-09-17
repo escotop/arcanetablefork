@@ -486,7 +486,7 @@ export const DeckEditor: Component<Props> = props => {
   function openTokenPrintingPicker(tokenKey: string) {
     const entry = getTokenDeckEntry(tokenKey);
     if (!supportsCardPrintings() || !entry) return;
-    if (entry.name) prefetchCardPrintings(entry.name);
+    if (entry.name) prefetchCardPrintings(entry.name, 1, undefined, entry.detail);
     setTokenPrintingPickerKey(tokenKey);
   }
 
@@ -609,7 +609,7 @@ export const DeckEditor: Component<Props> = props => {
   ) {
     if (!supportsCardPrintings() || !(deck[section]?.[storageKey]?.qty > 0)) return;
     const entry = deck[section]?.[storageKey];
-    if (entry?.name) prefetchCardPrintings(entry.name);
+    if (entry?.name) prefetchCardPrintings(entry.name, 1, undefined, entry.detail);
     setPrintingPickerSection(section);
     setPrintingPickerKey(storageKey);
   }
@@ -1521,8 +1521,11 @@ export const DeckEditor: Component<Props> = props => {
                             ) {
                               return;
                             }
-                            const name = deckCard()?.name ?? card.name;
-                            if (name) prefetchCardPrintings(name);
+                            const deckEntry = deckCard();
+                            const name = deckEntry?.name ?? card.name;
+                            if (name) {
+                              prefetchCardPrintings(name, 1, undefined, deckEntry?.detail ?? card.detail);
+                            }
                           }}>
                           <img
                             src={
