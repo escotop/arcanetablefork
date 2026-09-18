@@ -25,9 +25,10 @@ export async function fetchSpanishPrintingImageUrl(card: Card): Promise<string |
 
   const name = card.detail.name;
   const set = getCardSet(card);
-  const lookup = resolvePrintingsLookup({ name: card.name, detail: card.detail });
+  const lookupName = card.name ?? name;
+  const lookup = resolvePrintingsLookup({ name: lookupName, detail: card.detail });
   const result = await fetchCardPrintings(
-    card.name,
+    lookupName,
     1,
     `lang:es !"${name.replace(/"/g, '\\"')}" unique:prints`,
     card.detail,

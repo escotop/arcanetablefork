@@ -1,6 +1,6 @@
 import { CardEntry, CardEntryDetail } from './constants';
 
-export type PrintingsLookupSource = { name: string; detail?: CardEntryDetail };
+export type PrintingsLookupSource = { name?: string; detail?: CardEntryDetail };
 
 type ScryfallPrintingCandidate = {
   name?: string;
@@ -9,7 +9,8 @@ type ScryfallPrintingCandidate = {
 };
 
 /** Deck lists often use "Face A / Face B"; Scryfall uses "Face A // Face B". */
-export function normalizeDoubleFacedCardName(name: string): string {
+export function normalizeDoubleFacedCardName(name?: string | null): string {
+  if (name == null) return '';
   const trimmed = name.trim();
   if (!trimmed) return trimmed;
   if (trimmed.includes(' // ')) return trimmed;
@@ -29,14 +30,15 @@ export function resolvePrintingsLookupName(source: PrintingsLookupSource): strin
     if (front && back) return `${front} // ${back}`;
   }
 
-  return normalizeDoubleFacedCardName(source.name);
+  return normalizeDoubleFacedCardName(source.name ?? detail?.name ?? '');
 }
 
 export function resolvePrintingsLookup(source: PrintingsLookupSource) {
   const detail = source.detail as (CardEntryDetail & { oracle_id?: string }) | undefined;
+  const deckName = source.name ?? detail?.name ?? '';
   return {
-    deckName: source.name,
-    scryfallName: resolvePrintingsLookupName(source),
+    deckName,
+    scryfallName: resolvePrintingsLookupName({ name: deckName, detail }),
     oracleId: detail?.oracle_id,
   };
 }
@@ -72,6 +74,7 @@ export function buildDefaultPrintingsSearchQuery(lookup: ReturnType<typeof resol
     return `oracle_id:${lookup.oracleId} unique:prints`;
   }
   const quoted = lookup.scryfallName.replace(/"/g, '\\"');
+  if (!quoted) return 'unique:prints';
   return `!"${quoted}" unique:prints`;
 }
 

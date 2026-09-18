@@ -95,3 +95,10 @@ test('resolvePrintingsLookupName builds from card_faces when detail.name missing
     }),
   ).toBe('Nicol Bolas, the Ravager // Nicol Bolas, the Arisen');
 });
+
+test('scryfallCardMatchesPrintingsLookup tolerates missing deck name when detail has name', () => {
+  const lookup = resolvePrintingsLookup({
+    detail: { name: 'Lightning Bolt' } as CardEntryDetail,
+  });
+  expect(scryfallCardMatchesPrintingsLookup({ name: 'Lightning Bolt' }, lookup)).toBe(true);
+});
