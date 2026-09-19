@@ -5,7 +5,6 @@ import {
   createDeckPeekMoveEvent,
   createDeckPeekReorderEvent,
   createDeckSearchLogEvent,
-  createTransferCardEvent,
 } from '~/lib/createEvents';
 import { dispatchGameEvent, doXTimes, flushDispatchEventQueue } from '~/lib/globals';
 import { PlayArea } from '~/lib/playArea';
@@ -41,18 +40,16 @@ export function logDeckPeekMove(placement: 'top' | 'bottom', cardId: string) {
   dispatchGameEvent(createDeckPeekMoveEvent(placement, cardId));
 }
 
-export function drawCards(playArea: PlayArea, count: number = 1) {
-  const cards = playArea.deck.cards.slice(0, Math.max(0, count));
-  for (const card of cards) {
-    if (playArea.deck.cards[0]?.id === card.id) {
-      playArea.deck.materializeTopCard();
-    } else {
-      playArea.deck.prepareCardForRemoval(card);
-    }
+export async function drawCards(playArea: PlayArea, count: number = 1) {
+  const draws = Math.min(Math.max(0, count), playArea.deck.cards.length);
+  for (let i = 0; i < draws; i++) {
+    const card = playArea.deck.cards[0];
+    if (!card) break;
+    playArea.deck.materializeTopCard();
     logDeckDrawTop();
-    dispatchGameEvent(createTransferCardEvent(card, playArea.deck, playArea.hand));
+    await transferCard(card, playArea.deck, playArea.hand);
   }
-  return flushDispatchEventQueue();
+  await flushDispatchEventQueue();
 }
 
 export function peekFromTop(playArea: PlayArea, count = 1) {

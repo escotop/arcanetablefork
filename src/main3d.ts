@@ -49,7 +49,8 @@ import {
   isLocalHandZone,
   isSpectating,
   isUnderLocalHand,
-  isGameplayBlocked,
+  isTableInteractionAllowed,
+  flushDispatchEventQueue,
   playAreas,
   players,
   processedEvents,
@@ -575,6 +576,11 @@ export async function localInit(gameOptions: GameOptions) {
   document.addEventListener('mouseup', onDocumentDrop, false);
   document.addEventListener('wheel', onDocumentScroll, { passive: false });
   window.addEventListener('resize', onWindowResize, false);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      void flushDispatchEventQueue();
+    }
+  });
 
   void profileAsync('initial processEvents', () => processEvents(), {
     gameLogLength: gameLog.length,
@@ -919,7 +925,7 @@ function resolveContextMenuTarget(object: THREE.Object3D): THREE.Object3D {
 
 function onContextMenu(event: PointerEvent) {
   event.preventDefault();
-  if (isGameplayBlocked()) return;
+  if (!isTableInteractionAllowed()) return;
   updateMouse(event);
   raycaster.setFromCamera(mouse, camera);
   let intersects = raycaster.intersectObject(scene);
@@ -966,7 +972,7 @@ function findTablePingHit(): THREE.Intersection | undefined {
 }
 
 function publishQuickRegularPing() {
-  if (isGameplayBlocked()) return;
+  if (!isTableInteractionAllowed()) return;
   if (isSpectating()) return;
   if (!getLocalPlayArea()) return;
 
@@ -984,7 +990,7 @@ function onAuxClick(event: MouseEvent) {
 
 function onDocumentClick(event: PointerEvent) {
   if (isBoardInteractionSuppressed()) return;
-  if (isGameplayBlocked()) return;
+  if (!isTableInteractionAllowed()) return;
   updateMouse(event);
   setContextMenuSignal();
   raycaster.setFromCamera(mouse, camera);
@@ -1151,7 +1157,7 @@ function onDocumentDragStart(event: PointerEvent) {
   updateMouse(event);
   dragStartMouse.copy(mouse);
   event.dataTransfer.dropEffect = 'move';
-  if (isGameplayBlocked()) return;
+  if (!isTableInteractionAllowed()) return;
   raycaster.setFromCamera(mouse, camera);
   if (isSpectating()) return;
 
@@ -1461,7 +1467,7 @@ function onDocumentDragEnd(event: DragEvent) {
 async function onDocumentDrop(event) {
   event.preventDefault();
   updateMouse(event);
-  if (isGameplayBlocked()) return;
+  if (!isTableInteractionAllowed()) return;
 
   if (finishPingWheelInteraction(event.clientX, event.clientY)) {
     event.stopImmediatePropagation();

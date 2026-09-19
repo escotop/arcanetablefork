@@ -141,8 +141,17 @@ export class CardArea implements CardZone<{ positionArray?: [number, number, num
     cardMesh.rotation.copy(globalRotation);
 
     this.mesh.remove(cardMesh);
-    let index = this.cards.findIndex(c => c.id === cardMesh.userData.id);
-    this.cards.splice(index, 1);
+    const index = this.cards.findIndex(c => c.id === cardMesh.userData.id);
+    if (index >= 0) {
+      this.cards.splice(index, 1);
+      this.setObservable('cardCount', this.cards.length);
+    }
+  }
+
+  /** Battlefield clones are parented directly; keep `cards` in sync for transfers. */
+  trackExistingCard(card: Card) {
+    if (this.cards.some(entry => entry.id === card.id)) return;
+    this.cards.push(card);
     this.setObservable('cardCount', this.cards.length);
   }
 

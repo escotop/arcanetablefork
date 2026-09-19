@@ -709,8 +709,7 @@ export class PlayArea {
     if (!card) return;
     this.deck.materializeTopCard();
     dispatchGameEvent(createDeckDrawLogEvent({ source: 'top' }));
-    const event = createTransferCardEvent(card, this.deck, this.hand);
-    dispatchGameEvent(event);
+    void transferCard(card, this.deck, this.hand);
   }
 
   async executeMulligan(
@@ -905,7 +904,14 @@ export class PlayArea {
     let newCard = cloneCard(card, newId);
     setCardData(newCard.mesh, 'isClone', true);
     setCardData(newCard.mesh, 'clonedFromId', id);
-    card.mesh.parent?.add(newCard.mesh);
+    const battlefield = this.battlefieldZone;
+    const parent = card.mesh.parent ?? battlefield.mesh;
+    parent.add(newCard.mesh);
+    setCardData(newCard.mesh, 'zoneId', battlefield.id);
+    setCardData(newCard.mesh, 'location', 'battlefield');
+    setCardData(newCard.mesh, `zone.${battlefield.id}.position`, newCard.mesh.position.toArray());
+    setCardData(newCard.mesh, `zone.${battlefield.id}.rotation`, newCard.mesh.rotation.toArray());
+    battlefield.trackExistingCard(newCard);
   }
 
   deleteClone(id: string) {

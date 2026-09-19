@@ -169,9 +169,11 @@ export class CardStack implements CardZone {
     cardMesh.rotation.copy(globalRotation);
     this.mesh.remove(cardMesh);
 
-    let index = this.cards.findIndex(c => c.id === cardMesh.userData.id);
-    this.cards.splice(index, 1);
-    this.setObservable('cardCount', this.cards.length);
+    const index = this.cards.findIndex(c => c.id === cardMesh.userData.id);
+    if (index >= 0) {
+      this.cards.splice(index, 1);
+      this.setObservable('cardCount', this.cards.length);
+    }
     this.updateCardPositions();
   }
 

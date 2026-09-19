@@ -240,6 +240,84 @@ async function tryBatchReplayEvent(
   return false;
 }
 
+async function processGameLogEntry(srcEvent: Event) {
+  if (shouldSkipLocallyAppliedEvent(srcEvent)) {
+    if (isLoadProfiling()) recordReplaySkip('local');
+    if (srcEvent.type !== 'bulk') {
+      try {
+        addLogMessage(srcEvent);
+      } catch (e) {
+        logReloadOther('process-events-add-log-failed', {
+          type: srcEvent.type,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        Sentry.captureException(e, 'addLogMessage');
+        logger.error(e);
+      }
+    }
+    return;
+  }
+
+  if (srcEvent.type === 'bulk') {
+    timing = srcEvent.timing;
+    events = srcEvent.events
+      .map(e => {
+        e.clientID = srcEvent.clientID;
+        e.locallyApplied = srcEvent.locallyApplied;
+        return e;
+      })
+      .filter(e => !shouldSkipEventOnCatchUp(e));
+    if (isLoadProfiling()) recordReplayBatch(events.length);
+    if (!events.length) return;
+  } else {
+    if (shouldSkipEventOnCatchUp(srcEvent)) {
+      if (isLoadProfiling()) recordReplaySkip('catchUp');
+      return;
+    }
+    timing = 25;
+    events = [srcEvent];
+  }
+
+  while (events.length > 0) {
+    let event = events.shift();
+    if (shouldSkipEventOnCatchUp(event)) {
+      if (isLoadProfiling()) recordReplaySkip('catchUp');
+      continue;
+    }
+    try {
+      logReloadOther('process-events-handle-start', { type: event.type, clientID: event.clientID });
+      addLogMessage(event);
+    } catch (e) {
+      logReloadOther('process-events-add-log-failed', {
+        type: event.type,
+        error: e instanceof Error ? e.message : String(e),
+      });
+      Sentry.captureException(e, 'addLogMessage');
+      logger.error(e);
+    }
+    if (shouldSkipLocallyAppliedEvent(event)) {
+      if (isLoadProfiling()) recordReplaySkip('local');
+      continue;
+    }
+    if (event.type === 'waterdrop') continue;
+    const clientID = Number(event.clientID);
+    let playArea = Number.isFinite(clientID) ? playAreas[clientID] : undefined;
+    if (isLoadProfiling()) {
+      if (await profileReplayHandle(event.type, () => tryBatchReplayEvent(event, events, playArea))) {
+        continue;
+      }
+      await profileReplayHandle(event.type, () => handleEvent(event, playArea));
+    } else {
+      if (await tryBatchReplayEvent(event, events, playArea)) continue;
+      await handleEvent(event, playArea);
+    }
+    if (events.length > 0 && !shouldSkipEventTiming(event)) {
+      if (isLoadProfiling()) recordReplayDelay(timing);
+      await new Promise(resolve => setTimeout(resolve, timing));
+    }
+  }
+}
+
 async function drainProcessEvents() {
   if (isGameStateImportInProgress()) {
     logReloadOther('process-events-skipped-import-in-progress');
@@ -267,83 +345,17 @@ async function drainProcessEvents() {
       type: srcEvent?.type,
       clientID: srcEvent?.clientID,
     });
+    try {
+      await processGameLogEntry(srcEvent);
+    } catch (error) {
+      logReloadOther('process-events-entry-failed', {
+        index: processedEvents(),
+        type: srcEvent?.type,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
     setProcessedEvents(e => e + 1);
-
-    if (shouldSkipLocallyAppliedEvent(srcEvent)) {
-      if (isLoadProfiling()) recordReplaySkip('local');
-      if (srcEvent.type !== 'bulk') {
-        try {
-          addLogMessage(srcEvent);
-        } catch (e) {
-          logReloadOther('process-events-add-log-failed', {
-            type: srcEvent.type,
-            error: e instanceof Error ? e.message : String(e),
-          });
-          Sentry.captureException(e, 'addLogMessage');
-          logger.error(e);
-        }
-      }
-      continue;
-    }
-
-    if (srcEvent.type === 'bulk') {
-      timing = srcEvent.timing;
-      events = srcEvent.events
-        .map(e => {
-          e.clientID = srcEvent.clientID;
-          e.locallyApplied = srcEvent.locallyApplied;
-          return e;
-        })
-        .filter(e => !shouldSkipEventOnCatchUp(e));
-      if (isLoadProfiling()) recordReplayBatch(events.length);
-      if (!events.length) continue;
-    } else {
-      if (shouldSkipEventOnCatchUp(srcEvent)) {
-        if (isLoadProfiling()) recordReplaySkip('catchUp');
-        continue;
-      }
-      timing = 25;
-      events = [srcEvent];
-    }
-
-    while (events.length > 0) {
-      let event = events.shift();
-      if (shouldSkipEventOnCatchUp(event)) {
-        if (isLoadProfiling()) recordReplaySkip('catchUp');
-        continue;
-      }
-      try {
-        logReloadOther('process-events-handle-start', { type: event.type, clientID: event.clientID });
-        addLogMessage(event);
-      } catch (e) {
-        logReloadOther('process-events-add-log-failed', {
-          type: event.type,
-          error: e instanceof Error ? e.message : String(e),
-        });
-        Sentry.captureException(e, 'addLogMessage');
-        logger.error(e);
-      }
-      if (shouldSkipLocallyAppliedEvent(event)) {
-        if (isLoadProfiling()) recordReplaySkip('local');
-        continue;
-      }
-      if (event.type === 'waterdrop') continue;
-      const clientID = Number(event.clientID);
-      let playArea = Number.isFinite(clientID) ? playAreas[clientID] : undefined;
-      if (isLoadProfiling()) {
-        if (await profileReplayHandle(event.type, () => tryBatchReplayEvent(event, events, playArea))) {
-          continue;
-        }
-        await profileReplayHandle(event.type, () => handleEvent(event, playArea));
-      } else {
-        if (await tryBatchReplayEvent(event, events, playArea)) continue;
-        await handleEvent(event, playArea);
-      }
-      if (events.length > 0 && !shouldSkipEventTiming(event)) {
-        if (isLoadProfiling()) recordReplayDelay(timing);
-        await new Promise(resolve => setTimeout(resolve, timing));
-      }
-    }
   }
 }
 
@@ -492,6 +504,24 @@ function isCardInZone(card: Card, zone?: { cards?: Card[] }) {
   return zone.cards.some(entry => entry.id === card.id || String(entry.id) === String(card.id));
 }
 
+function isCardOnZoneMesh(card: Card, zone?: { mesh?: Object3D }) {
+  const mesh = card.mesh;
+  if (!mesh || !zone?.mesh) return false;
+  let current: Object3D | null = mesh.parent;
+  while (current) {
+    if (current === zone.mesh) return true;
+    current = current.parent;
+  }
+  return false;
+}
+
+function isCardInZoneOrOnMesh(
+  card: Card,
+  zone?: { cards?: Card[]; mesh?: Object3D },
+) {
+  return isCardInZone(card, zone) || isCardOnZoneMesh(card, zone);
+}
+
 function findZoneContainingCard(card: Card, playArea?: PlayArea) {
   if (!playArea) return undefined;
 
@@ -506,7 +536,7 @@ function findZoneContainingCard(card: Card, playArea?: PlayArea) {
     playArea.tokenSearchZone,
   ];
 
-  return zones.find(zone => isCardInZone(card, zone));
+  return zones.find(zone => isCardInZoneOrOnMesh(card, zone));
 }
 
 function ensureCardReady(card: Card | undefined, clientId?: number): Card | undefined {
@@ -816,8 +846,8 @@ const EVENTS = {
     if (!card) return;
 
     let resolvedFromZone = fromZone;
-    if (!isCardInZone(card, resolvedFromZone)) {
-      if (isCardInZone(card, toZone)) return;
+    if (!isCardInZoneOrOnMesh(card, resolvedFromZone)) {
+      if (isCardInZoneOrOnMesh(card, toZone)) return;
       const actualZone = findZoneContainingCard(card, playArea);
       if (actualZone) {
         resolvedFromZone = actualZone;

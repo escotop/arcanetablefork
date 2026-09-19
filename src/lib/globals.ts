@@ -226,11 +226,15 @@ export let [logs, setLogs] = createStore([]);
 export let [processedEvents, setProcessedEvents] = createSignal(0);
 let gameStateImportInProgress = false;
 let eventCatchUpComplete = false;
+export const [eventCatchUpCompleteSignal, setEventCatchUpCompleteSignal] = createSignal(false);
 let syncPaused = false;
 let gameplayBlocked = false;
 
 export function setSyncPaused(value: boolean) {
   syncPaused = value;
+  if (!value) {
+    flushPendingSyncEvents();
+  }
 }
 
 export function isSyncPaused() {
@@ -239,6 +243,14 @@ export function isSyncPaused() {
 
 export function setGameplayBlocked(value: boolean) {
   gameplayBlocked = value;
+  if (!value) {
+    flushPendingSyncEvents();
+  }
+}
+
+/** Block table input until log replay and multiplayer barriers are done. */
+export function isTableInteractionAllowed() {
+  return isEventCatchUpComplete() && !syncPaused && !isGameplayBlocked();
 }
 
 export function isGameplayBlocked() {
@@ -247,6 +259,10 @@ export function isGameplayBlocked() {
 
 export function setEventCatchUpComplete(value: boolean) {
   eventCatchUpComplete = value;
+  setEventCatchUpCompleteSignal(value);
+  if (value) {
+    flushPendingSyncEvents();
+  }
 }
 
 export function isEventCatchUpComplete() {
@@ -277,6 +293,9 @@ export function isGameStateImportInProgress() {
 }
 
 export function resetGameSceneForReplay() {
+  pendingSyncEvents.length = 0;
+  batch.length = 0;
+  flushScheduled = false;
   clearSpanishPreview();
   Object.values(playAreas).forEach(playArea => {
     if (playArea && table) table.remove(playArea.mesh);
@@ -292,6 +311,7 @@ export function resetGameSceneForReplay() {
   setLocalPlayerClientId(undefined);
   setIsIntitialized(false);
   setEventCatchUpComplete(false);
+  setEventCatchUpCompleteSignal(false);
   historicalLogReplayInProgress = true;
 }
 export let [isSpectating, setIsSpectating] = createSignal(false);
@@ -873,6 +893,42 @@ function detectCircularRefs(
   return null;
 }
 
+let gameLogPushFailureNotified = false;
+
+function notifyGameLogPushFailure(message: string) {
+  if (gameLogPushFailureNotified) return;
+  gameLogPushFailureNotified = true;
+  devLog.error(message);
+  void import('solid-sonner').then(({ toast }) => {
+    toast.error('Could not sync action to other players. Try again or reload the game.');
+  });
+}
+
+function canPublishToGameLog() {
+  return isEventCatchUpComplete() && !syncPaused && !isGameplayBlocked();
+}
+
+type PendingSyncItem =
+  | { mode: 'direct'; event: Record<string, unknown> }
+  | { mode: 'dispatch'; event: Record<string, unknown>; timing: number };
+
+const pendingSyncEvents: PendingSyncItem[] = [];
+
+export function flushPendingSyncEvents() {
+  if (!canPublishToGameLog()) return;
+
+  while (pendingSyncEvents.length > 0) {
+    const item = pendingSyncEvents.shift()!;
+    if (item.mode === 'direct') {
+      sendEventImmediate(item.event);
+    } else {
+      dispatchGameEventImmediate(item.event, item.timing);
+    }
+  }
+
+  void flushDispatchEventQueue();
+}
+
 function safeGameLogPush(events: unknown[]) {
   const eventTypes = Array.isArray(events)
     ? events.map((event: any) => event?.type ?? 'unknown')
@@ -883,40 +939,41 @@ function safeGameLogPush(events: unknown[]) {
   if (circular) {
     logReloadOther('gamelog-push-blocked-circular', { circular, eventTypes });
     console.error('[CIRCULAR_REF_DETECTED]', circular);
-    console.error('[EVENT_CAUSING_ISSUE]', JSON.stringify(events, (key, value) => {
-      if (value && typeof value === 'object') {
-        if ('isObject3D' in value) return '[Object3D]';
-        if ('isMaterial' in value) return '[Material]';
-        if ('isTexture' in value) return '[Texture]';
-      }
-      return value;
-    }, 2).slice(0, 2000));
-    // Skip pushing to avoid crash
-    return;
+    notifyGameLogPushFailure(`Game log push blocked: ${circular}`);
+    return false;
   }
   try {
     gameLog.push(events);
     logReloadOther('gamelog-push-done', { eventTypes, newLength: gameLog.length });
+    return true;
   } catch (error) {
     logReloadOther('gamelog-push-threw', {
       eventTypes,
       error: error instanceof Error ? error.message : String(error),
     });
+    notifyGameLogPushFailure(
+      error instanceof Error ? error.message : 'Game log push failed',
+    );
     throw error;
   }
+}
+
+function sendEventImmediate(event: Record<string, unknown>) {
+  event.clientID = getLocalPlayerClientId();
+  event.locallyApplied = true;
+  sanitizeGameLogEvent(event);
+  safeGameLogPush([event]);
 }
 
 /**
  * @deprecated use dispatchEvent instead
  */
 export function sendEvent(event) {
-  if (syncPaused || isGameplayBlocked()) {
+  if (!canPublishToGameLog()) {
+    pendingSyncEvents.push({ mode: 'direct', event: structuredClone(event) });
     return;
   }
-  event.clientID = getLocalPlayerClientId();
-  event.locallyApplied = true;
-  sanitizeGameLogEvent(event);
-  safeGameLogPush([event]);
+  sendEventImmediate(event);
 }
 
 let batch: any[] = [];
@@ -930,7 +987,7 @@ export async function flushDispatchEventQueue() {
   flushScheduled = false;
   return new Promise<void>(resolve => {
     drainResolvers.push(resolve);
-    let event = {
+    const event = {
       type: 'bulk',
       timing: batchTiming,
       events,
@@ -938,21 +995,31 @@ export async function flushDispatchEventQueue() {
     };
     sanitizeGameLogEvent(event);
     safeGameLogPush([event]);
+    resolve();
   });
 }
 
-export function dispatchGameEvent(event: any, timing = 0) {
-  if (syncPaused || isGameplayBlocked()) return;
+function dispatchGameEventImmediate(event: Record<string, unknown>, timing = 0) {
   event.clientID = getLocalPlayerClientId();
   if (batch.length > 0 && timing !== batchTiming) {
-    flushDispatchEventQueue();
+    void flushDispatchEventQueue();
   }
   batchTiming = timing;
   batch.push(event);
   if (!flushScheduled) {
     flushScheduled = true;
-    queueMicrotask(flushDispatchEventQueue);
+    queueMicrotask(() => {
+      void flushDispatchEventQueue();
+    });
   }
+}
+
+export function dispatchGameEvent(event: any, timing = 0) {
+  if (!canPublishToGameLog()) {
+    pendingSyncEvents.push({ mode: 'dispatch', event: structuredClone(event), timing });
+    return;
+  }
+  dispatchGameEventImmediate(event, timing);
 }
 
 /** CSS3DObject and the renderer's inner camera layer default to pointer-events: auto and block the WebGL canvas. */
@@ -1013,6 +1080,7 @@ export function cleanup() {
   setIsSpectating(false);
   setIsIntitialized(false);
   setEventCatchUpComplete(false);
+  setEventCatchUpCompleteSignal(false);
   initHowItPlaysAdvice();
   clearWaterdrops();
   clearPingSync();
