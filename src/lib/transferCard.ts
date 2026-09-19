@@ -1,4 +1,4 @@
-import { ensureCardMesh, loadCardTextures, setCardData, updateModifiers } from './card';
+import { ensureCardMesh, loadCardTextures, setCardData, updateModifiers, warmCardTextureCache } from './card';
 import { Card, CardZone } from './constants';
 import {
   cardsById,
@@ -102,6 +102,15 @@ export async function transferCard<AddOptions extends {}>(
 
   if (addOptions?.skipAnimation) {
     setCardData(card.mesh, 'skipAnimation', true);
+  }
+
+  if (
+    fromZone?.zone === 'hand' &&
+    toZone &&
+    (toZone.zone === 'battlefield' || toZone.zone === 'peek' || toZone.zone === 'reveal') &&
+    card.mesh
+  ) {
+    warmCardTextureCache(card);
   }
 
   await fromZone?.removeCard?.(card.mesh);

@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { getDeckPreviewImageUrl } from '../deck';
+import { DeckPreviewImage } from './deckPreviewImage';
 import { createDeckStore } from '../deckStore';
 import { useCardSystemContext } from '../cardSystemContext';
 import { colorHashDark } from '../globals';
@@ -313,9 +313,10 @@ function DeckOption(props: DeckOptionProps) {
         type='button'
         onClick={() => props.selectable && props.onSelect()}
         disabled={!props.selectable}>
-        <div
-          class='bg-cover bg-center'
-          style={`background-image: url(${getDeckPreviewImageUrl(props.deck)}); height: 100%;`}></div>
+        <DeckPreviewImage
+          deck={props.deck}
+          class='size-full object-cover object-center'
+        />
         <div class='absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent py-4 px-2 text-left'>
           <h3 class='text-white text-xl font-semibold'>{props.deck?.name || 'Untitled'}</h3>
           <div class='flex flex-row gap-2 pt-2 flex-wrap'>

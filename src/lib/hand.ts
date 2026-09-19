@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
 import { CatmullRomCurve3, Euler, Group, Intersection, Mesh, Object3D, Plane, Raycaster, Vector3 } from 'three';
 import { animateObject, cancelAnimation } from './animations';
-import { cleanupCard, getSerializableCard, setCardData, stripCardIdentityForHiddenHand, applyOpponentHiddenHandFace } from './card';
+import { cleanupCard, getSerializableCard, setCardData, stripCardIdentityForHiddenHand, applyOpponentHiddenHandFace, prefetchHiddenHandCardTextureCache } from './card';
 import { Card, CARD_HEIGHT, CardZone } from './constants';
 import { cardsById, bumpHowItPlaysHandTick, isEventCatchUpComplete, setHoverSignal, settings, zonesById } from './globals';
 import { getGlobalRotation } from './utils';
@@ -426,6 +426,7 @@ export class Hand implements CardZone {
     if (!this.isLocalHand) {
       stripCardIdentityForHiddenHand(card);
       applyOpponentHiddenHandFace(card);
+      prefetchHiddenHandCardTextureCache(card);
     }
 
     setCardData(card.mesh, 'zoneId', this.id);

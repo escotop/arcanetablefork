@@ -5,11 +5,12 @@ import { Portal } from 'solid-js/web';
 import { produce, unwrap } from 'solid-js/store';
 import { Button } from '~/components/ui/button';
 import { resetDocumentScroll } from '~/lib/documentScrollLock';
-import { getDeckPreviewImageUrl } from '~/lib/deck';
+import { DeckPreviewImage } from '~/lib/ui/deckPreviewImage';
 import { useCardSystemContext } from '~/lib/cardSystemContext';
 import { Deck } from '~/lib/constants';
 import { createDeckStore } from '~/lib/deckStore';
 import { getDeckCoverMetadata } from '~/lib/deck';
+import { isBrokenDeckCoverUrl } from '~/lib/deckCoverPreview';
 import { DeckEditor } from '~/lib/ui/deckEditor';
 import { compareDecksByBracket } from '~/lib/commanderBracket';
 import BracketEstimateTag from '~/lib/ui/bracketEstimateTag';
@@ -62,13 +63,14 @@ const LandingPage: Component = () => {
     void initCardSystem();
 
     for (const deck of decks()) {
+      const needsCover =
+        !deck.coverImage || isBrokenDeckCoverUrl(deck.coverImage);
+      if (!needsCover) continue;
+
       const metadata = getDeckCoverMetadata(deck);
-      if (
-        metadata.coverImage !== deck.coverImage ||
-        metadata.coverImageFullArt !== deck.coverImageFullArt
-      ) {
-        setDeckStore('decks', deck.id, current => ({ ...current, ...metadata }));
-      }
+      if (!metadata.coverImage) continue;
+
+      setDeckStore('decks', deck.id, current => ({ ...current, ...metadata }));
     }
   });
 
@@ -155,10 +157,15 @@ const LandingPage: Component = () => {
                           type='button'
                           class='block size-full text-left'
                           onClick={() => setEditingDeck(deck)}>
-                          <div
-                            class='absolute inset-0 bg-cover bg-center'
-                            style={{
-                              'background-image': `url(${getDeckPreviewImageUrl(deck)})`,
+                          <DeckPreviewImage
+                            deck={deck}
+                            class='absolute inset-0 size-full object-cover object-center'
+                            onResolvedCover={url => {
+                              if (deck.coverImage === url) return;
+                              setDeckStore('decks', deck.id, current => ({
+                                ...current,
+                                coverImage: url,
+                              }));
                             }}
                           />
                           <div class='absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/10' />

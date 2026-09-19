@@ -664,6 +664,17 @@ export async function init({ gameId }) {
   provider = createSyncProvider(gameId);
   markLoadProfile('sync provider created', { gameId });
 
+  // Initialize game engine
+  try {
+    const { initializeGameEngine } = await import('./gameEngineIntegration');
+    const playerSessionId = getOrCreatePlayerSessionId(gameId);
+    await initializeGameEngine(gameId, playerSessionId, ydoc, provider, indexeddbPersistence);
+    markLoadProfile('game engine initialized', { gameId });
+  } catch (error) {
+    console.error('[GameEngine] Failed to initialize:', error);
+    // Continue without game engine
+  }
+
   cardBackTexture = textureLoader.load(cardSystem.cardBack ?? DEFAULT_CARD_BACK);
   cardBackTexture.colorSpace = THREE.SRGBColorSpace;
   cardBackTexture.userData.isCardBack = true;

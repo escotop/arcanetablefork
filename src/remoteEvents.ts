@@ -12,8 +12,10 @@ import {
   normalizeCardCounterModifiers,
   stripCardIdentityForHiddenHand,
   updateModifiers,
+  warmCardTextureCache,
 } from './lib/card';
 import { Card } from './lib/constants';
+import type { CardId } from './game-engine/types';
 import { removeOpponentCommanderTracking } from './lib/commanderTracking';
 import * as Sentry from '@sentry/solidstart';
 import {
@@ -516,8 +518,39 @@ function ensureCardReady(card: Card | undefined, clientId?: number): Card | unde
   return card;
 }
 
+function eventTargetsEngineCard(event: GameEvent): string | undefined {
+  if (event.type === 'CARD_TAPPED' || event.type === 'CARD_FLIPPED') {
+    return (event.payload as { cardId?: string }).cardId;
+  }
+  return undefined;
+}
+
 export async function handleEvent(event: Event, playArea: PlayArea) {
   logReloadOther('handle-event-start', { type: event.type, clientID: event.clientID });
+  
+  // Bridge event to game engine (shadow mode)
+  try {
+    const { getGameEngine } = await import('./lib/gameEngineIntegration');
+    const { bridgeOldEventToNew, shouldBridgeEvent } = await import('./game-engine/bridges/event-bridge');
+    
+    const gameEngine = getGameEngine();
+    if (gameEngine && shouldBridgeEvent(event.type)) {
+      const currentSequence = gameEngine.getState().sequence;
+      const newEvent = bridgeOldEventToNew(event, currentSequence + 1);
+      
+      if (newEvent) {
+        const cardId = eventTargetsEngineCard(newEvent);
+        if (!cardId || gameEngine.getCard(cardId as CardId)) {
+          gameEngine.applyShadowEvents([newEvent]);
+        }
+      }
+    }
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn('[EventBridge] Failed to bridge event:', error);
+    }
+  }
+  
   expect(!!EVENTS[event.type], `${event.type} not implemented`);
 
   if (event.type === 'animateObject') {
@@ -804,6 +837,15 @@ const EVENTS = {
 
     if (event.payload?.userData) {
       applyEventUserData(card, event.payload.userData);
+    }
+
+    if (
+      isRemotePlayerEvent(event) &&
+      resolvedFromZone?.zone === 'hand' &&
+      toZone &&
+      (toZone.zone === 'battlefield' || toZone.zone === 'peek' || toZone.zone === 'reveal')
+    ) {
+      warmCardTextureCache(card);
     }
 
     if (

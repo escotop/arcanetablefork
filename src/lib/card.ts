@@ -581,6 +581,110 @@ export async function loadCardTextures(
   await frontPromise;
 }
 
+/**
+ * Start loading card face textures into the shared cache without waiting.
+ * Does not change what is shown on the mesh.
+ */
+function prefetchCardFaceTexturesIntoCache(card: Card): void {
+  void (async () => {
+    try {
+      if (!getCardImage(card)) {
+        await ensureCardImageDetail(card);
+      }
+
+      const front =
+        normalizeTextureUrl(card.customArtUrl ?? getCardImage(card, 0) ?? '') ?? '';
+      if (!front) return;
+
+      void loadTextureMaterial(front, cardTextureMaterialCache).catch(() => {});
+
+      const needsBack =
+        card.mesh?.userData.isDoubleSided ||
+        card.detail?.layout === 'transform' ||
+        (card.detail?.card_faces && card.detail.card_faces.length > 1);
+      if (needsBack) {
+        const back = normalizeTextureUrl(getCardImage(card, 1) ?? '');
+        if (back) {
+          void loadTextureMaterial(back, cardTextureMaterialCache).catch(() => {});
+        }
+      }
+    } catch (error) {
+      devLog.warn('[prefetchCardFaceTexturesIntoCache] failed', card.detail?.name ?? card.id, error);
+    }
+  })();
+}
+
+/**
+ * Use when a card becomes visible (e.g. opponent plays from hand).
+ */
+export function warmCardTextureCache(card: Card): void {
+  if (!card.mesh) return;
+
+  restoreCardDetailIfStripped(card);
+  prefetchCardFaceTexturesIntoCache(card);
+}
+
+/** Apply front/back from warm cache as soon as the card leaves a hidden hand. */
+export async function applyCachedCardTexturesIfReady(card: Card): Promise<void> {
+  if (!card.mesh) return;
+  if (isOpponentPrivateHandCard(card)) return;
+
+  restoreCardDetailIfStripped(card);
+
+  if (!getCardImage(card)) {
+    await ensureCardImageDetail(card);
+  }
+
+  const front =
+    normalizeTextureUrl(card.customArtUrl ?? getCardImage(card, 0) ?? '') ?? '';
+  if (!front) return;
+
+  const frontEntry = cardTextureMaterialCache.get(front);
+  if (frontEntry) {
+    try {
+      card.mesh.material[4] = (await frontEntry).clone();
+      card.mesh.material[4].needsUpdate = true;
+      if (card.mesh.userData.card_face_urls?.length) {
+        card.mesh.userData.card_face_urls[0] = front;
+      }
+    } catch {
+      /* loadCardTextures will retry */
+    }
+  }
+
+  const needsBack =
+    card.mesh.userData.isDoubleSided ||
+    (card.detail?.card_faces && card.detail.card_faces.length > 1);
+  if (!needsBack) return;
+
+  const back = normalizeTextureUrl(getCardImage(card, 1) ?? '');
+  if (!back) return;
+
+  const backEntry = cardTextureMaterialCache.get(back);
+  if (!backEntry) return;
+
+  try {
+    const mat = (await backEntry).clone();
+    card.mesh.userData.cardBack = mat;
+    if (card.mesh.userData.isPublic) {
+      card.mesh.material[5] = mat;
+      card.mesh.material[5].needsUpdate = true;
+    }
+  } catch {
+    /* loadCardTextures will retry */
+  }
+}
+
+/**
+ * Prefetch art for a card in someone else's hand. Keeps the face-down / hidden
+ * appearance; only populates the texture cache so play animations show art immediately.
+ */
+export function prefetchHiddenHandCardTextureCache(card: Card): void {
+  if (!card.mesh) return;
+  if (card.mesh.userData.location !== 'hand') return;
+  prefetchCardFaceTexturesIntoCache(card);
+}
+
 const pendingImageHydration = new Map<string, Promise<void>>();
 
 function cardImageHydrationKey(card: Card) {
@@ -1198,6 +1302,15 @@ export function setCardData<Field extends keyof CardUserData>(
   }
 
   set(cardMesh.userData, field, value);
+
+  if (
+    field === 'location' &&
+    cardMesh.userData.previousLocation === 'hand' &&
+    value !== 'hand'
+  ) {
+    const card = cardsById.get(cardMesh.userData.id);
+    if (card) void applyCachedCardTexturesIfReady(card);
+  }
 
   if (field === 'isPublic' && cardMesh.userData.location === 'hand') {
     const card = cardsById.get(cardMesh.userData.id);

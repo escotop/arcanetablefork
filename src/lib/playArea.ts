@@ -43,7 +43,7 @@ import {
 import { Hand } from './hand';
 import { transferCard } from './transferCard';
 import { getCardKey, hydrateDeck } from './deckStore';
-import { cardFromDeckEntry, preloadStackTextures } from './cardLoading';
+import { cardFromDeckEntry, preloadStackTextures, scheduleOpponentHandTexturePrefetch } from './cardLoading';
 import { Deck as DeckData, DetailedCardEntry } from './constants';
 import { profileAsync } from './loadProfile';
 import { collectTokenPartIds, appendSavedTokenPrintings, mergeTokenPrintings, resolveTokensByIds, restorePlayAreaTokenPrintings } from './deckTokens';
@@ -836,6 +836,8 @@ export class PlayArea {
 
     const animate = options.animate ?? isEventCatchUpComplete();
     const targetQuaternion = getRotationFromCardState(cardMesh.userData);
+    const landPosition = cardMesh.position.clone();
+    setCardData(cardMesh, `zone.${zone.id}.position`, landPosition.toArray());
 
     if (!animate) {
       cardMesh.quaternion.copy(targetQuaternion);
@@ -847,15 +849,16 @@ export class PlayArea {
       completeOnCancel: true,
       duration: 0.4,
       path: new CatmullRomCurve3([
-        cardMesh.position.clone(),
-        cardMesh.position.clone().add(new Vector3(0, 0, 20)),
-        new Vector3().fromArray(cardMesh.userData.zone[zone.id].position),
+        landPosition.clone(),
+        landPosition.clone().add(new Vector3(0, 0, 20)),
+        landPosition.clone(),
       ]),
       to: {
         quarternion: targetQuaternion,
       },
       onComplete: () => {
         setCardData(cardMesh, `zone.${zone.id}.rotation`, cardMesh.rotation.toArray());
+        setCardData(cardMesh, `zone.${zone.id}.position`, cardMesh.position.toArray());
       },
     });
   }
@@ -1032,9 +1035,26 @@ export class PlayArea {
   }
 
   loadTextures() {
+    if (this.isLocalPlayArea) {
+      const handJobs = this.hand.cards
+        .filter(card => card.mesh)
+        .map(card => loadCardTextures(card));
+      const jobs = [
+        ...this.battlefieldZone.cards.filter(card => card.mesh).map(card => loadCardTextures(card)),
+        ...handJobs,
+        preloadStackTextures(this.graveyardZone),
+        preloadStackTextures(this.exileZone),
+      ];
+      void Promise.all(jobs).finally(() => {
+        this.reapplyBattlefieldOrientations();
+      });
+      return;
+    }
+
+    scheduleOpponentHandTexturePrefetch(this.hand);
+
     const jobs = [
       ...this.battlefieldZone.cards.filter(card => card.mesh).map(card => loadCardTextures(card)),
-      ...this.hand.cards.filter(card => card.mesh).map(card => loadCardTextures(card)),
       preloadStackTextures(this.graveyardZone),
       preloadStackTextures(this.exileZone),
     ];

@@ -1,8 +1,9 @@
 import { nanoid } from 'nanoid';
 import { Card } from './constants';
 import { cardsById } from './globals';
-import { ensureCardMesh, loadCardTextures } from './card';
+import { ensureCardMesh, loadCardTextures, prefetchHiddenHandCardTextureCache } from './card';
 import type { CardStack } from './cardStack';
+import type { Hand } from './hand';
 
 export const ZONE_PRELOAD_TEXTURE_COUNT = 10;
 
@@ -72,4 +73,30 @@ function scheduleDeferredStackTextures(zone: CardStack) {
 
 export function onStackCardAdded(zone: CardStack) {
   void preloadStackTextures(zone);
+}
+
+const opponentHandPrefetchQueues = new WeakMap<Hand, number>();
+
+/** Prefetch opponent hand art into cache without revealing faces (spread across frames). */
+export function scheduleOpponentHandTexturePrefetch(hand: Hand) {
+  if (hand.isLocalHand) return;
+
+  const cards = hand.cards.filter(c => c.mesh);
+  if (!cards.length) return;
+
+  let index = opponentHandPrefetchQueues.get(hand) ?? 0;
+  opponentHandPrefetchQueues.set(hand, index);
+
+  const loadNext = () => {
+    if (index >= cards.length) {
+      opponentHandPrefetchQueues.delete(hand);
+      return;
+    }
+    prefetchHiddenHandCardTextureCache(cards[index]);
+    index++;
+    opponentHandPrefetchQueues.set(hand, index);
+    requestAnimationFrame(loadNext);
+  };
+
+  requestAnimationFrame(loadNext);
 }
