@@ -2,7 +2,7 @@ import { createSignal } from 'solid-js';
 import { Card } from './constants';
 import { createCardFrontMaterial } from './card';
 import { fetchCardPrintings, getPrintingPreviewUrl, supportsCardPrintings } from './deck';
-import { scryfallCardMatchesPrintingsLookup, resolvePrintingsLookup } from './deckPrinting';
+import { findSpanishPrintingForEntry } from './deckSpanishPrintings';
 import { cardsById, textureLoaderWorker } from './globals';
 
 export const SPANISH_PREVIEW_NOT_FOUND_MESSAGE = 'No esta en spanish. Haber estudiao';
@@ -16,27 +16,17 @@ export const [spanishPreviewUi, setSpanishPreviewUi] = createSignal<SpanishPrevi
 let activeCardId: string | undefined;
 let applyGeneration = 0;
 
-function getCardSet(card: Card) {
-  return (card.detail as { set?: string }).set;
-}
-
 export async function fetchSpanishPrintingImageUrl(card: Card): Promise<string | undefined> {
   if (!supportsCardPrintings() || !card.detail?.name) return;
 
-  const name = card.detail.name;
-  const set = getCardSet(card);
-  const lookupName = card.name ?? name;
-  const lookup = resolvePrintingsLookup({ name: lookupName, detail: card.detail });
-  const result = await fetchCardPrintings(
-    lookupName,
-    1,
-    `lang:es !"${name.replace(/"/g, '\\"')}" unique:prints`,
-    card.detail,
-  );
-  const prints = result.data.filter(entry => scryfallCardMatchesPrintingsLookup(entry, lookup));
-  const match =
-    (set ? prints.find(entry => entry.set?.toLowerCase() === set.toLowerCase()) : undefined) ??
-    prints[0];
+  const match = await findSpanishPrintingForEntry({
+    name: card.name,
+    detail: card.detail,
+    id: card.id,
+    set: (card.detail as { set?: string }).set ?? '',
+    qty: 1,
+    categories: [],
+  });
 
   return match ? getPrintingPreviewUrl(match) : undefined;
 }

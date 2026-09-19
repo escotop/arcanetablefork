@@ -78,6 +78,16 @@ export function buildDefaultPrintingsSearchQuery(lookup: ReturnType<typeof resol
   return `!"${quoted}" unique:prints`;
 }
 
+export type PrintingsLanguageFilter = 'en' | 'es';
+
+export function buildPrintingsSearchQuery(
+  lookup: ReturnType<typeof resolvePrintingsLookup>,
+  language: PrintingsLanguageFilter,
+): string {
+  const base = buildDefaultPrintingsSearchQuery(lookup);
+  return `lang:${language} ${base}`;
+}
+
 function normalizeSetCode(set?: string) {
   return set?.trim().toLowerCase() || undefined;
 }
@@ -116,10 +126,20 @@ function resolvedSetsMatch(requestedSet: string | undefined, detail: CardEntryDe
 }
 
 export function hasRequestedPrinting(entry: CardEntry) {
-  return !!(normalizeSetCode(entry.set) || normalizeCollectorNumber(entry.collector_number));
+  return !!(
+    entry.id?.trim() ||
+    normalizeSetCode(entry.set) ||
+    normalizeCollectorNumber(entry.collector_number)
+  );
 }
 
 export function printingMatchesRequest(detail: CardEntryDetail, entry: CardEntry) {
+  const requestedId = entry.id?.trim();
+  const detailId = (detail as CardEntryDetail & { id?: string }).id?.trim();
+  if (requestedId) {
+    if (!detailId || requestedId !== detailId) return false;
+  }
+
   const requestedSet = normalizeSetCode(entry.set);
   const requestedCollector = normalizeCollectorNumber(entry.collector_number);
   if (!requestedSet && !requestedCollector) return true;

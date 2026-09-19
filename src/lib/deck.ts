@@ -763,6 +763,13 @@ async function fetchCardDetailPayload(
   entry: CardEntry,
   trace: string[] = [],
 ): Promise<CardEntryDetail | null> {
+  if (entry.id?.trim()) {
+    trace.push(`Lookup by Scryfall id ${entry.id}`);
+    const byId = await fetchCardDetailById(entry.id);
+    if (byId) return byId;
+    trace.push('Scryfall id lookup returned no card');
+  }
+
   const { name, set, collector_number } = entry;
 
   if (set && collector_number) {

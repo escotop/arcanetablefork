@@ -24,6 +24,21 @@ const payload = {
   collector_number: '258',
 } as CardEntryDetail;
 
+test('printingMatchesRequest rejects different Scryfall id for same set and collector', () => {
+  expect(
+    printingMatchesRequest(
+      { ...payload, id: 'english-print-id', lang: 'en' },
+      { ...entry, id: 'spanish-print-id' },
+    ),
+  ).toBe(false);
+});
+
+test('printingMatchesRequest requires matching id when entry specifies id', () => {
+  expect(
+    printingMatchesRequest({ ...payload, id: 'same-id' }, { ...entry, id: 'same-id' }),
+  ).toBe(true);
+});
+
 test('printingMatchesRequest accepts exact set and collector', () => {
   expect(printingMatchesRequest(payload, entry)).toBe(true);
 });

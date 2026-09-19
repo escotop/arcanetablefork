@@ -16,6 +16,11 @@ import {
   getPrintingLabel,
   getPrintingPreviewUrl,
 } from '~/lib/deck';
+import {
+  buildPrintingsSearchQuery,
+  PrintingsLanguageFilter,
+  resolvePrintingsLookup,
+} from '~/lib/deckPrinting';
 import { getCardImage } from '~/lib/card';
 import { cardSystem } from '~/lib/globals';
 import { cn } from '~/lib/cnUtil';
@@ -50,8 +55,15 @@ function writeColsPerRow(value: number) {
   localStorage.setItem(COLS_STORAGE_KEY, String(value));
 }
 
+function initialPrintLanguage(entry: DetailedCardEntry): PrintingsLanguageFilter {
+  return (entry.detail as { lang?: string } | undefined)?.lang === 'es' ? 'es' : 'en';
+}
+
 const PrintingPickerModal: Component<Props> = props => {
   const [panelMode, setPanelMode] = createSignal<PanelMode>('printings');
+  const [printLanguage, setPrintLanguage] = createSignal<PrintingsLanguageFilter>(
+    initialPrintLanguage(props.entry),
+  );
   const [printings, setPrintings] = createSignal<CardPrintingOption[]>([]);
   const [page, setPage] = createSignal(0);
   const [totalPages, setTotalPages] = createSignal(0);
@@ -78,23 +90,50 @@ const PrintingPickerModal: Component<Props> = props => {
   const customArtOptions = createMemo(() => [...savedCustomOptions(), ...galleryCards()]);
 
   const visiblePrintings = createMemo(() => {
-    const fetched = printings();
-    const pinned = props.pinnedPrintings ?? [];
+    const lang = printLanguage();
+    const matchesLang = (printing: CardPrintingOption) => !printing.lang || printing.lang === lang;
+    const fetched = printings().filter(matchesLang);
+    const pinned = (props.pinnedPrintings ?? []).filter(matchesLang);
     const ids = new Set(fetched.map(printing => printing.id));
     return [...pinned.filter(printing => printing.id && !ids.has(printing.id)), ...fetched];
   });
 
-  async function loadPage(nextPage: number, append = false) {
+  function printingsSearchQuery(lang = printLanguage()) {
+    return buildPrintingsSearchQuery(
+      resolvePrintingsLookup({ name: props.entry.name, detail: props.entry.detail }),
+      lang,
+    );
+  }
+
+  async function loadPage(
+    nextPage: number,
+    append = false,
+    lang: PrintingsLanguageFilter = printLanguage(),
+  ) {
     if (loading()) return;
     setLoading(true);
     try {
-      const result = await fetchCardPrintings(props.entry.name, nextPage, undefined, props.entry.detail);
+      const result = await fetchCardPrintings(
+        props.entry.name,
+        nextPage,
+        printingsSearchQuery(lang),
+        props.entry.detail,
+      );
       setPrintings(append ? [...printings(), ...result.data] : result.data);
       setPage(result.page);
       setTotalPages(result.total_pages);
     } finally {
       setLoading(false);
     }
+  }
+
+  function togglePrintLanguage() {
+    const next: PrintingsLanguageFilter = printLanguage() === 'en' ? 'es' : 'en';
+    setPrintLanguage(next);
+    setPrintings([]);
+    setPage(0);
+    setTotalPages(0);
+    void loadPage(1, false, next);
   }
 
   async function loadGalleryPage(nextPage: number, append = false) {
@@ -188,10 +227,29 @@ const PrintingPickerModal: Component<Props> = props => {
         <div class='min-w-0'>
           <h2 class='truncate text-lg font-semibold'>{props.entry.name}</h2>
           <p class='text-sm text-muted-foreground'>
-            {panelMode() === 'printings' ? 'Choose a printing' : 'Custom card art'}
+            {panelMode() === 'printings'
+              ? printLanguage() === 'es'
+                ? 'Choose a printing (Spanish)'
+                : 'Choose a printing (English)'
+              : 'Custom card art'}
           </p>
         </div>
         <div class='flex shrink-0 items-center gap-3'>
+          <Show when={panelMode() === 'printings'}>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              class='whitespace-nowrap font-mono'
+              title={
+                printLanguage() === 'en'
+                  ? 'Showing English printings. Click for Spanish.'
+                  : 'Showing Spanish printings. Click for English.'
+              }
+              onClick={togglePrintLanguage}>
+              {printLanguage() === 'en' ? 'EN' : 'ES'}
+            </Button>
+          </Show>
           <Button
             type='button'
             variant={panelMode() === 'custom-art' ? 'default' : 'outline'}
@@ -270,6 +328,13 @@ const PrintingPickerModal: Component<Props> = props => {
                         <Show when={isSelected()}>
                           <Badge class='absolute left-2 top-2 shadow-md'>Selected</Badge>
                         </Show>
+                        <Show when={printing.lang === 'es' || printing.lang === 'en'}>
+                          <Badge
+                            variant='secondary'
+                            class='absolute right-2 top-2 font-mono text-[10px] uppercase shadow-md'>
+                            {printing.lang}
+                          </Badge>
+                        </Show>
                       </div>
                       <div class='min-w-0 px-1'>
                         <div class='truncate font-mono text-xs font-bold uppercase'>
@@ -289,7 +354,11 @@ const PrintingPickerModal: Component<Props> = props => {
             </div>
 
             <Show when={!loading() && visiblePrintings().length === 0}>
-              <div class='py-12 text-center text-sm text-muted-foreground'>No printings found</div>
+              <div class='py-12 text-center text-sm text-muted-foreground'>
+                {printLanguage() === 'es'
+                  ? 'No Spanish printings found for this card on Scryfall'
+                  : 'No printings found'}
+              </div>
             </Show>
 
             <Show when={page() < totalPages()}>

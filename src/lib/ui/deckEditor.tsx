@@ -45,6 +45,10 @@ import {
 import { cardSystem, colorHashDark } from '../globals';
 import { devLog } from '../devLog';
 import { lockDocumentScroll, unlockDocumentScroll } from '../documentScrollLock';
+import {
+  findSpanishPrintingForEntry,
+  listDeckEntriesForSpanishSearch,
+} from '../deckSpanishPrintings';
 import { searchCards } from '../scryfall/client';
 import { cn } from '../utils';
 import styles from './deckEditor.module.css';
@@ -582,6 +586,7 @@ export const DeckEditor: Component<Props> = props => {
           ...previous,
           id: printing.id,
           set: printing.set ?? previous.set,
+          collector_number: printing.collector_number ?? previous.collector_number,
         },
         printing,
       );
@@ -600,6 +605,41 @@ export const DeckEditor: Component<Props> = props => {
     updateDeck(section, storageKey, nextEntry);
     if (section === 'cards') {
       updateInPlayMirror(previous, nextEntry);
+    }
+  }
+
+  const [spanishPrintingsRunning, setSpanishPrintingsRunning] = createSignal(false);
+
+  async function searchSpanishPrintingsForDeck() {
+    if (spanishPrintingsRunning() || !supportsCardPrintings()) return;
+
+    setSpanishPrintingsRunning(true);
+    let updatedCount = 0;
+    let skippedCount = 0;
+
+    try {
+      for (const { section, storageKey, entry } of listDeckEntriesForSpanishSearch(deck)) {
+        const printing = await findSpanishPrintingForEntry(entry);
+        if (!printing) {
+          skippedCount++;
+          continue;
+        }
+        await changeCardPrinting(storageKey, printing, section);
+        updatedCount++;
+      }
+
+      if (updatedCount === 0) {
+        toast.message('No Spanish printings found to apply.');
+      } else {
+        toast.success(
+          `Updated ${updatedCount} card${updatedCount === 1 ? '' : 's'} to Spanish printings` +
+            (skippedCount > 0 ? ` (${skippedCount} unchanged)` : ''),
+        );
+      }
+    } catch {
+      toast.error('Could not search Spanish printings.');
+    } finally {
+      setSpanishPrintingsRunning(false);
     }
   }
 
@@ -1177,6 +1217,19 @@ export const DeckEditor: Component<Props> = props => {
                 </ComboboxControl>
                 <ComboboxContent style='max-height: 50lvh; overflow: auto;' />
               </Combobox>
+              <Show when={supportsCardPrintings()}>
+                <Button
+                  type='button'
+                  variant='outline'
+                  class='mt-3 w-full'
+                  disabled={spanishPrintingsRunning()}
+                  onClick={() => void searchSpanishPrintingsForDeck()}>
+                  <Show when={spanishPrintingsRunning()} fallback='Search Spanish cards'>
+                    <LoaderIcon class='size-4 animate-spin' />
+                    Searching…
+                  </Show>
+                </Button>
+              </Show>
             </div>
             </div>
 

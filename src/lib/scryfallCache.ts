@@ -184,9 +184,8 @@ export async function getCachedCardById(id: string): Promise<CardEntryDetail | n
 }
 
 export async function getCachedCardDetail(entry: CardEntry): Promise<CardEntryDetail | null> {
-  if (entry.id) {
-    const byId = await readCardRecord(cardIdKey(entry.id));
-    if (byId) return byId;
+  if (entry.id?.trim()) {
+    return readCardRecord(cardIdKey(entry.id));
   }
 
   const set = normalizePrintingSetCode(entry.set);
