@@ -31,7 +31,7 @@ import {
   TextFieldLabel,
 } from '~/components/ui/text-field';
 import { getCardImage } from '../card';
-import { DetailedCardEntry, Deck, FORMATS } from '../constants';
+import { DetailedCardEntry, CardEntryDetail, Deck, FORMATS } from '../constants';
 import {
   CardPrintingOption,
   entryToPrintingOption,
@@ -46,7 +46,12 @@ import { cardSystem, colorHashDark } from '../globals';
 import { devLog } from '../devLog';
 import { lockDocumentScroll, unlockDocumentScroll } from '../documentScrollLock';
 import {
-  findSpanishPrintingForEntry,
+  buildPrintingsSearchQuery,
+  resolvePrintingsLookup,
+} from '../deckPrinting';
+import {
+  findSpanishPrintingsForDeckRows,
+  isEntrySpanishPrinting,
   listDeckEntriesForSpanishSearch,
 } from '../deckSpanishPrintings';
 import { searchCards } from '../scryfall/client';
@@ -571,27 +576,55 @@ export const DeckEditor: Component<Props> = props => {
     if (!previous) return;
 
     const qty = previous.qty;
-    let updated = await fetchCardInfo({
+    const entryBase = {
       name: previous.name,
       id: printing.id,
-      set: printing.set,
-      collector_number: printing.collector_number,
+      set: printing.set ?? previous.set,
+      collector_number: printing.collector_number ?? previous.collector_number,
       qty,
       categories: previous.categories ?? [],
-    }).catch(() => undefined);
+    };
 
-    if (!updated?.id) {
+    let updated: DetailedCardEntry | undefined;
+
+    if (printing.id && getPrintingPreviewUrl(printing)) {
+      const mergedDetail = {
+        ...(previous.detail ?? { name: previous.name }),
+        id: printing.id,
+        name: printing.name ?? previous.detail?.name ?? previous.name,
+        set: printing.set ?? previous.detail?.set,
+        collector_number: printing.collector_number ?? previous.detail?.collector_number,
+        lang: printing.lang ?? (previous.detail as { lang?: string } | undefined)?.lang,
+        image_uris: printing.image_uris ?? previous.detail?.image_uris,
+        card_faces: printing.card_faces ?? previous.detail?.card_faces,
+      } as CardEntryDetail;
+      const populated = populateCardInfo(mergedDetail, entryBase);
       updated = withPrintingImages(
         {
           ...previous,
-          id: printing.id,
-          set: printing.set ?? previous.set,
-          collector_number: printing.collector_number ?? previous.collector_number,
+          ...populated,
+          qty,
+          categories: previous.categories ?? [],
+          customArtUrl: undefined,
         },
         printing,
       );
     } else {
-      updated = withPrintingImages(updated, printing);
+      updated = await fetchCardInfo(entryBase).catch(() => undefined);
+
+      if (!updated?.id) {
+        updated = withPrintingImages(
+          {
+            ...previous,
+            id: printing.id,
+            set: printing.set ?? previous.set,
+            collector_number: printing.collector_number ?? previous.collector_number,
+          },
+          printing,
+        );
+      } else {
+        updated = withPrintingImages(updated, printing);
+      }
     }
 
     if (!updated?.id) return;
@@ -618,12 +651,21 @@ export const DeckEditor: Component<Props> = props => {
     let skippedCount = 0;
 
     try {
-      for (const { section, storageKey, entry } of listDeckEntriesForSpanishSearch(deck)) {
-        const printing = await findSpanishPrintingForEntry(entry);
+      const rows = listDeckEntriesForSpanishSearch(deck);
+      const printingsByRow = await findSpanishPrintingsForDeckRows(rows);
+
+      for (const { section, storageKey, entry } of rows) {
+        if (isEntrySpanishPrinting(entry)) {
+          skippedCount++;
+          continue;
+        }
+
+        const printing = printingsByRow.get(`${section}:${storageKey}`);
         if (!printing) {
           skippedCount++;
           continue;
         }
+
         await changeCardPrinting(storageKey, printing, section);
         updatedCount++;
       }
@@ -643,13 +685,24 @@ export const DeckEditor: Component<Props> = props => {
     }
   }
 
+  function printingsPrefetchQuery(entry: DetailedCardEntry) {
+    const lang =
+      (entry.detail as { lang?: string } | undefined)?.lang === 'es' ? 'es' : 'en';
+    return buildPrintingsSearchQuery(
+      resolvePrintingsLookup({ name: entry.name, detail: entry.detail }),
+      lang,
+    );
+  }
+
   function openPrintingPicker(
     storageKey: string,
     section: 'cards' | 'sideboard' = 'cards',
   ) {
     if (!supportsCardPrintings() || !(deck[section]?.[storageKey]?.qty > 0)) return;
     const entry = deck[section]?.[storageKey];
-    if (entry?.name) prefetchCardPrintings(entry.name, 1, undefined, entry.detail);
+    if (entry?.name) {
+      prefetchCardPrintings(entry.name, 1, printingsPrefetchQuery(entry), entry.detail);
+    }
     setPrintingPickerSection(section);
     setPrintingPickerKey(storageKey);
   }

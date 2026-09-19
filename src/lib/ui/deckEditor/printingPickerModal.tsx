@@ -12,6 +12,7 @@ import {
 } from '~/lib/customCardArt';
 import {
   CardPrintingOption,
+  entryToPrintingOption,
   fetchCardPrintings,
   getPrintingLabel,
   getPrintingPreviewUrl,
@@ -79,7 +80,7 @@ const PrintingPickerModal: Component<Props> = props => {
   const [galleryLoadedFor, setGalleryLoadedFor] = createSignal<string | null>(null);
   const [customLoading, setCustomLoading] = createSignal(false);
 
-  const selectedId = () => props.entry.id;
+  const selectedId = () => entryToPrintingOption(props.entry).id || undefined;
   const usingCustomArt = () => !!props.entry.customArtUrl;
   const selectedImageUrl = () => getCardImage(props.entry);
 
@@ -89,13 +90,33 @@ const PrintingPickerModal: Component<Props> = props => {
 
   const customArtOptions = createMemo(() => [...savedCustomOptions(), ...galleryCards()]);
 
+  const currentDeckPrinting = createMemo(() => {
+    const option = entryToPrintingOption(props.entry);
+    return option.id ? option : undefined;
+  });
+
   const visiblePrintings = createMemo(() => {
     const lang = printLanguage();
+    const selected = selectedId();
     const matchesLang = (printing: CardPrintingOption) => !printing.lang || printing.lang === lang;
+    const includePinned = (printing: CardPrintingOption) =>
+      !!printing.id && (matchesLang(printing) || printing.id === selected);
     const fetched = printings().filter(matchesLang);
-    const pinned = (props.pinnedPrintings ?? []).filter(matchesLang);
     const ids = new Set(fetched.map(printing => printing.id));
-    return [...pinned.filter(printing => printing.id && !ids.has(printing.id)), ...fetched];
+
+    const pinnedSources = [
+      ...(props.pinnedPrintings ?? []),
+      ...(currentDeckPrinting() ? [currentDeckPrinting()!] : []),
+    ];
+    const pinned: CardPrintingOption[] = [];
+    const seenPinned = new Set<string>();
+    for (const printing of pinnedSources) {
+      if (!printing.id || seenPinned.has(printing.id)) continue;
+      seenPinned.add(printing.id);
+      if (includePinned(printing)) pinned.push(printing);
+    }
+
+    return [...pinned.filter(printing => !ids.has(printing.id)), ...fetched];
   });
 
   function printingsSearchQuery(lang = printLanguage()) {

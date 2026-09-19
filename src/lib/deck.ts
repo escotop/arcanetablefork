@@ -982,7 +982,7 @@ async function enrichPrintingOptions(
   const needsEnrich = printings.filter(printing => !printing.set);
   if (needsEnrich.length === 0) return printings;
 
-  const concurrency = 12;
+  const concurrency = 2;
   const enriched = new Map<string, CardPrintingOption>();
 
   for (let index = 0; index < needsEnrich.length; index += concurrency) {

@@ -1,7 +1,7 @@
 import type { CardEntryDetail } from '../constants';
 
 const SCRYFALL_API = '/api/scryfall';
-const MIN_REQUEST_INTERVAL_MS = 110;
+const MIN_REQUEST_INTERVAL_MS = 125;
 
 const TYPE_ALIASES: Record<string, string> = {
   creature: '(t:creature or t:summon)',
@@ -14,21 +14,22 @@ const TYPE_ALIASES: Record<string, string> = {
 };
 
 let lastRequestAt = 0;
+let scryfallFetchChain: Promise<unknown> = Promise.resolve();
 
 function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function scryfallFetch(path: string, init?: RequestInit): Promise<Response> {
-  const now = Date.now();
-  const wait = Math.max(0, MIN_REQUEST_INTERVAL_MS - (now - lastRequestAt));
-  if (wait) await delay(wait);
-  lastRequestAt = Date.now();
-
+async function scryfallFetchInner(path: string, init?: RequestInit): Promise<Response> {
   const url = path.startsWith('http') ? path : `${SCRYFALL_API}${path}`;
   let response: Response | undefined;
 
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const now = Date.now();
+    const wait = Math.max(0, MIN_REQUEST_INTERVAL_MS - (now - lastRequestAt));
+    if (wait) await delay(wait);
+    lastRequestAt = Date.now();
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20_000);
     try {
@@ -46,10 +47,20 @@ async function scryfallFetch(path: string, init?: RequestInit): Promise<Response
     }
 
     if (response.status !== 429 && response.status !== 503) return response;
-    await delay(300 * (attempt + 1));
+
+    await delay(Math.min(2_000, 400 * (attempt + 1)));
   }
 
   return response!;
+}
+
+async function scryfallFetch(path: string, init?: RequestInit): Promise<Response> {
+  const next = scryfallFetchChain.then(() => scryfallFetchInner(path, init));
+  scryfallFetchChain = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
 }
 
 export function mapScryfallCard(card: Record<string, unknown>): CardEntryDetail {
@@ -64,6 +75,9 @@ export function mapScryfallCard(card: Record<string, unknown>): CardEntryDetail 
     ...(card as CardEntryDetail),
     id: String(card.id ?? ''),
     name: String(card.name ?? ''),
+    set: card.set as string | undefined,
+    collector_number: card.collector_number as string | undefined,
+    lang: card.lang as string | undefined,
     type_line: String(card.type_line ?? ''),
     image_uris: (card.image_uris as Record<string, string>) ?? {},
     card_faces: (card.card_faces as CardEntryDetail['card_faces']) ?? undefined,
