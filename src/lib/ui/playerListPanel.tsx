@@ -42,6 +42,8 @@ import { getCameraViewIndexForClientId, getOrderedPlayAreas, setCameraViewByPlay
 
 import { LifeField } from './playerMenu';
 
+import PlayingCardsFanIcon from '~/lib/icons/playing-cards-fan.svg';
+
 import styles from './playerListPanel.module.css';
 
 
@@ -73,6 +75,15 @@ const stopPointer = (e: PointerEvent) => {
   e.stopPropagation();
 
 };
+
+function playerHandCount(clientId: number) {
+  Object.values(playAreas);
+  const area = playAreas[clientId];
+  if (!area) return 0;
+  area.hand.observable.cardCount;
+  area.hand.observable.revision;
+  return area.hand.observable.cardCount ?? area.hand.cards.length;
+}
 
 
 
@@ -246,6 +257,8 @@ const PlayerListRow: Component<{ player: LifeBarPlayer }> = props => {
 
       : `View from ${props.player.name}'s perspective`;
 
+  const handCount = createMemo(() => playerHandCount(props.player.clientId));
+
 
 
   return (
@@ -269,6 +282,11 @@ const PlayerListRow: Component<{ player: LifeBarPlayer }> = props => {
         />
 
         <span class={styles.playerNameText}>{displayName()}</span>
+
+        <span class={styles.handCount} title={`${handCount()} cards in hand`}>
+          <PlayingCardsFanIcon class={styles.handCountIcon} aria-hidden='true' />
+          {handCount()}
+        </span>
 
       </div>
 

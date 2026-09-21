@@ -525,7 +525,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     blockCardInteraction();
 
     const menuWidth = 128;
-    const menuHeight = 300;
+    const menuHeight = 330;
     const bounds = modalContentRef?.getBoundingClientRect();
     if (!bounds) return;
 
@@ -628,6 +628,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
         toZone = area.exileZone;
         break;
       case 'battlefield':
+      case 'battlefield-face-down':
         toZone = area.battlefieldZone;
         break;
       case 'deck-top':
@@ -651,6 +652,8 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
 
     if (zoneName === 'deck-bottom') {
       transferCard(card, fromZone, toZone, { addOptions: { location: 'bottom' } });
+    } else if (zoneName === 'battlefield-face-down') {
+      transferCard(card, fromZone, toZone, { userData: { isFlipped: true } });
     } else {
       transferCard(card, fromZone, toZone);
     }
@@ -1263,6 +1266,16 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
                         )
                       }>
                       Battlefield
+                    </button>
+                    <button
+                      type='button'
+                      class='w-full px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent'
+                      onMouseDown={e =>
+                        handleContextMenuAction(e, () =>
+                          moveCardsToZone(targetCards, 'battlefield-face-down'),
+                        )
+                      }>
+                      Battlefield Face down
                     </button>
                     <button
                       type='button'
