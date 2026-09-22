@@ -61,6 +61,7 @@ import {
 } from './lib/playerSession';
 import {
   appendPlayerToTurnOrder,
+  shouldApplyPassTurnFromLogEvent,
   writeTurnOrderState,
   type TurnOrderState,
 } from './lib/turnOrder';
@@ -781,6 +782,7 @@ const EVENTS = {
     readjustPlayAreas();
   },
   passTurn(event: ReturnType<typeof EventCreators.createPassTurnEvent>) {
+    if (!shouldApplyPassTurnFromLogEvent()) return;
     const turnOrder = event.payload?.turnOrder as TurnOrderState | undefined;
     if (!turnOrder || !Array.isArray(turnOrder.order)) return;
     writeTurnOrderState(turnOrder);

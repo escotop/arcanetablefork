@@ -63,7 +63,7 @@ import {
   iterateGameLogEvents,
 } from './playerSession';
 import { resetMultiplayerSyncState } from './multiplayerSync';
-import { removePlayerFromTurnOrder } from './turnOrder';
+import { removePlayerFromTurnOrder, syncTurnOrderAfterLogReplay } from './turnOrder';
 import { clearWaterdrops } from './waterdropEffect';
 import { clearPingSync } from './pingSync';
 import { clearVideoPings } from './pingVideoEffect';
@@ -278,6 +278,7 @@ export function isHistoricalLogReplayInProgress() {
 
 export function finishHistoricalLogReplay() {
   historicalLogReplayInProgress = false;
+  syncTurnOrderAfterLogReplay();
 }
 
 export function hasPersistedGameState() {

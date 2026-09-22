@@ -1,5 +1,12 @@
 import { createSignal } from 'solid-js';
-import { gameLog, gameState, getLocalPlayerClientId, isEventCatchUpComplete, playAreas } from './globals';
+import {
+  gameLog,
+  gameState,
+  getLocalPlayerClientId,
+  isEventCatchUpComplete,
+  isHistoricalLogReplayInProgress,
+  playAreas,
+} from './globals';
 import { iterateGameLogEvents } from './playerSession';
 import { playTurnSound } from './sounds';
 
@@ -131,6 +138,41 @@ export function appendPlayerToTurnOrder(clientId: number) {
   writeTurnOrderState(next);
 }
 
+function lastPassTurnFromLog(): TurnOrderState | null {
+  let last: TurnOrderState | null = null;
+  for (const event of iterateGameLogEvents(gameLog)) {
+    if (event.type !== 'passTurn') continue;
+    const turnOrder = event.payload?.turnOrder as TurnOrderState | undefined;
+    if (turnOrder && Array.isArray(turnOrder.order)) {
+      last = turnOrder;
+    }
+  }
+  return last;
+}
+
+/** Apply current turn once after log replay — passTurn events are not replayed step-by-step. */
+export function syncTurnOrderAfterLogReplay() {
+  const persisted = readTurnOrderState();
+  if (persisted?.order.length) {
+    setTurnOrderState(sanitizeTurnOrder(persisted));
+    return;
+  }
+
+  const fromLog = lastPassTurnFromLog();
+  if (!fromLog?.order.length) {
+    setTurnOrderState(null);
+    return;
+  }
+
+  const next = sanitizeTurnOrder(fromLog);
+  writeTurnOrderState(next);
+  setTurnOrderState(readTurnOrderState());
+}
+
+export function shouldApplyPassTurnFromLogEvent() {
+  return isEventCatchUpComplete() && !isHistoricalLogReplayInProgress();
+}
+
 export function removePlayerFromTurnOrder(clientId: number) {
   const current = readTurnOrderState();
   if (!current?.order.length) return;
@@ -170,6 +212,7 @@ export function initTurnOrderSync() {
     if (
       initialized &&
       isEventCatchUpComplete() &&
+      !isHistoricalLogReplayInProgress() &&
       active !== undefined &&
       active === localClientId &&
       active !== previousActive
