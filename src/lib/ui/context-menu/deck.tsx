@@ -1,6 +1,6 @@
 import { PlayArea } from '~/lib/playArea';
 import { useMenuContext } from './context';
-import { Dynamic, For, Match, Switch } from 'solid-js/web';
+import { Dynamic, Match, Switch } from 'solid-js/web';
 import {
   discardFromTop,
   drawCards,
@@ -119,13 +119,9 @@ export default function DeckContextMenu(props: { playArea: PlayArea }) {
       <Dynamic component={ctx.menu}>
         <Dynamic component={ctx.trigger}>Mulligan</Dynamic>
         <Dynamic component={ctx.content}>
-          <For each={Array(7).fill(0)}>
-            {(_, i) => (
-              <Dynamic component={ctx.item} onClick={() => props.playArea.mulligan(7 - i())}>
-                {7 - i()} Cards
-              </Dynamic>
-            )}
-          </For>
+          <Dynamic component={ctx.item} onClick={() => props.playArea.mulligan(7)}>
+            7 Cards
+          </Dynamic>
         </Dynamic>
       </Dynamic>
     </>

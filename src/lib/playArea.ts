@@ -46,7 +46,7 @@ import { getCardKey, hydrateDeck } from './deckStore';
 import { cardFromDeckEntry, preloadStackTextures, scheduleOpponentHandTexturePrefetch } from './cardLoading';
 import { Deck as DeckData, DetailedCardEntry } from './constants';
 import { profileAsync } from './loadProfile';
-import { collectTokenPartIds, appendSavedTokenPrintings, mergeTokenPrintings, resolveTokensByIds, restorePlayAreaTokenPrintings } from './deckTokens';
+import { collectTokenPartIds, appendSavedTokenPrintings, mergeTokenPrintings, resolveTokenPartIdsFromSources, resolveTokensByIds, restorePlayAreaTokenPrintings } from './deckTokens';
 import {
   createCreateCardEvent,
   createDeckDrawLogEvent,
@@ -538,8 +538,66 @@ export class PlayArea {
   }
 
   async toggleTokenMenu(payload?: { availableTokens: CardReference[]; ids: string[] }) {
-    const isOpen = this.tokenSearchZone.cards.length > 0;
     await this.dismissAllCardGrids();
+
+    const resolveAvailableTokens = async () => {
+      const tokenIds = await resolveTokenPartIdsFromSources(this.getTokenSources());
+      const tokenDetails = await resolveTokensByIds(tokenIds);
+      return appendSavedTokenPrintings(
+        mergeTokenPrintings(tokenDetails, this.tokenPrintings),
+        this.tokenPrintings,
+      );
+    };
+
+    const openLocalTokenSearchModal = async (merged: DetailedCardEntry[]) => {
+      const availableCards = merged.map((entry, i) => ({
+        id: payload?.ids?.[i] ?? nanoid(),
+        clientId: this.clientId,
+        detail: entry.detail,
+        customArtUrl: entry.customArtUrl,
+        modifiers: {} as Card['modifiers'],
+      }));
+
+      setPeekFilterText('');
+      setPeekTypeFilter(null);
+      const { setCardSearchModalOpen, setCardSearchModalData, cardSearchModalOpen } =
+        await import('./globals');
+
+      if (cardSearchModalOpen()) {
+        setCardSearchModalOpen(false);
+        setCardSearchModalData(null);
+        this.availableTokens = undefined;
+        return;
+      }
+
+      setCardSearchModalData({
+        cards: [],
+        zone: 'tokenSearch',
+        title: 'Token Search…',
+      });
+      setCardSearchModalOpen(true);
+
+      if (!merged.length) {
+        setCardSearchModalOpen(false);
+        setCardSearchModalData(null);
+        return;
+      }
+
+      this.availableTokens = merged.map(entry => ({ ...entry.detail, clientId: this.clientId }));
+      setCardSearchModalData({
+        cards: availableCards,
+        zone: 'tokenSearch',
+        title: `Token Search (${availableCards.length} tokens)`,
+      });
+    };
+
+    if (this.isLocalPlayArea && !payload?.availableTokens) {
+      const merged = await resolveAvailableTokens();
+      await openLocalTokenSearchModal(merged);
+      return;
+    }
+
+    const isOpen = this.tokenSearchZone.cards.length > 0;
     if (isOpen) {
       this.availableTokens = undefined;
       return;
@@ -548,45 +606,12 @@ export class PlayArea {
       this.availableTokens = payload.availableTokens;
     }
 
-    const resolveAvailableTokens = async () => {
-      const tokenDetails = await resolveTokensByIds(collectTokenPartIds(this.getTokenSources()));
-      return appendSavedTokenPrintings(
-        mergeTokenPrintings(tokenDetails, this.tokenPrintings),
-        this.tokenPrintings,
-      );
-    };
-
     if (!this.availableTokens?.length) {
       const merged = await resolveAvailableTokens();
       if (!merged.length) return;
 
       this.availableTokens = merged.map(entry => ({ ...entry.detail, clientId: this.clientId }));
 
-      // Para el jugador local, usar el modal 2D
-      if (this.isLocalPlayArea) {
-        let availableCards = merged.map((entry, i) => {
-          return {
-            id: payload?.ids?.[i] ?? nanoid(),
-            clientId: this.clientId,
-            detail: entry.detail,
-            customArtUrl: entry.customArtUrl,
-            modifiers: {} as Card['modifiers'],
-          };
-        });
-
-        setPeekFilterText('');
-        setPeekTypeFilter(null);
-        const { setCardSearchModalOpen, setCardSearchModalData } = await import('./globals');
-        setCardSearchModalData({
-          cards: availableCards,
-          zone: 'tokenSearch',
-          title: `Token Search (${availableCards.length} tokens)`,
-        });
-        setCardSearchModalOpen(true);
-        return;
-      }
-
-      // Para jugadores remotos, usar el método antiguo
       let availableCards = merged.map((entry, i) => {
         let card = cloneCard(
           { detail: entry.detail, customArtUrl: entry.customArtUrl },
@@ -613,31 +638,6 @@ export class PlayArea {
           this.tokenSearchZone.addCard(availableCards[i]);
         }, i * 50);
       }
-      return;
-    }
-
-    // Si ya tenemos availableTokens
-    if (this.isLocalPlayArea) {
-      let availableCards = this.availableTokens.map((detail, i) => {
-        const mergedEntry = mergeTokenPrintings([detail], this.tokenPrintings)[0];
-        return {
-          id: payload?.ids?.[i] ?? nanoid(),
-          clientId: this.clientId,
-          detail: mergedEntry.detail,
-          customArtUrl: mergedEntry.customArtUrl,
-          modifiers: {} as Card['modifiers'],
-        };
-      });
-
-      setPeekFilterText('');
-      setPeekTypeFilter(null);
-      const { setCardSearchModalOpen, setCardSearchModalData } = await import('./globals');
-      setCardSearchModalData({
-        cards: availableCards,
-        zone: 'tokenSearch',
-        title: `Token Search (${availableCards.length} tokens)`,
-      });
-      setCardSearchModalOpen(true);
       return;
     }
 
@@ -678,6 +678,8 @@ export class PlayArea {
       ...this.battlefieldZone.cards,
       ...this.graveyardZone.cards,
       ...this.exileZone.cards,
+      ...this.peekZone.cards,
+      ...this.revealZone.cards,
     ];
   }
 

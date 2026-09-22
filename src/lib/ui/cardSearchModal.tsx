@@ -101,6 +101,11 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     setLocalCards(props.cards);
   });
 
+  createEffect(() => {
+    if (!props.open || props.zone !== 'tokenSearch') return;
+    setLocalCards(props.cards);
+  });
+
   createEffect((prevOpen: boolean) => {
     const open = props.open;
     if (open && !prevOpen && props.deckViewMode === 'peek') {
@@ -1043,8 +1048,13 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
             <Show
               when={filteredCards().length > 0}
               fallback={
-                <div class='flex items-center justify-center h-full text-muted-foreground'>
-                  No cards found
+                <div class='flex h-full min-h-48 flex-col items-center justify-center gap-2 text-muted-foreground'>
+                  <Show
+                    when={props.zone === 'tokenSearch' && props.open && localCards().length === 0}
+                    fallback={<span>No cards found</span>}>
+                    <LoaderIcon class='size-8 animate-spin' />
+                    <span>Loading tokens…</span>
+                  </Show>
                 </div>
               }>
               <Switch>

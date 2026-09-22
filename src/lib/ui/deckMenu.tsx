@@ -108,15 +108,9 @@ const DeckMenu: Component<{ playArea: PlayArea }> = props => {
           </MenubarSub>
           <MenubarItem onClick={() => props.playArea.deckFlipTop()}>Flip top card</MenubarItem>
           <MenubarSub overlap>
-            <MenubarSubTrigger onClick={() => props.playArea.mulligan(1)}>
-              Mulligan for
-            </MenubarSubTrigger>
+            <MenubarSubTrigger>Mulligan</MenubarSubTrigger>
             <MenubarSubContent>
-              <div class='py-1.5 px-2'>Mulligan for x cards</div>
-              <NumberFieldMenuItem
-                defaultValue={7}
-                onSubmit={async count => props.playArea.mulligan(count)}
-              />
+              <MenubarItem onClick={() => props.playArea.mulligan(7)}>7 Cards</MenubarItem>
             </MenubarSubContent>
           </MenubarSub>
           <MenubarSeparator />

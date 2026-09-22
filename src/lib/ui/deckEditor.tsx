@@ -133,7 +133,7 @@ import {
   sortCommandersFirst,
   toggleCommanderCategories,
 } from '../deckCommander';
-import { collectTokenPartIds, getDefaultTokenEntry, getTokenKey, mergeTokenPrintings, resolveTokensByIds } from '../deckTokens';
+import { getDefaultTokenEntry, getTokenKey, mergeTokenPrintings, resolveTokensForSources } from '../deckTokens';
 import OverflowMenuIcon from 'lucide-solid/icons/ellipsis';
 import DeleteIcon from 'lucide-solid/icons/trash-2';
 
@@ -993,12 +993,12 @@ export const DeckEditor: Component<Props> = props => {
     );
   });
 
-  const deckTokenPartIds = createMemo(() => {
+  const deckTokenSources = createMemo(() => {
     trackDeep(deck.cards);
-    return collectTokenPartIds(getDeckList().filter(entry => entry?.qty));
+    return getDeckList().filter(entry => entry?.qty);
   });
 
-  const [deckTokens] = createResource(deckTokenPartIds, resolveTokensByIds);
+  const [deckTokens] = createResource(deckTokenSources, resolveTokensForSources);
 
   const deckTokenEntryList = createMemo(() => {
     trackDeep(deck.tokens);

@@ -4,11 +4,18 @@ import { applyCustomArtToEntry } from './customCardArt';
 import { getDeckStore } from './deckStore';
 import { loadGameMeta } from './gameMeta';
 import type { PlayArea } from './playArea';
-import { getCardById } from './scryfall/client';
+import { getCachedCardById, setCachedCardDetail } from './scryfallCache';
+import { mapScryfallCard, postCardCollection } from './scryfall/client';
 
-type TokenSource = { detail?: { all_parts?: CardEntryDetail['all_parts'] } };
+type TokenSource = { id?: string; detail?: { all_parts?: CardEntryDetail['all_parts']; id?: string } };
 
 type TokenDetail = CardEntryDetail & { oracle_id?: string };
+
+const COLLECTION_BATCH_SIZE = 75;
+
+function parentCardId(source: TokenSource): string | undefined {
+  return source.detail?.id?.trim() || source.id?.trim() || undefined;
+}
 
 export function getTokenKey(detail: TokenDetail) {
   return detail.oracle_id ?? detail.id ?? detail.name;
@@ -34,22 +41,116 @@ export function getDefaultTokenEntry(
   return token ? tokenDetailToEntry(token) : undefined;
 }
 
+export function tokenPartId(part: { id?: string; uri?: string }): string | undefined {
+  if (part.id?.trim()) return part.id.trim();
+  const uri = part.uri?.trim();
+  if (!uri) return undefined;
+  const match = uri.match(/\/cards\/([0-9a-f-]{36})/i);
+  return match?.[1];
+}
+
 export function collectTokenPartIds(sources: TokenSource[]): string[] {
   const ids = new Set<string>();
   for (const source of sources) {
     for (const part of source.detail?.all_parts ?? []) {
-      if (part.component === 'token' && part.id) {
-        ids.add(part.id);
+      if (part.component !== 'token') continue;
+      const id = tokenPartId(part);
+      if (id) ids.add(id);
+    }
+  }
+  return [...ids];
+}
+
+function sourceHasTokenParts(source: TokenSource) {
+  return (source.detail?.all_parts ?? []).some(part => part.component === 'token' && tokenPartId(part));
+}
+
+export function collectParentCardIdsForTokenLookup(sources: TokenSource[]): string[] {
+  const ids = new Set<string>();
+  for (const source of sources) {
+    if (sourceHasTokenParts(source)) continue;
+    const parentId = parentCardId(source);
+    if (parentId) ids.add(parentId);
+  }
+  return [...ids];
+}
+
+async function fetchCardDetailsByIds(ids: string[]): Promise<CardEntryDetail[]> {
+  if (!ids.length) return [];
+
+  const results: CardEntryDetail[] = [];
+  const needsNetwork: string[] = [];
+
+  for (const id of ids) {
+    const cached = await getCachedCardById(id);
+    if (cached?.all_parts?.some(part => part.component === 'token')) {
+      results.push(cached);
+      continue;
+    }
+    needsNetwork.push(id);
+  }
+
+  for (let index = 0; index < needsNetwork.length; index += COLLECTION_BATCH_SIZE) {
+    const batch = needsNetwork.slice(index, index + COLLECTION_BATCH_SIZE);
+    const body = await postCardCollection(batch.map(id => ({ id })));
+    for (const raw of body.data ?? []) {
+      const mapped = mapScryfallCard(raw as Record<string, unknown>);
+      results.push(mapped);
+      void setCachedCardDetail(mapped);
+    }
+  }
+
+  return results;
+}
+
+export async function resolveTokenPartIdsFromSources(sources: TokenSource[]): Promise<string[]> {
+  const ids = new Set(collectTokenPartIds(sources));
+  const parentIds = collectParentCardIdsForTokenLookup(sources);
+  if (parentIds.length) {
+    const parents = await fetchCardDetailsByIds(parentIds);
+    for (const parent of parents) {
+      for (const part of parent.all_parts ?? []) {
+        if (part.component !== 'token') continue;
+        const id = tokenPartId(part);
+        if (id) ids.add(id);
       }
     }
   }
   return [...ids];
 }
 
+async function fetchTokenDetailsByIds(ids: string[]): Promise<CardEntryDetail[]> {
+  if (!ids.length) return [];
+
+  const resolved: CardEntryDetail[] = [];
+  const missing: string[] = [];
+
+  for (const id of ids) {
+    const cached = await getCachedCardById(id);
+    if (cached?.name && Object.keys(cached.image_uris ?? {}).length > 0) {
+      resolved.push(cached);
+    } else {
+      missing.push(id);
+    }
+  }
+
+  for (let index = 0; index < missing.length; index += COLLECTION_BATCH_SIZE) {
+    const batch = missing.slice(index, index + COLLECTION_BATCH_SIZE);
+    const body = await postCardCollection(batch.map(id => ({ id })));
+    for (const raw of body.data ?? []) {
+      const mapped = mapScryfallCard(raw as Record<string, unknown>);
+      resolved.push(mapped);
+      void setCachedCardDetail(mapped);
+    }
+  }
+
+  return resolved;
+}
+
 export async function resolveTokensByIds(ids: string[]): Promise<CardEntryDetail[]> {
   if (!ids.length) return [];
 
-  const tokens = await Promise.all(ids.map(id => getCardById(id)));
+  const tokens = await fetchTokenDetailsByIds(ids);
 
   return uniqBy(
     tokens.filter((token): token is CardEntryDetail => token !== null),
@@ -139,4 +240,10 @@ export function restorePlayAreaTokenPrintings(
   if (playArea.tokenPrintings) Object.assign(merged, playArea.tokenPrintings);
 
   playArea.tokenPrintings = Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+/** Resolve display-ready tokens for cards/tokens in play or in a deck list. */
+export async function resolveTokensForSources(sources: TokenSource[]): Promise<CardEntryDetail[]> {
+  const ids = await resolveTokenPartIdsFromSources(sources);
+  return resolveTokensByIds(ids);
 }
