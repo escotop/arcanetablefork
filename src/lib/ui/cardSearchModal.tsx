@@ -881,8 +881,13 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
     });
   });
 
+  function onDialogOpenChange(open: boolean) {
+    if (open) return;
+    dismissModal();
+  }
+
   return (
-    <Dialog open={props.open} onOpenChange={dismissModal}>
+    <Dialog open={props.open} onOpenChange={onDialogOpenChange}>
       <DialogContent
         class='max-w-[90vw] h-[95vh] overflow-hidden flex flex-col p-0'
         hideClose

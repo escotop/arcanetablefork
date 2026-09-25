@@ -12,6 +12,53 @@ type TokenSource = { id?: string; detail?: { all_parts?: CardEntryDetail['all_pa
 type TokenDetail = CardEntryDetail & { oracle_id?: string };
 
 const COLLECTION_BATCH_SIZE = 75;
+const TOKEN_MENU_RESULT_CACHE_LIMIT = 4;
+
+const parentTokenPartIdsCache = new Map<string, string[]>();
+const tokenMenuResultCache = new Map<string, DetailedCardEntry[]>();
+
+function rememberParentTokenParts(detail: CardEntryDetail) {
+  const parentId = (detail as CardEntryDetail & { id?: string }).id?.trim();
+  if (!parentId) return;
+  const partIds = (detail.all_parts ?? [])
+    .filter(part => part.component === 'token')
+    .map(part => tokenPartId(part))
+    .filter((id): id is string => !!id);
+  if (partIds.length) parentTokenPartIdsCache.set(parentId, partIds);
+}
+
+function tokenMenuCacheKey(
+  sources: TokenSource[],
+  saved?: Record<string, DetailedCardEntry>,
+  parentLookupSources?: TokenSource[],
+) {
+  const direct = collectTokenPartIds(sources).sort().join(',');
+  const parents = collectParentCardIdsForTokenLookup(parentLookupSources ?? sources)
+    .sort()
+    .join(',');
+  const savedKeys = saved ? Object.keys(saved).sort().join(',') : '';
+  return `${direct}|${parents}|${savedKeys}`;
+}
+
+function rememberTokenMenuResult(
+  key: string,
+  merged: DetailedCardEntry[],
+) {
+  if (tokenMenuResultCache.has(key)) tokenMenuResultCache.delete(key);
+  tokenMenuResultCache.set(key, merged);
+  while (tokenMenuResultCache.size > TOKEN_MENU_RESULT_CACHE_LIMIT) {
+    const oldest = tokenMenuResultCache.keys().next().value;
+    if (oldest === undefined) break;
+    tokenMenuResultCache.delete(oldest);
+  }
+}
+
+async function loadCachedCardsByIds(ids: string[]) {
+  const pairs = await Promise.all(
+    ids.map(async id => [id, await getCachedCardById(id)] as const),
+  );
+  return new Map(pairs.filter((entry): entry is [string, CardEntryDetail] => !!entry[1]));
+}
 
 function parentCardId(source: TokenSource): string | undefined {
   return source.detail?.id?.trim() || source.id?.trim() || undefined;
@@ -80,10 +127,15 @@ async function fetchCardDetailsByIds(ids: string[]): Promise<CardEntryDetail[]> 
 
   const results: CardEntryDetail[] = [];
   const needsNetwork: string[] = [];
+  const cachedById = await loadCachedCardsByIds(ids);
 
   for (const id of ids) {
-    const cached = await getCachedCardById(id);
+    const remembered = parentTokenPartIdsCache.get(id);
+    if (remembered?.length) continue;
+
+    const cached = cachedById.get(id);
     if (cached?.all_parts?.some(part => part.component === 'token')) {
+      rememberParentTokenParts(cached);
       results.push(cached);
       continue;
     }
@@ -95,6 +147,7 @@ async function fetchCardDetailsByIds(ids: string[]): Promise<CardEntryDetail[]> 
     const body = await postCardCollection(batch.map(id => ({ id })));
     for (const raw of body.data ?? []) {
       const mapped = mapScryfallCard(raw as Record<string, unknown>);
+      rememberParentTokenParts(mapped);
       results.push(mapped);
       void setCachedCardDetail(mapped);
     }
@@ -103,11 +156,22 @@ async function fetchCardDetailsByIds(ids: string[]): Promise<CardEntryDetail[]> 
   return results;
 }
 
-export async function resolveTokenPartIdsFromSources(sources: TokenSource[]): Promise<string[]> {
+export async function resolveTokenPartIdsFromSources(
+  sources: TokenSource[],
+  parentLookupSources?: TokenSource[],
+): Promise<string[]> {
   const ids = new Set(collectTokenPartIds(sources));
-  const parentIds = collectParentCardIdsForTokenLookup(sources);
-  if (parentIds.length) {
-    const parents = await fetchCardDetailsByIds(parentIds);
+  const parentIds = collectParentCardIdsForTokenLookup(parentLookupSources ?? sources);
+
+  for (const parentId of parentIds) {
+    for (const partId of parentTokenPartIdsCache.get(parentId) ?? []) {
+      ids.add(partId);
+    }
+  }
+
+  const parentsToFetch = parentIds.filter(id => !parentTokenPartIdsCache.has(id));
+  if (parentsToFetch.length) {
+    const parents = await fetchCardDetailsByIds(parentsToFetch);
     for (const parent of parents) {
       for (const part of parent.all_parts ?? []) {
         if (part.component !== 'token') continue;
@@ -116,6 +180,7 @@ export async function resolveTokenPartIdsFromSources(sources: TokenSource[]): Pr
       }
     }
   }
+
   return [...ids];
 }
 
@@ -124,9 +189,10 @@ async function fetchTokenDetailsByIds(ids: string[]): Promise<CardEntryDetail[]>
 
   const resolved: CardEntryDetail[] = [];
   const missing: string[] = [];
+  const cachedById = await loadCachedCardsByIds(ids);
 
   for (const id of ids) {
-    const cached = await getCachedCardById(id);
+    const cached = cachedById.get(id);
     if (cached?.name && Object.keys(cached.image_uris ?? {}).length > 0) {
       resolved.push(cached);
     } else {
@@ -246,4 +312,30 @@ export function restorePlayAreaTokenPrintings(
 export async function resolveTokensForSources(sources: TokenSource[]): Promise<CardEntryDetail[]> {
   const ids = await resolveTokenPartIdsFromSources(sources);
   return resolveTokensByIds(ids);
+}
+
+export async function resolveTokenMenuEntries(
+  sources: TokenSource[],
+  saved: Record<string, DetailedCardEntry> | undefined,
+  parentLookupSources?: TokenSource[],
+): Promise<DetailedCardEntry[]> {
+  const cacheKey = tokenMenuCacheKey(sources, saved, parentLookupSources);
+  const cached = tokenMenuResultCache.get(cacheKey);
+  if (cached) return cached;
+
+  const tokenIds = await resolveTokenPartIdsFromSources(sources, parentLookupSources);
+  const tokenDetails = await resolveTokensByIds(tokenIds);
+  const merged = appendSavedTokenPrintings(mergeTokenPrintings(tokenDetails, saved), saved);
+  rememberTokenMenuResult(cacheKey, merged);
+  return merged;
+}
+
+export function prefetchTokenMenuEntries(
+  sources: TokenSource[],
+  saved: Record<string, DetailedCardEntry> | undefined,
+  parentLookupSources?: TokenSource[],
+) {
+  const cacheKey = tokenMenuCacheKey(sources, saved, parentLookupSources);
+  if (tokenMenuResultCache.has(cacheKey)) return;
+  void resolveTokenMenuEntries(sources, saved, parentLookupSources);
 }

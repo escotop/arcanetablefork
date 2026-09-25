@@ -46,7 +46,7 @@ import { getCardKey, hydrateDeck } from './deckStore';
 import { cardFromDeckEntry, preloadStackTextures, scheduleOpponentHandTexturePrefetch } from './cardLoading';
 import { Deck as DeckData, DetailedCardEntry } from './constants';
 import { profileAsync } from './loadProfile';
-import { collectTokenPartIds, appendSavedTokenPrintings, mergeTokenPrintings, resolveTokenPartIdsFromSources, resolveTokensByIds, restorePlayAreaTokenPrintings } from './deckTokens';
+import { appendSavedTokenPrintings, mergeTokenPrintings, prefetchTokenMenuEntries, resolveTokenMenuEntries, restorePlayAreaTokenPrintings } from './deckTokens';
 import {
   createCreateCardEvent,
   createDeckDrawLogEvent,
@@ -540,16 +540,35 @@ export class PlayArea {
   async toggleTokenMenu(payload?: { availableTokens: CardReference[]; ids: string[] }) {
     await this.dismissAllCardGrids();
 
-    const resolveAvailableTokens = async () => {
-      const tokenIds = await resolveTokenPartIdsFromSources(this.getTokenSources());
-      const tokenDetails = await resolveTokensByIds(tokenIds);
-      return appendSavedTokenPrintings(
-        mergeTokenPrintings(tokenDetails, this.tokenPrintings),
-        this.tokenPrintings,
-      );
-    };
+    const tokenSources = () => this.getTokenSources();
+    const parentLookupSources = () => this.getDeckListTokenSources();
 
-    const openLocalTokenSearchModal = async (merged: DetailedCardEntry[]) => {
+    const resolveAvailableTokens = () =>
+      resolveTokenMenuEntries(tokenSources(), this.tokenPrintings, parentLookupSources());
+
+    const openLocalTokenSearchModal = async (merged: DetailedCardEntry[], options?: { loading?: boolean }) => {
+      const { setCardSearchModalOpen, setCardSearchModalData } = await import('./globals');
+
+      setPeekFilterText('');
+      setPeekTypeFilter(null);
+
+      if (options?.loading) {
+        setCardSearchModalData({
+          cards: [],
+          zone: 'tokenSearch',
+          title: 'Token Search…',
+        });
+        setCardSearchModalOpen(true);
+        return;
+      }
+
+      if (!merged.length) {
+        setCardSearchModalOpen(false);
+        setCardSearchModalData(null);
+        this.availableTokens = undefined;
+        return;
+      }
+
       const availableCards = merged.map((entry, i) => ({
         id: payload?.ids?.[i] ?? nanoid(),
         clientId: this.clientId,
@@ -558,11 +577,18 @@ export class PlayArea {
         modifiers: {} as Card['modifiers'],
       }));
 
-      setPeekFilterText('');
-      setPeekTypeFilter(null);
-      const { setCardSearchModalOpen, setCardSearchModalData, cardSearchModalOpen } =
-        await import('./globals');
+      this.availableTokens = merged.map(entry => ({ ...entry.detail, clientId: this.clientId }));
+      setCardSearchModalData({
+        cards: availableCards,
+        zone: 'tokenSearch',
+        title: `Token Search (${availableCards.length} tokens)`,
+      });
+      setCardSearchModalOpen(true);
+    };
 
+    if (this.isLocalPlayArea && !payload?.availableTokens) {
+      const { cardSearchModalOpen, setCardSearchModalOpen, setCardSearchModalData } =
+        await import('./globals');
       if (cardSearchModalOpen()) {
         setCardSearchModalOpen(false);
         setCardSearchModalData(null);
@@ -570,30 +596,16 @@ export class PlayArea {
         return;
       }
 
-      setCardSearchModalData({
-        cards: [],
-        zone: 'tokenSearch',
-        title: 'Token Search…',
-      });
-      setCardSearchModalOpen(true);
-
-      if (!merged.length) {
+      await openLocalTokenSearchModal([], { loading: true });
+      try {
+        const merged = await resolveAvailableTokens();
+        await openLocalTokenSearchModal(merged);
+      } catch {
         setCardSearchModalOpen(false);
         setCardSearchModalData(null);
-        return;
+        this.availableTokens = undefined;
       }
-
-      this.availableTokens = merged.map(entry => ({ ...entry.detail, clientId: this.clientId }));
-      setCardSearchModalData({
-        cards: availableCards,
-        zone: 'tokenSearch',
-        title: `Token Search (${availableCards.length} tokens)`,
-      });
-    };
-
-    if (this.isLocalPlayArea && !payload?.availableTokens) {
-      const merged = await resolveAvailableTokens();
-      await openLocalTokenSearchModal(merged);
+      void prefetchTokenMenuEntries(tokenSources(), this.tokenPrintings, parentLookupSources());
       return;
     }
 
@@ -681,6 +693,11 @@ export class PlayArea {
       ...this.peekZone.cards,
       ...this.revealZone.cards,
     ];
+  }
+
+  /** Deck list rows — used to discover token parts without scanning every library card. */
+  private getDeckListTokenSources() {
+    return [...this.cards];
   }
 
   modifyCard(card: Card, update = x => x) {
@@ -942,6 +959,15 @@ export class PlayArea {
     this.revealZone.enableLocalFeatures();
     this.tokenSearchZone.enableLocalFeatures();
     this.attachLocalDeckListener();
+  }
+
+  prefetchTokenMenuCache() {
+    if (!this.isLocalPlayArea) return;
+    prefetchTokenMenuEntries(
+      this.getTokenSources(),
+      this.tokenPrintings,
+      this.getDeckListTokenSources(),
+    );
   }
 
   unsetAsLocalPlayArea() {

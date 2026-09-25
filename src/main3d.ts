@@ -344,6 +344,7 @@ async function finalizeReconnectedPlayArea(
 
   restoreCustomCounters(gameId);
   restorePlayAreaTokenPrintings(area, gameId);
+  area.prefetchTokenMenuCache();
 
   markLoadProfile('reclaim play area ready', { joinClientId: area.clientId, cardCount: area.deck.cards.length });
   void area.loadTextures();
@@ -401,6 +402,7 @@ async function reclaimLocalPlayArea(
 
   restoreCustomCounters(gameId);
   restorePlayAreaTokenPrintings(area, gameId);
+  area.prefetchTokenMenuCache();
 
   markLoadProfile('reclaim play area ready', { joinClientId, cardCount: area.deck.cards.length });
   void area.loadTextures();
