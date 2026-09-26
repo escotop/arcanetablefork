@@ -1180,7 +1180,10 @@ export function initializeCardMesh(card: Card, clientId: string | number): Card 
   return card;
 }
 
-export function getCardMeshTetherPoint(cardMesh: Mesh) {
+export function getCardMeshTetherPoint(cardMesh: Mesh | undefined) {
+  if (!cardMesh?.userData) {
+    return { x: 0, y: 0 };
+  }
   let offset = { x: 0, y: 0 };
   let targetVertex = 6;
   if (cardMesh.userData.isTapped) {
@@ -1242,10 +1245,11 @@ export function cleanupCard(card: Card) {
 }
 
 export function setCardData<Field extends keyof CardUserData>(
-  cardMesh: Object3D,
+  cardMesh: Object3D | undefined,
   field: Field,
   value: CardUserData[Field],
 ) {
+  if (!cardMesh?.userData) return;
   let modifiersNeedUpdate = false;
   // before setting value
   if (field === 'isPublic') {

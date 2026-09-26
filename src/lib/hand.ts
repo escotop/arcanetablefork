@@ -542,12 +542,16 @@ export class Hand implements CardZone {
   };
 
   removeCard(cardMesh: Object3D) {
+    if (!cardMesh?.userData?.id) return;
+
     cancelAnimation(cardMesh);
     cardMesh.renderOrder = 0;
 
     let worldPosition = new Vector3();
     cardMesh.getWorldPosition(worldPosition);
     let cardIndex = this.cards.findIndex(c => c.id === cardMesh.userData.id);
+    if (cardIndex < 0) return;
+
     let globalRotation = getGlobalRotation(cardMesh);
 
     cardMesh.position.set(worldPosition.x, worldPosition.y, worldPosition.z);
@@ -610,6 +614,7 @@ function animateUnfocusCard(
   nextFocusedIndex?: number,
 ) {
   const card = cards[index];
+  if (!card?.mesh?.userData) return;
   applyHandRenderOrder(cards, nextFocusedIndex);
 
   animateObject(card.mesh, {

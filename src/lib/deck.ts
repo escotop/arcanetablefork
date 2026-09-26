@@ -317,7 +317,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
         }
       }
       this.mesh.position.set(70, -55, this.cards.length * CARD_THICKNESS + 2.5);
-      this.condenseMeshes();
+      queueMicrotask(() => this.condenseMeshes());
       return;
     }
 
@@ -434,7 +434,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
         meshId: cardMesh.userData.id,
       });
     }
-    if (this.isTopPublic && !this.cards[0]?.mesh?.userData.isPublic) {
+    if (this.isTopPublic && !this.cards[0]?.mesh?.userData?.isPublic) {
       await this.flipTop();
     }
     this.condenseMeshes();
@@ -502,19 +502,27 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
         resolve();
         return;
       }
-      const wasPublic = card.mesh?.userData.isPublic ?? false;
+      const wasPublic = card.mesh?.userData?.isPublic ?? false;
       this.materializeTopCard();
+      if (!card.mesh) {
+        resolve();
+        return;
+      }
       void loadCardTextures(card).then(() => {
+        if (!card.mesh) {
+          resolve();
+          return;
+        }
         const isVisible = !wasPublic;
 
-        setCardData(card.mesh!, 'isPublic', isVisible);
+        setCardData(card.mesh, 'isPublic', isVisible);
 
-        animateObject(card.mesh!, {
+        animateObject(card.mesh, {
           completeOnCancel: true,
           duration: 0.2,
           path: new CatmullRomCurve3([
-            card.mesh!.position.clone(),
-            card.mesh!.position.clone(),
+            card.mesh.position.clone(),
+            card.mesh.position.clone(),
           ]),
           to: {
             rotation: new Euler(0, isVisible ? Math.PI : 0, 0),

@@ -31,7 +31,24 @@ export function createTransferCardEvent<AddOptions extends {}>(
     const ownerId = card.clientId ?? getLocalPlayerClientId();
     if (ownerId !== undefined) ensureCardMesh(card, ownerId);
   }
-  expect(!!card.mesh, `card mesh is undefined`);
+  if (!card.mesh) {
+    return {
+      type: 'transferCard',
+      payload: {
+        userData: { id: card.id },
+        fromZoneId: fromZone?.id,
+        toZoneId: toZone?.id,
+        extendedOptions: {
+          addOptions: {
+            skipAnimation: false,
+            ...addOptions,
+          },
+          userData,
+          preventTransmit: true,
+        },
+      },
+    } as const;
+  }
 
   return {
     type: 'transferCard',

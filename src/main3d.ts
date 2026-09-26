@@ -99,6 +99,7 @@ import {
   registerPlayerSession,
   resolveJoinClientId,
 } from './lib/playerSession';
+import { Deck } from './lib/deck';
 import { Hand } from './lib/hand';
 import { PlayArea } from './lib/playArea';
 import { ensureLoyaltyCountersOnBattlefield } from './lib/loyaltyCounter';
@@ -1652,9 +1653,17 @@ async function onDocumentDrop(event) {
 
     if (dragged.length) {
       setHoverSignal(signal => {
-        let mesh = signal?.mesh ?? dragged[0];
+        const cardId = dragged[0]?.userData?.id as string | undefined;
+        const card = cardId ? cardsById.get(cardId) : undefined;
+        let mesh =
+          (card?.mesh as THREE.Object3D | undefined) ??
+          (dragged[0]?.userData ? dragged[0] : undefined);
+        if (!mesh?.userData && toZone.zone === 'deck') {
+          mesh = (toZone as Deck).topProxyMesh;
+        }
+        if (!mesh?.userData) return signal;
         focusOn(mesh);
-        const tether = getCardMeshTetherPoint(mesh);
+        const tether = getCardMeshTetherPoint(mesh as THREE.Mesh);
         return {
           mouse,
           ...(signal ?? {}),
