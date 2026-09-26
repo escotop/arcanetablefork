@@ -75,6 +75,7 @@ import {
   onLocalPlayAreaChanged,
   setEventCatchUpComplete,
   finishHistoricalLogReplay,
+  setDeferGameLogReplay,
   setPlayAreas,
   setPlayers,
   setSettings,
@@ -91,6 +92,7 @@ import {
 import { devLog } from './lib/devLog';
 import {
   clearStaleJoinBinding,
+  findJoinClientIdForSession,
   getOrCreatePlayerSessionId,
   getStoredJoinBinding,
   persistJoinBinding,
@@ -125,10 +127,11 @@ import { drawCards, OPENING_HAND_SIZE } from './lib/shortcuts/commands/deck';
 import { registerCustomCounter, restoreCustomCounters } from './lib/ui/counterDialog';
 import { resolveStackAnchor } from './lib/footprintOverlap';
 import { restackItemsLocally } from './lib/utils';
-import { processEvents, syncPlayAreasFromGameLog, waitForGameLogCatchUp, waitForMultiplayerGameState } from './remoteEvents';
+import { processEvents, syncPlayAreasFromGameLog, waitForGameLogCatchUp, waitForGameLogDocumentSync, waitForMultiplayerGameState, isSoloGameRoom } from './remoteEvents';
 import { setupGameStateImportObserver } from './lib/gameStateSnapshot';
 import {
   acquireWorldSnapshot,
+  applyStoredWorldSnapshotIfAvailable,
   gameNeedsSnapshotSync,
   hasSnapshotCatchUp,
   restoreLocalPlayerAwarenessFromWorldSnapshot,
@@ -222,20 +225,40 @@ function waitForProviderSync(maxWaitMs = 8000): Promise<{
 
 async function waitForRemoteGameLog(maxWaitMs = 10000): Promise<boolean> {
   if (gameLog.length > 0) return true;
+  return waitForGameLogDocumentSync({ minLength: 1, maxWaitMs });
+}
 
-  const deadline = performance.now() + maxWaitMs;
-  while (performance.now() < deadline) {
-    await processEvents();
-    if (gameLog.length > 0) return true;
+const RECONNECT_SNAPSHOT_FAILED =
+  'No se pudo recuperar el estado de la partida. Asegúrate de que otro jugador siga en la mesa e inténtalo de nuevo.';
 
-    const remaining = Math.max(250, deadline - performance.now());
-    const sync = await waitForProviderSync(Math.min(1000, remaining));
-    if (sync.synced && gameLog.length > 0) return true;
+async function reconnectViaLogReplay(
+  joinClientId: number,
+  gameId: string,
+  playerSessionId: string,
+  initCardSystem?: (uri: string) => Promise<unknown>,
+): Promise<boolean> {
+  setDeferGameLogReplay(false);
+  await profileAsync('solo reconnect log replay', () => waitForGameLogReplay());
+  return reclaimLocalPlayArea(joinClientId, gameId, playerSessionId, initCardSystem, {
+    skipReplayWait: true,
+    maxAreaWaitMs: 15_000,
+  });
+}
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+async function reconnectViaSnapshot(
+  gameId: string,
+  playerSessionId: string,
+  initCardSystem?: (uri: string) => Promise<unknown>,
+): Promise<boolean> {
+  const snapshotApplied = await acquireWorldSnapshot(gameId, playerSessionId);
+  if (!snapshotApplied) {
+    return false;
   }
+  return finalizeReconnectedPlayArea(gameId, playerSessionId, initCardSystem);
+}
 
-  return gameLog.length > 0;
+function pollGameLogForJoinBinding() {
+  return waitForGameLogDocumentSync({ maxWaitMs: 500 });
 }
 
 function assertMultiplayerConnectionReady(providerSync: { synced: boolean; timedOut: boolean }) {
@@ -417,43 +440,52 @@ export async function tryReconnectToGame(
   gameId: string,
   initCardSystem?: (uri: string) => Promise<unknown>,
 ): Promise<boolean> {
+  setDeferGameLogReplay(true);
+  try {
   const playerSessionId = getOrCreatePlayerSessionId(gameId);
   clearStaleJoinBinding(gameLog, gameId, playerSessionId);
   const providerSync = await profileAsync('provider sync', () => waitForProviderSync());
   markLoadProfile('provider sync result', providerSync);
   const joinClientId = await profileAsync('resolve join client', () =>
-    resolveJoinClientId(gameLog, gameId, playerSessionId, processEvents),
+    resolveJoinClientId(gameLog, gameId, playerSessionId, pollGameLogForJoinBinding),
   );
   if (joinClientId === undefined) {
     markLoadProfile('no existing join — fresh game');
     return false;
   }
 
-  // Siempre intentar snapshot primero si hay múltiples jugadores
   if (gameNeedsSnapshotSync(playerSessionId, gameId)) {
-    const snapshotApplied = await profileAsync('acquire world snapshot', () =>
-      acquireWorldSnapshot(gameId, playerSessionId),
+    const ok = await profileAsync('reconnect via snapshot', () =>
+      reconnectViaSnapshot(gameId, playerSessionId, initCardSystem),
     );
-    if (snapshotApplied) {
-      const ok = await profileAsync('finalize reconnected play area', () =>
-        finalizeReconnectedPlayArea(gameId, playerSessionId, initCardSystem),
-      );
-      markLoadProfile('reconnect path', { path: 'snapshot', ok });
-      return ok;
+    if (ok) {
+      markLoadProfile('reconnect path', { path: 'snapshot', ok: true });
+      return true;
     }
-
-    await profileAsync('game log replay (snapshot fallback)', () => waitForGameLogReplay());
+    if (isSoloGameRoom()) {
+      const soloOk = await profileAsync('solo reconnect via log replay', () =>
+        reconnectViaLogReplay(joinClientId, gameId, playerSessionId, initCardSystem),
+      );
+      markLoadProfile('reconnect path', { path: 'solo-log-replay', ok: soloOk });
+      return soloOk;
+    }
+    markLoadProfile('reconnect path', { path: 'snapshot', ok: false });
+    return false;
   }
 
-  const reclaimed = await profileAsync('reclaim local play area', () =>
-    reclaimLocalPlayArea(joinClientId, gameId, playerSessionId, initCardSystem, {
-      maxReplayWaitMs: 5_000,
-      maxAreaWaitMs: 15_000,
-      skipReplayWait: true,
-    }),
-  );
-  markLoadProfile('reconnect path', { path: 'reclaim', reclaimed });
-  return reclaimed;
+  if (getLocalPlayArea()) {
+    const ok = await profileAsync('finalize reconnected play area', () =>
+      finalizeReconnectedPlayArea(gameId, playerSessionId, initCardSystem),
+    );
+    markLoadProfile('reconnect path', { path: 'already-hydrated', ok });
+    return ok;
+  }
+
+  markLoadProfile('reconnect path', { path: 'failed-no-snapshot-sync' });
+  return false;
+  } finally {
+    setDeferGameLogReplay(false);
+  }
 }
 
 export async function localInit(gameOptions: GameOptions) {
@@ -469,6 +501,15 @@ export async function localInit(gameOptions: GameOptions) {
   await profileAsync('globals.init (3d + indexeddb)', () => init(gameOptions), {
     gameId: gameOptions.gameId,
   });
+
+  const playerSessionId = getOrCreatePlayerSessionId(gameOptions.gameId);
+  const storedJoin = getStoredJoinBinding(gameOptions.gameId);
+  if (
+    storedJoin?.playerSessionId === playerSessionId ||
+    findJoinClientIdForSession(gameLog, playerSessionId) !== undefined
+  ) {
+    setDeferGameLogReplay(true);
+  }
 
   time = 0;
   dragTargets = [];
@@ -552,7 +593,7 @@ export async function localInit(gameOptions: GameOptions) {
   setupGameStateImportObserver(() => currentGameId);
   initReloadOtherPlayerDebug();
   setupSyncBarrierObserver();
-  setupPersistentSnapshotPublisher();
+  setupPersistentSnapshotPublisher(() => currentGameId);
   setupPingWheelKeys({ onQuickPing: publishQuickRegularPing });
   preloadPingVideos();
   refreshMultiplayerSyncState();
@@ -639,8 +680,12 @@ export async function loadDeckAndJoin(
   });
 
   const existingJoinClientId = await profileAsync('resolve join client (new game)', () =>
-    resolveJoinClientId(gameLog, currentGameId, playerSessionId, processEvents),
+    resolveJoinClientId(gameLog, currentGameId, playerSessionId, pollGameLogForJoinBinding),
   );
+
+  const reconnectingPlayer =
+    existingJoinClientId !== undefined &&
+    gameNeedsSnapshotSync(playerSessionId, currentGameId);
 
   const joiningExistingRoom =
     existingJoinClientId !== undefined ||
@@ -663,24 +708,35 @@ export async function loadDeckAndJoin(
       }
     }
 
-    await profileAsync('multiplayer state (pre-join)', () =>
-      waitForMultiplayerGameState(existingJoinClientId !== undefined ? 10000 : 8000),
-    );
-    syncPlayAreasFromGameLog();
-
-    if (existingJoinClientId !== undefined && gameNeedsSnapshotSync(playerSessionId, currentGameId)) {
-      const snapshotApplied = await profileAsync('acquire world snapshot (join)', () =>
-        acquireWorldSnapshot(currentGameId, playerSessionId),
+    if (reconnectingPlayer) {
+      const ok = await profileAsync('reconnect via snapshot (join)', () =>
+        reconnectViaSnapshot(currentGameId, playerSessionId, initCardSystem),
       );
-
-      if (snapshotApplied && getLocalPlayArea()) {
-        await profileAsync('finalize reconnected play area (join)', () =>
-          finalizeReconnectedPlayArea(currentGameId, playerSessionId, initCardSystem),
-        );
+      if (ok && getLocalPlayArea()) {
         markLoadProfile('join complete', { path: 'snapshot-reconnect' });
         return;
       }
+      if (isSoloGameRoom() && existingJoinClientId !== undefined) {
+        const soloOk = await profileAsync('solo reconnect via log replay (join)', () =>
+          reconnectViaLogReplay(
+            existingJoinClientId,
+            currentGameId,
+            playerSessionId,
+            initCardSystem,
+          ),
+        );
+        if (soloOk) {
+          markLoadProfile('join complete', { path: 'solo-log-replay' });
+          return;
+        }
+      }
+      throw new Error(RECONNECT_SNAPSHOT_FAILED);
     }
+
+    await profileAsync('multiplayer state (pre-join)', () =>
+      waitForMultiplayerGameState(8000),
+    );
+    syncPlayAreasFromGameLog();
   } else {
     markLoadProfile('skipped multiplayer pre-sync — solo/new table');
   }
@@ -694,21 +750,34 @@ export async function loadDeckAndJoin(
       return;
     }
 
-    await profileAsync('game log replay (join reclaim)', () => waitForGameLogReplay());
-
-    const reclaimed = await profileAsync('reclaim local play area (join)', () =>
-      reclaimLocalPlayArea(
-        existingJoinClientId,
-        currentGameId,
-        playerSessionId,
-        initCardSystem,
-        { maxReplayWaitMs: 5_000, maxAreaWaitMs: 10_000, skipReplayWait: true },
-      ),
-    );
-    if (reclaimed) {
-      markLoadProfile('join complete', { path: 'reclaim' });
+    if (
+      await profileAsync('stored snapshot fallback (join)', () =>
+        applyStoredWorldSnapshotIfAvailable(currentGameId, playerSessionId),
+      )
+    ) {
+      await profileAsync('finalize reconnected play area (join)', () =>
+        finalizeReconnectedPlayArea(currentGameId, playerSessionId, initCardSystem),
+      );
+      markLoadProfile('join complete', { path: 'stored-snapshot' });
       return;
     }
+
+    if (isSoloGameRoom()) {
+      const soloOk = await profileAsync('solo reconnect via log replay (join)', () =>
+        reconnectViaLogReplay(
+          existingJoinClientId,
+          currentGameId,
+          playerSessionId,
+          initCardSystem,
+        ),
+      );
+      if (soloOk) {
+        markLoadProfile('join complete', { path: 'solo-log-replay' });
+        return;
+      }
+    }
+
+    throw new Error(RECONNECT_SNAPSHOT_FAILED);
   }
 
   let deck = settings.deck;

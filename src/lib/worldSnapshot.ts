@@ -18,6 +18,7 @@ import {
   flushDispatchEventQueue,
   isSyncPaused,
   processedEvents,
+  setDeferGameLogReplay,
 } from './globals';
 import { readjustPlayAreas } from '../main3d';
 import { PlayArea } from './playArea';
@@ -30,7 +31,7 @@ import {
   persistJoinBinding,
   registerPlayerSession,
 } from './playerSession';
-import { getActiveJoinClientIdsFromLog, waitForGameLogCatchUp } from '../remoteEvents';
+import { getActiveJoinClientIdsFromLog, setOnGameLogProcessed, waitForGameLogCatchUp, waitForGameLogDocumentSync } from '../remoteEvents';
 import { resetCustomCountersForSnapshot } from './ui/counterDialog';
 import { refreshMultiplayerSyncState } from './multiplayerSync';
 import { slimPlayAreaStateForSnapshot } from './gameLogEvents';
@@ -42,6 +43,8 @@ import {
 } from './reloadOtherPlayerDebug';
 
 export const WORLD_SNAPSHOT_VERSION = 1;
+
+const LOCAL_WORLD_SNAPSHOT_PREFIX = 'arcanetable-local-world-snapshot:';
 
 export interface SyncBarrier {
   id: string;
@@ -174,6 +177,48 @@ function shouldPublishSnapshotForBarrier(barrier: SyncBarrier): boolean {
   return Object.values(playAreas).some(area => Boolean(area));
 }
 
+function readLocalWorldSnapshot(gameId: string): WorldSnapshot | undefined {
+  if (!gameId) return undefined;
+  try {
+    const raw = localStorage.getItem(`${LOCAL_WORLD_SNAPSHOT_PREFIX}${gameId}`);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as WorldSnapshot;
+    if (!parsed?.playAreas?.length) return undefined;
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+function persistLocalWorldSnapshot(gameId: string) {
+  if (!gameId) return;
+  if (!Object.values(playAreas).some(area => Boolean(area))) return;
+
+  const snapshot = exportWorldSnapshot('local');
+  try {
+    localStorage.setItem(`${LOCAL_WORLD_SNAPSHOT_PREFIX}${gameId}`, JSON.stringify(snapshot));
+    devLog.debug('[worldSnapshot] Local snapshot saved', {
+      gameId,
+      logLength: snapshot.logLength,
+    });
+  } catch (error) {
+    devLog.warn('[worldSnapshot] Local snapshot save failed', error);
+  }
+}
+
+function getLocalPersistedWorldSnapshot(gameId: string): WorldSnapshot | undefined {
+  const snapshot = readLocalWorldSnapshot(gameId);
+  if (!snapshot) return undefined;
+  if (snapshot.logLength > gameLog.length) {
+    devLog.debug('[worldSnapshot] Local snapshot ahead of Yjs log', {
+      snapshotLogLength: snapshot.logLength,
+      currentLogLength: gameLog.length,
+    });
+    return undefined;
+  }
+  return snapshot;
+}
+
 function getStoredWorldSnapshot(): WorldSnapshot | undefined {
   const snapshot = gameState.get('worldSnapshot') as WorldSnapshot | undefined;
   if (!snapshot?.playAreas?.length) {
@@ -199,20 +244,25 @@ function getStoredWorldSnapshot(): WorldSnapshot | undefined {
 
 async function waitUntilLogCoversSnapshot(snapshot: WorldSnapshot, maxWaitMs = 12_000): Promise<boolean> {
   if (snapshot.logLength <= gameLog.length) return true;
-
-  const deadline = performance.now() + maxWaitMs;
-  while (performance.now() < deadline) {
-    await waitForGameLogCatchUp({
-      maxWaitMs: Math.max(250, deadline - performance.now()),
-    });
-    if (gameLog.length >= snapshot.logLength) return true;
-    await new Promise(resolve => setTimeout(resolve, 50));
-  }
-
-  return gameLog.length >= snapshot.logLength;
+  return waitForGameLogDocumentSync({
+    targetLength: snapshot.logLength,
+    maxWaitMs,
+  });
 }
 
-async function resolveStoredWorldSnapshot(maxWaitMs = 12_000): Promise<WorldSnapshot | undefined> {
+async function resolveStoredWorldSnapshot(
+  gameId: string,
+  maxWaitMs = 12_000,
+): Promise<WorldSnapshot | undefined> {
+  const local = getLocalPersistedWorldSnapshot(gameId);
+  if (local) {
+    console.log('[worldSnapshot] Using local snapshot', {
+      logLength: local.logLength,
+      currentLogLength: gameLog.length,
+    });
+    return local;
+  }
+
   let snapshot = getStoredWorldSnapshot();
   if (snapshot) return snapshot;
 
@@ -236,7 +286,7 @@ async function resolveStoredWorldSnapshot(maxWaitMs = 12_000): Promise<WorldSnap
 
 async function tryApplyStoredWorldSnapshot(gameId: string, playerSessionId: string): Promise<boolean> {
   console.log('[worldSnapshot] Trying to apply stored snapshot');
-  const snapshot = await resolveStoredWorldSnapshot();
+  const snapshot = await resolveStoredWorldSnapshot(gameId);
   if (!snapshot) {
     console.log('[worldSnapshot] No stored snapshot available');
     return false;
@@ -250,6 +300,69 @@ async function tryApplyStoredWorldSnapshot(gameId: string, playerSessionId: stri
   } catch (error) {
     console.error('[worldSnapshot] Failed to apply snapshot:', error);
     return false;
+  }
+}
+
+/** Fallback when live peer sync fails: apply the persistent/barrier snapshot from Yjs. */
+export async function applyStoredWorldSnapshotIfAvailable(
+  gameId: string,
+  playerSessionId: string,
+): Promise<boolean> {
+  return tryApplyStoredWorldSnapshot(gameId, playerSessionId);
+}
+
+function countRemoteNonSpectatingPlayers(): number {
+  if (!provider?.awareness) return 0;
+  const localId = provider.awareness.clientID;
+  return Array.from(provider.awareness.getStates().entries()).filter(
+    ([id, entry]) => id !== localId && !entry?.isSpectating,
+  ).length;
+}
+
+async function requestSnapshotFromPeers(
+  gameId: string,
+  playerSessionId: string,
+  maxWaitMs: number,
+): Promise<boolean> {
+  if (countRemoteNonSpectatingPlayers() === 0) {
+    console.log('[worldSnapshot] No remote players online — skipping peer snapshot request');
+    return false;
+  }
+
+  console.log('[worldSnapshot] Requesting current state from other players');
+  const barrierId = nanoid();
+  await flushDispatchEventQueue();
+  setSyncPaused(true);
+  refreshMultiplayerSyncState();
+
+  provider?.awareness?.setLocalStateField('syncJoining', true);
+  refreshMultiplayerSyncState();
+
+  gameState.doc?.transact(() => {
+    gameState.set('syncBarrier', {
+      id: barrierId,
+      joinerSessionId: playerSessionId,
+      status: 'pending',
+      requestedAt: Date.now(),
+    });
+  });
+
+  try {
+    console.log('[worldSnapshot] Waiting for barrier snapshot...');
+    const snapshot = await waitForBarrierSnapshot(barrierId, maxWaitMs);
+    console.log('[worldSnapshot] Received barrier snapshot, applying...');
+    await applyWorldSnapshot(gameId, playerSessionId, snapshot);
+    releaseSyncBarrier(barrierId);
+    console.log('[worldSnapshot] Barrier snapshot applied successfully');
+    return true;
+  } catch (error) {
+    console.error('[worldSnapshot] Peer snapshot request failed:', error);
+    releaseSyncBarrier(barrierId);
+    return false;
+  } finally {
+    provider?.awareness?.setLocalStateField('syncJoining', false);
+    setSyncPaused(false);
+    refreshMultiplayerSyncState();
   }
 }
 
@@ -318,6 +431,7 @@ export async function applyWorldSnapshot(
   playerSessionId: string,
   snapshot: WorldSnapshot,
 ) {
+  setDeferGameLogReplay(false);
   resetGameSceneForReplay();
   resetCustomCountersForSnapshot(gameId);
 
@@ -378,6 +492,7 @@ export async function applyWorldSnapshot(
 
   setEventCatchUpComplete(true);
   finishHistoricalLogReplay();
+  if (gameId) persistLocalWorldSnapshot(gameId);
 }
 
 async function waitForBarrierSnapshot(barrierId: string, maxWaitMs: number): Promise<WorldSnapshot> {
@@ -553,12 +668,13 @@ function publishSnapshotForBarrier(barrier: SyncBarrier) {
   });
 }
 
-function publishPersistentWorldSnapshot() {
+function publishPersistentWorldSnapshot(onPublished?: (logLength: number) => void) {
   if (!Object.values(playAreas).some(area => Boolean(area))) {
     logReloadOther('publish-persistent-skipped-no-areas');
     return;
   }
 
+  const targetLogLength = gameLog.length;
   logReloadOther('publish-persistent-scheduled');
   void flushDispatchEventQueue().then(async () => {
     logReloadOther('publish-persistent-flush-done');
@@ -582,6 +698,7 @@ function publishPersistentWorldSnapshot() {
         playAreas: snapshot.playAreas.length,
       });
       logReloadOther('publish-persistent-transact-done');
+      onPublished?.(targetLogLength);
     });
   });
 }
@@ -647,87 +764,55 @@ export function setupSyncBarrierObserver() {
   });
 }
 
-/** Request a barrier, wait for snapshot, hydrate scene, skip event replay. */
+/** Reconnect: ask peers for live state, else apply stored snapshot — never full log replay. */
 export async function acquireWorldSnapshot(
   gameId: string,
   playerSessionId: string,
 ): Promise<boolean> {
   console.log('[worldSnapshot] acquireWorldSnapshot called', { gameId, playerSessionId });
-  
+
   if (!gameNeedsSnapshotSync(playerSessionId, gameId)) {
     console.log('[worldSnapshot] Game does not need snapshot sync (new player)');
     return false;
   }
 
-  console.log('[worldSnapshot] Game needs snapshot sync (reconnecting player)');
+  console.log('[worldSnapshot] Reconnect sync — peers first, stored snapshot fallback');
 
-  await waitForGameLogCatchUp({ maxWaitMs: 10_000 });
-  
+  await waitForGameLogDocumentSync({ minLength: 1, maxWaitMs: 10_000 });
+
+  const fromPeers = await requestSnapshotFromPeers(gameId, playerSessionId, 12_000);
+  if (fromPeers) {
+    console.log('[worldSnapshot] Reconnected from peer snapshot');
+    return true;
+  }
+
   if (await tryApplyStoredWorldSnapshot(gameId, playerSessionId)) {
-    console.log('[worldSnapshot] Used stored snapshot successfully');
+    console.log('[worldSnapshot] Reconnected from stored snapshot');
     return true;
   }
 
-  console.log('[worldSnapshot] Creating sync barrier for fresh snapshot');
-  const barrierId = nanoid();
-  await flushDispatchEventQueue();
-  setSyncPaused(true);
-  refreshMultiplayerSyncState();
-
-  provider?.awareness?.setLocalStateField('syncJoining', true);
-  refreshMultiplayerSyncState();
-
-  gameState.doc?.transact(() => {
-    gameState.set('syncBarrier', {
-      id: barrierId,
-      joinerSessionId: playerSessionId,
-      status: 'pending',
-      requestedAt: Date.now(),
-    });
-  });
-
-  try {
-    console.log('[worldSnapshot] Waiting for barrier snapshot...');
-    const snapshot = await waitForBarrierSnapshot(barrierId, 12_000);
-    console.log('[worldSnapshot] Received barrier snapshot, applying...');
-    await applyWorldSnapshot(gameId, playerSessionId, snapshot);
-    releaseSyncBarrier(barrierId);
-    console.log('[worldSnapshot] Barrier snapshot applied successfully');
-    return true;
-  } catch (error) {
-    console.error('[worldSnapshot] Barrier snapshot failed:', error);
-    if (await tryApplyStoredWorldSnapshot(gameId, playerSessionId)) {
-      console.log('[worldSnapshot] Fallback to stored snapshot succeeded');
-      releaseSyncBarrier(barrierId);
-      return true;
-    }
-    console.error('[worldSnapshot] All snapshot methods failed, will use full replay');
-    releaseSyncBarrier(barrierId);
-    return false;
-  } finally {
-    provider?.awareness?.setLocalStateField('syncJoining', false);
-    setSyncPaused(false);
-    refreshMultiplayerSyncState();
-  }
+  console.log('[worldSnapshot] Reconnect sync failed — no peer or stored snapshot');
+  return false;
 }
 
-export function setupPersistentSnapshotPublisher() {
+export function setupLocalWorldSnapshotSync(getGameId: () => string | undefined) {
+  setOnGameLogProcessed(() => {
+    const gameId = getGameId();
+    if (gameId) persistLocalWorldSnapshot(gameId);
+  });
+}
+
+export function setupPersistentSnapshotPublisher(getGameId?: () => string | undefined) {
   if (!gameState) return;
+
+  setupLocalWorldSnapshotSync(getGameId ?? (() => undefined));
 
   let lastPublishedLogLength = 0;
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
-  const MIN_LOG_GROWTH = 50;  // Publicar solo después de 50+ eventos nuevos
 
   const publishIfNeeded = () => {
     const currentLogLength = gameLog.length;
-    const growth = currentLogLength - lastPublishedLogLength;
-    
-    // No publicar si el crecimiento es muy pequeño
-    if (growth < MIN_LOG_GROWTH && currentLogLength > 0) {
-      return;
-    }
-    
-    if (currentLogLength === lastPublishedLogLength) return;
+    if (currentLogLength === 0 || currentLogLength === lastPublishedLogLength) return;
 
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
@@ -738,21 +823,17 @@ export function setupPersistentSnapshotPublisher() {
       }
 
       const length = gameLog.length;
-      if (length === lastPublishedLogLength) return;
-      
-      const actualGrowth = length - lastPublishedLogLength;
-      if (actualGrowth < MIN_LOG_GROWTH && length > 0) {
-        return;
-      }
+      if (length === 0 || length === lastPublishedLogLength) return;
 
       logReloadOther('persistent-publisher-scheduled', {
         from: lastPublishedLogLength,
         to: length,
-        growth: actualGrowth,
+        growth: length - lastPublishedLogLength,
       });
-      lastPublishedLogLength = length;
-      publishPersistentWorldSnapshot();
-    }, 500);  // Aumentar debounce de 150ms a 500ms
+      publishPersistentWorldSnapshot(publishedLength => {
+        lastPublishedLogLength = publishedLength;
+      });
+    }, 500);
   };
 
   gameLog.observe(publishIfNeeded);

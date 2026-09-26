@@ -43,6 +43,7 @@ import {
   zonesById,
   isGameStateImportInProgress,
   isEventCatchUpComplete,
+  isGameLogReplayDeferred,
   isHistoricalLogReplayInProgress,
   resetGameSceneForReplay,
 } from './lib/globals';
@@ -87,6 +88,13 @@ type Event = { clientID: string; skipReplay?: boolean } & Events;
 let events = [];
 let timing = 100;
 let processEventsChain: Promise<void> = Promise.resolve();
+
+let onGameLogProcessed: (() => void) | undefined;
+
+/** Called after each successful game-log replay drain (for immediate local snapshot). */
+export function setOnGameLogProcessed(callback: (() => void) | undefined) {
+  onGameLogProcessed = callback;
+}
 
 function shouldSkipLocallyAppliedEvent(event: { clientID?: number; locallyApplied?: boolean }) {
   if (isHistoricalLogReplayInProgress()) return false;
@@ -320,6 +328,10 @@ async function processGameLogEntry(srcEvent: Event) {
 }
 
 async function drainProcessEvents() {
+  if (isGameLogReplayDeferred()) {
+    logReloadOther('process-events-deferred-for-reconnect-snapshot');
+    return;
+  }
   if (isGameStateImportInProgress()) {
     logReloadOther('process-events-skipped-import-in-progress');
     return;
@@ -375,6 +387,7 @@ export function processEvents(): Promise<void> {
         processed: processedEvents(),
         logLength: gameLog.length,
       });
+      onGameLogProcessed?.();
     })
     .catch(error => {
       logReloadOther('process-events-drain-error', {
@@ -402,6 +415,54 @@ export async function waitForGameLogCatchUp(options?: { maxWaitMs?: number }) {
   }
 
   return processedEvents() >= gameLog.length;
+}
+
+function waitForProviderDocumentSync(maxWaitMs: number): Promise<void> {
+  if (!provider) return Promise.resolve();
+  if ((provider as { synced?: boolean }).synced) return Promise.resolve();
+
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      provider!.off('sync', onSync);
+      resolve();
+    };
+    const onSync = (synced: boolean) => {
+      if (synced) finish();
+    };
+    provider!.on('sync', onSync);
+    setTimeout(finish, maxWaitMs);
+  });
+}
+
+/** Wait for Yjs game log length without replaying events into the 3D scene. */
+export async function waitForGameLogDocumentSync(options?: {
+  minLength?: number;
+  targetLength?: number;
+  maxWaitMs?: number;
+}): Promise<boolean> {
+  const deadline = performance.now() + (options?.maxWaitMs ?? 15_000);
+  const minLength = options?.minLength ?? 0;
+  const targetLength = options?.targetLength;
+
+  while (performance.now() < deadline) {
+    const length = gameLog.length;
+    if (targetLength !== undefined) {
+      if (length >= targetLength) return true;
+    } else if (length >= minLength) {
+      return true;
+    }
+
+    const remaining = Math.max(250, deadline - performance.now());
+    await waitForProviderDocumentSync(Math.min(1000, remaining));
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+
+  const length = gameLog.length;
+  if (targetLength !== undefined) return length >= targetLength;
+  return length >= minLength;
 }
 
 const USERDATA_BLOCK_LIST = ['cardBack', 'publicCardBack'];
@@ -726,6 +787,11 @@ export function getActiveJoinClientIdsFromLog(): Set<number> {
   }
 
   return activeJoins;
+}
+
+/** True when the game log has at most one seated player (solo table). */
+export function isSoloGameRoom(): boolean {
+  return getActiveJoinClientIdsFromLog().size <= 1;
 }
 
 export function countRemoteJoinsMissingPlayAreas(localClientId?: number): number {

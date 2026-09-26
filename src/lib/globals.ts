@@ -47,7 +47,6 @@ import { logReloadOther } from './reloadOtherPlayerDebug';
 import { cleanupFromNode, canPeekFaceDownBattlefieldCardInFocusPanel, getFocusCameraPositionRelativeTo } from './utils';
 import { createBattlefieldPeekLogEvent } from './createEvents';
 import { Selection } from './selection';
-import { subscribeClientErrors } from './clientErrorReporting';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { CSS3DRenderer } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import GUI from 'lil-gui';
@@ -229,6 +228,15 @@ let eventCatchUpComplete = false;
 export const [eventCatchUpCompleteSignal, setEventCatchUpCompleteSignal] = createSignal(false);
 let syncPaused = false;
 let gameplayBlocked = false;
+let deferGameLogReplay = false;
+
+export function setDeferGameLogReplay(value: boolean) {
+  deferGameLogReplay = value;
+}
+
+export function isGameLogReplayDeferred() {
+  return deferGameLogReplay;
+}
 
 export function setSyncPaused(value: boolean) {
   syncPaused = value;
@@ -381,11 +389,7 @@ export let [announcement, setAnnouncement] = createSignal<string | undefined>();
 export let tearingDown = false;
 
 export let selection: Selection;
-export let [capturedErrors, setCapturedErrors] = createSignal([]);
-
-subscribeClientErrors(error => {
-  setCapturedErrors(errors => [...errors, error]);
-});
+export let [capturedErrors, setCapturedErrors] = createSignal<Error[]>([]);
 
 export let cardLoadingTexture: THREE.Texture;
 export let cardBackTexture: THREE.Texture;
