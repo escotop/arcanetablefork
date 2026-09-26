@@ -2,6 +2,9 @@ import { expect, test } from 'vitest';
 import {
   collectParentCardIdsForTokenLookup,
   collectTokenPartIds,
+  getDefaultTokenEntry,
+  getTokenKey,
+  mergeTokenPrintings,
   tokenPartId,
 } from './deckTokens';
 
@@ -46,4 +49,23 @@ test('collectParentCardIdsForTokenLookup skips cards that already list tokens', 
     { detail: { id: 'needs-fetch', name: 'Parent' } },
   ]);
   expect(ids).toEqual(['needs-fetch']);
+});
+
+test('getTokenKey tolerates missing detail', () => {
+  expect(getTokenKey(undefined)).toBe('');
+  expect(getTokenKey({ name: 'Treasure', id: 'abc' } as never)).toBe('abc');
+});
+
+test('getDefaultTokenEntry ignores undefined defaults entries', () => {
+  const entry = getDefaultTokenEntry('abc', [
+    undefined as never,
+    { id: 'abc', name: 'Treasure' } as never,
+  ]);
+  expect(entry?.name).toBe('Treasure');
+});
+
+test('mergeTokenPrintings skips invalid token rows', () => {
+  const merged = mergeTokenPrintings([undefined as never, { id: 't1', name: 'Token' } as never], {});
+  expect(merged).toHaveLength(1);
+  expect(merged[0]?.name).toBe('Token');
 });

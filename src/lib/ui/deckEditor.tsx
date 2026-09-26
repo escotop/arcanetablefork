@@ -1027,7 +1027,7 @@ export const DeckEditor: Component<Props> = props => {
     trackDeep(deck.tokens);
     const resolved = deckTokens.error ? [] : (deckTokens() ?? []);
     if (!resolved.length && !deck.tokens) return [];
-    return mergeTokenPrintings(resolved, deck.tokens);
+    return mergeTokenPrintings(resolved, deck.tokens).filter(entry => getTokenKey(entry.detail));
   });
 
   function getTokenDeckEntry(tokenKey: string): DetailedCardEntry | undefined {

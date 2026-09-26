@@ -64,8 +64,13 @@ function parentCardId(source: TokenSource): string | undefined {
   return source.detail?.id?.trim() || source.id?.trim() || undefined;
 }
 
-export function getTokenKey(detail: TokenDetail) {
-  return detail.oracle_id ?? detail.id ?? detail.name;
+export function getTokenKey(detail: TokenDetail | null | undefined): string {
+  if (!detail) return '';
+  return detail.oracle_id ?? detail.id ?? detail.name ?? '';
+}
+
+function isUsableTokenDetail(detail: TokenDetail | null | undefined): detail is TokenDetail {
+  return !!getTokenKey(detail);
 }
 
 export function tokenDetailToEntry(token: CardEntryDetail): DetailedCardEntry {
@@ -84,7 +89,9 @@ export function getDefaultTokenEntry(
   tokenKey: string,
   defaults: CardEntryDetail[] | undefined,
 ): DetailedCardEntry | undefined {
-  const token = defaults?.find(entry => getTokenKey(entry as TokenDetail) === tokenKey);
+  const token = defaults?.find(
+    entry => isUsableTokenDetail(entry) && getTokenKey(entry) === tokenKey,
+  );
   return token ? tokenDetailToEntry(token) : undefined;
 }
 
@@ -219,8 +226,8 @@ export async function resolveTokensByIds(ids: string[]): Promise<CardEntryDetail
   const tokens = await fetchTokenDetailsByIds(ids);
 
   return uniqBy(
-    tokens.filter((token): token is CardEntryDetail => token !== null),
-    token => getTokenKey(token as TokenDetail),
+    tokens.filter(isUsableTokenDetail),
+    token => getTokenKey(token),
   ).sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -230,15 +237,17 @@ export function findSavedTokenOverride(
 ): DetailedCardEntry | undefined {
   if (!saved) return undefined;
   if (saved[key]) return saved[key];
-  return Object.values(saved).find(entry => getTokenKey(entry.detail) === key);
+  return Object.values(saved).find(
+    entry => isUsableTokenDetail(entry?.detail) && getTokenKey(entry.detail) === key,
+  );
 }
 
 export function mergeTokenPrintings(
   tokens: CardEntryDetail[],
   saved: Record<string, DetailedCardEntry> | undefined,
 ): DetailedCardEntry[] {
-  return tokens.map(token => {
-    const key = getTokenKey(token as TokenDetail);
+  return tokens.filter(isUsableTokenDetail).map(token => {
+    const key = getTokenKey(token);
     const override = findSavedTokenOverride(key, saved);
     if (override) {
       return applyCustomArtToEntry({
@@ -269,10 +278,13 @@ export function appendSavedTokenPrintings(
   if (!saved) return tokens;
 
   const merged = [...tokens];
-  const mergedKeys = new Set(merged.map(token => getTokenKey(token.detail as TokenDetail)));
+  const mergedKeys = new Set(
+    merged.filter(entry => isUsableTokenDetail(entry.detail)).map(token => getTokenKey(token.detail)),
+  );
 
   for (const savedEntry of Object.values(saved)) {
-    const key = getTokenKey(savedEntry.detail as TokenDetail);
+    if (!isUsableTokenDetail(savedEntry?.detail)) continue;
+    const key = getTokenKey(savedEntry.detail);
     if (mergedKeys.has(key)) continue;
     merged.push(
       applyCustomArtToEntry({
