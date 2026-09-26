@@ -47,7 +47,7 @@ import { logReloadOther } from './reloadOtherPlayerDebug';
 import { cleanupFromNode, canPeekFaceDownBattlefieldCardInFocusPanel, getFocusCameraPositionRelativeTo } from './utils';
 import { createBattlefieldPeekLogEvent } from './createEvents';
 import { Selection } from './selection';
-import { captureConsole } from './console-capture';
+import { subscribeClientErrors } from './clientErrorReporting';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { CSS3DRenderer } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import GUI from 'lil-gui';
@@ -383,6 +383,10 @@ export let tearingDown = false;
 export let selection: Selection;
 export let [capturedErrors, setCapturedErrors] = createSignal([]);
 
+subscribeClientErrors(error => {
+  setCapturedErrors(errors => [...errors, error]);
+});
+
 export let cardLoadingTexture: THREE.Texture;
 export let cardBackTexture: THREE.Texture;
 
@@ -504,8 +508,6 @@ export function isCameraTiltBlocked() {
 }
 
 export const DEFAULT_CARD_BACK = DEFAULT_CARD_BACK_URL;
-
-[('warn', 'error')].forEach(captureConsole);
 
 export function doXTimes(x: number, callback, delay = 5): Promise<void> {
   if (x < 1) return Promise.resolve();

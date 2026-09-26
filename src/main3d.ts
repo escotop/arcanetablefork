@@ -16,6 +16,7 @@ import {
   isMagicCardSystem,
   LoadSettings,
 } from './lib/constants';
+import { reportClientError } from './lib/clientErrorReporting';
 import {
   animateCameraLook,
   animateCameraTiltToRest,
@@ -65,7 +66,6 @@ import {
   css3dRenderer,
   patchCss3dPointerEvents,
   setAnimating,
-  setCapturedErrors,
   setCardBackTexture,
   setContextMenuSignal,
   setHoverSignal,
@@ -1706,7 +1706,7 @@ export function animate() {
     }
   } catch (e) {
     devLog.error(e);
-    setCapturedErrors(errors => [...errors, e]);
+    reportClientError(e);
     isErrored = true;
   }
 }

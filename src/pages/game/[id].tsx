@@ -13,7 +13,6 @@ import {
   setSelectedDeckId,
 } from '~/lib/globals';
 import { HotKeys } from '~/lib/shortcuts/hotkeys';
-import StackTraceDialog from '~/lib/stack-trace-dialog';
 import DeckPicker from '~/lib/ui/deckPicker';
 import GameLoadingOverlay from '~/lib/ui/gameLoadingOverlay';
 import MultiplayerSyncOverlay from '~/lib/ui/multiplayerSyncOverlay';
@@ -103,7 +102,6 @@ const GamePage: Component = props => {
           />
         </Show>
       </Show>
-      <StackTraceDialog />
     </>
   );
 };

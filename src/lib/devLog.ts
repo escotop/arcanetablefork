@@ -17,12 +17,11 @@ export const devLog = {
   debug: bindConsole('debug'),
 };
 
-/** Mute noisy console methods in production; errors still log to the console. */
+/** Mute noisy console methods in production; warnings and errors stay visible. */
 export function silenceConsoleInProduction() {
   if (!import.meta.env.PROD) return;
 
   console.log = noop;
-  console.warn = noop;
   console.info = noop;
   console.debug = noop;
 }

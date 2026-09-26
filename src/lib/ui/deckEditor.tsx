@@ -134,6 +134,7 @@ import {
   toggleCommanderCategories,
 } from '../deckCommander';
 import { collectTokenPartIds, getDefaultTokenEntry, getTokenKey, mergeTokenPrintings, resolveTokensForSources } from '../deckTokens';
+import { reportClientError } from '../clientErrorReporting';
 import OverflowMenuIcon from 'lucide-solid/icons/ellipsis';
 import DeleteIcon from 'lucide-solid/icons/trash-2';
 
@@ -224,9 +225,15 @@ export const DeckEditor: Component<Props> = props => {
   );
 
   onMount(async () => {
-    await setCardSystem(deck.system ?? MTG_CARD_SYSTEM.id);
-    if (props.deck?.id || Object.keys(deck.cards ?? {}).length > 0) {
-      await rehydrateDeck(deck);
+    try {
+      await setCardSystem(deck.system ?? MTG_CARD_SYSTEM.id);
+      if (props.deck?.id || Object.keys(deck.cards ?? {}).length > 0) {
+        await rehydrateDeck(deck);
+      }
+    } catch (error) {
+      devLog.error('Deck editor failed to open', error);
+      reportClientError(error);
+      toast.error('Could not fully load this deck. Some card data may be missing.');
     }
   });
 
@@ -238,7 +245,10 @@ export const DeckEditor: Component<Props> = props => {
     on(
       () => deck.system,
       () => {
-        rehydrateDeck(unwrap(deck));
+        void rehydrateDeck(unwrap(deck)).catch(error => {
+          devLog.error('Deck rehydrate failed', error);
+          reportClientError(error);
+        });
         setTypeFilter('deck');
         setSearchParams(
           { q: undefined, page: undefined, totalPages: undefined, catalogType: undefined },
@@ -1000,12 +1010,23 @@ export const DeckEditor: Component<Props> = props => {
 
   const deckTokenPartIds = createMemo(() => collectTokenPartIds(deckTokenSources()));
 
-  const [deckTokens] = createResource(deckTokenSources, resolveTokensForSources);
+  async function loadDeckEditorTokens(sources: ReturnType<typeof deckTokenSources>) {
+    try {
+      return await resolveTokensForSources(sources);
+    } catch (error) {
+      devLog.error('Failed to load deck tokens', error);
+      reportClientError(error);
+      toast.error('Could not load related tokens. Other deck editing still works.');
+      return [];
+    }
+  }
+
+  const [deckTokens] = createResource(deckTokenSources, loadDeckEditorTokens);
 
   const deckTokenEntryList = createMemo(() => {
     trackDeep(deck.tokens);
-    const resolved = deckTokens();
-    if (!resolved) return [];
+    const resolved = deckTokens.error ? [] : (deckTokens() ?? []);
+    if (!resolved.length && !deck.tokens) return [];
     return mergeTokenPrintings(resolved, deck.tokens);
   });
 
@@ -1023,7 +1044,8 @@ export const DeckEditor: Component<Props> = props => {
   }
 
   function getTokenPinnedPrintings(tokenKey: string): CardPrintingOption[] | undefined {
-    const defaultEntry = getDefaultTokenEntry(tokenKey, deckTokens());
+    const defaults = deckTokens.error ? undefined : deckTokens();
+    const defaultEntry = getDefaultTokenEntry(tokenKey, defaults);
     return defaultEntry ? [entryToPrintingOption(defaultEntry)] : undefined;
   }
 
