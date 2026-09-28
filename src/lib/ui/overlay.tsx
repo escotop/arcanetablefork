@@ -255,17 +255,21 @@ export default function Overlay() {
       <Announcement />
       <CommandPalette playArea={playArea()!} />
       <Show when={cardSearchModalData()}>
-        {data => (
-          <CardSearchModal
-            open={cardSearchModalOpen()}
-            onOpenChange={setCardSearchModalOpen}
-            cards={data().cards}
-            zone={data().zone}
-            title={data().title}
-            deckViewMode={data().deckViewMode}
-            readOnly={data().readOnly}
-          />
-        )}
+        {() => {
+          const modalData = cardSearchModalData();
+          if (!modalData?.zone) return null;
+          return (
+            <CardSearchModal
+              open={cardSearchModalOpen()}
+              onOpenChange={setCardSearchModalOpen}
+              cards={modalData.cards}
+              zone={modalData.zone}
+              title={modalData.title}
+              deckViewMode={modalData.deckViewMode}
+              readOnly={modalData.readOnly}
+            />
+          );
+        }}
       </Show>
     </div>
   );

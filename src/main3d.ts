@@ -105,6 +105,7 @@ import { PlayArea } from './lib/playArea';
 import { ensureLoyaltyCountersOnBattlefield } from './lib/loyaltyCounter';
 import { getPlayAreaPlayerName } from './lib/playAreaNameTag';
 import { resolvePlayerColor } from './lib/playerColor';
+import { isPlayerNameTaken, PLAYER_NAME_TAKEN_MESSAGE } from './lib/playerNameAvailability';
 import { handlePingAwarenessChanges, isCardPingTarget, publishTablePingFromHit } from './lib/pingSync';
 import {
   isBoardInteractionSuppressed,
@@ -668,6 +669,14 @@ export async function loadDeckAndJoin(
 ) {
   const providerSync = await profileAsync('provider sync (join)', () => waitForProviderSync(10000));
   await profileAsync('process events after provider sync', () => processEvents());
+
+  const joinName = settings.name?.trim();
+  if (!joinName) {
+    throw new Error('Name is required');
+  }
+  if (isPlayerNameTaken(joinName)) {
+    throw new Error(PLAYER_NAME_TAKEN_MESSAGE);
+  }
 
   const playerSessionId = getOrCreatePlayerSessionId(currentGameId);
   clearStaleJoinBinding(gameLog, currentGameId, playerSessionId);

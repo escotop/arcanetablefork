@@ -224,6 +224,16 @@ export function getTextureLoadUrl(url: string | undefined): string | undefined {
   return proxyPath;
 }
 
+/** URL for `<img>` and UI previews (avoids CORS-blocked origins when possible). */
+export function getDisplayTextureUrl(url: string | undefined): string | undefined {
+  const normalized = normalizeTextureUrl(url);
+  if (!normalized) return undefined;
+  if (needsCrossOriginImageFallback(normalized)) {
+    return buildPublicImageProxyUrl(normalized) ?? normalized;
+  }
+  return getTextureLoadUrl(normalized) ?? normalized;
+}
+
 /** Ordered fallbacks for fetching remote card art (proxy, direct, weserv). */
 export function getTextureLoadUrlCandidates(url: string | undefined): string[] {
   const normalized = normalizeTextureUrl(url);
@@ -234,11 +244,25 @@ export function getTextureLoadUrlCandidates(url: string | undefined): string[] {
     if (candidate && !candidates.includes(candidate)) candidates.push(candidate);
   };
 
-  push(getTextureLoadUrl(normalized));
-  push(normalized);
+  const crossOrigin = needsCrossOriginImageFallback(normalized);
+  const weserv = buildPublicImageProxyUrl(normalized);
 
-  if (needsTextureProxy(normalized) || needsCrossOriginImageFallback(normalized)) {
-    push(buildPublicImageProxyUrl(normalized));
+  if (crossOrigin) {
+    push(weserv);
+  }
+
+  push(getTextureLoadUrl(normalized));
+
+  if (!crossOrigin) {
+    push(normalized);
+  }
+
+  if (needsTextureProxy(normalized)) {
+    push(weserv);
+  }
+
+  if (crossOrigin) {
+    push(normalized);
   }
 
   return candidates;

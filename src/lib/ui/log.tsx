@@ -186,7 +186,7 @@ export function parseLogEntry(entry) {
     case 'transferCard': {
       let fromZone = zonesById.get(data.fromZoneId);
       let toZone = zonesById.get(data.toZoneId);
-      let destination = toZone.zone;
+      let destination = toZone?.zone ?? toZone?.mesh?.userData?.zone ?? 'unknown';
       if (
         toZone?.mesh.userData.zone === 'deck' &&
         entry.extendedOptions?.addOptions?.location === 'bottom'
@@ -196,7 +196,8 @@ export function parseLogEntry(entry) {
       return (
         <>
           moved {getTransferCardReference(entry, userData, card, fromZone, toZone)} from{' '}
-          <strong>{fromZone?.mesh.userData.zone}</strong> to <strong>{destination}</strong>
+          <strong>{fromZone?.mesh.userData.zone ?? fromZone?.zone ?? 'unknown'}</strong> to{' '}
+          <strong>{destination}</strong>
         </>
       );
     }

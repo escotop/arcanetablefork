@@ -392,7 +392,7 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
 
     if (filters.length) {
       const haystack = (card: Card) =>
-        `${card.detail.name} ${card.detail.type_line} ${card.detail.oracle_text}`.toLowerCase();
+        `${card.detail?.name ?? ''} ${card.detail?.type_line ?? ''} ${card.detail?.oracle_text ?? ''}`.toLowerCase();
       candidates = candidates.filter(card =>
         filters.every(filter => haystack(card).includes(filter)),
       );
@@ -400,7 +400,9 @@ export const CardSearchModal: Component<CardSearchModalProps> = props => {
 
     if (props.deckViewMode === 'search') {
       candidates = [...candidates].sort((a, b) =>
-        a.detail.name.localeCompare(b.detail.name, undefined, { sensitivity: 'base' }),
+        (a.detail?.name ?? '').localeCompare(b.detail?.name ?? '', undefined, {
+          sensitivity: 'base',
+        }),
       );
     }
 

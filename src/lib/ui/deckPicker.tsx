@@ -1,4 +1,5 @@
 import { createSignal, Match, Switch } from 'solid-js';
+import { toast } from 'solid-sonner';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -25,6 +26,7 @@ import { setIsSpectating } from '../globals';
 import { DeckManagerDialog } from './deckManager';
 import CopyLinkButton from '~/components/ui/copy-link-button';
 import { DEFAULT_COMMANDER_LIFE, LoadSettings } from '../constants';
+import { isPlayerNameTaken, PLAYER_NAME_TAKEN_MESSAGE } from '../playerNameAvailability';
 
 interface Props {
   onStart(settings: LoadSettings): void;
@@ -87,15 +89,26 @@ interface SessionOptionsProps {
 }
 
 function SessionOptions(props: SessionOptionsProps) {
+  const [nameError, setNameError] = createSignal('');
+
   async function onSubmit(e: SubmitEvent & { currentTarget: HTMLFormElement }) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const data = Object.fromEntries(formData.entries());
+    const name = String(data.name ?? '').trim();
 
+    if (isPlayerNameTaken(name)) {
+      setNameError(PLAYER_NAME_TAKEN_MESSAGE);
+      toast.error(PLAYER_NAME_TAKEN_MESSAGE);
+      return;
+    }
+
+    setNameError('');
     e.currentTarget.reset();
 
     props.onSubmit({
       ...data,
+      name,
       startingLife: parseInt(data.startingLife as string, 10),
       startingCommanderLife: parseInt(data.startingCommanderLife as string, 10),
     });
@@ -110,9 +123,17 @@ function SessionOptions(props: SessionOptionsProps) {
         <form class='flex flex-col gap-5' onSubmit={onSubmit}>
           <TextField
             defaultValue={localStorage.getItem('arcanetable-name') ?? ''}
-            onChange={value => localStorage.setItem('arcanetable-name', value)}>
+            onChange={value => {
+              localStorage.setItem('arcanetable-name', value);
+              if (nameError()) setNameError('');
+            }}>
             <TextFieldLabel for='name'>Name</TextFieldLabel>
             <TextFieldInput required type='text' id='name' name='name' />
+            {nameError() ? (
+              <p class='text-sm text-destructive mt-1' role='alert'>
+                {nameError()}
+              </p>
+            ) : null}
           </TextField>
           <div class='flex gap-4 items-end'>
             <NumberField value={40}>
