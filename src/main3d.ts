@@ -464,12 +464,14 @@ export async function tryReconnectToGame(
       markLoadProfile('reconnect path', { path: 'snapshot', ok: true });
       return true;
     }
-    if (isSoloGameRoom()) {
-      const soloOk = await profileAsync('solo reconnect via log replay', () =>
+    if (gameLog.length > 0) {
+      const logOk = await profileAsync('multiplayer reconnect via log replay fallback', () =>
         reconnectViaLogReplay(joinClientId, gameId, playerSessionId, initCardSystem),
       );
-      markLoadProfile('reconnect path', { path: 'solo-log-replay', ok: soloOk });
-      return soloOk;
+      if (logOk) {
+        markLoadProfile('reconnect path', { path: 'log-replay-fallback', ok: true });
+        return true;
+      }
     }
     markLoadProfile('reconnect path', { path: 'snapshot', ok: false });
     return false;

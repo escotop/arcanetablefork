@@ -206,43 +206,18 @@ function persistLocalWorldSnapshot(gameId: string) {
   }
 }
 
-function getLocalPersistedWorldSnapshot(gameId: string): WorldSnapshot | undefined {
-  const snapshot = readLocalWorldSnapshot(gameId);
-  if (!snapshot) return undefined;
-  if (snapshot.logLength > gameLog.length) {
-    devLog.debug('[worldSnapshot] Local snapshot ahead of Yjs log', {
-      snapshotLogLength: snapshot.logLength,
-      currentLogLength: gameLog.length,
-    });
-    return undefined;
-  }
-  return snapshot;
-}
+function pickBestWorldSnapshot(...candidates: (WorldSnapshot | undefined)[]): WorldSnapshot | undefined {
+  const valid = candidates.filter((s): s is WorldSnapshot => !!s?.playAreas?.length);
+  if (!valid.length) return undefined;
 
-function getStoredWorldSnapshot(): WorldSnapshot | undefined {
-  const snapshot = gameState.get('worldSnapshot') as WorldSnapshot | undefined;
-  if (!snapshot?.playAreas?.length) {
-    console.log('[worldSnapshot] No snapshot or empty playAreas');
-    return undefined;
-  }
-  if (snapshot.logLength > gameLog.length) {
-    console.log('[worldSnapshot] Snapshot ahead of local log (may sync soon)', {
-      snapshotLogLength: snapshot.logLength,
-      currentLogLength: gameLog.length,
-      barrierId: snapshot.barrierId,
-    });
-    return undefined;
-  }
-  console.log('[worldSnapshot] Valid snapshot found', {
-    logLength: snapshot.logLength,
-    currentLogLength: gameLog.length,
-    playAreas: snapshot.playAreas.length,
-    barrierId: snapshot.barrierId,
+  return valid.reduce((best, cur) => {
+    if (cur.logLength > best.logLength) return cur;
+    if (cur.logLength < best.logLength) return best;
+    return (cur.snapshotVersion ?? 0) >= (best.snapshotVersion ?? 0) ? cur : best;
   });
-  return snapshot;
 }
 
-async function waitUntilLogCoversSnapshot(snapshot: WorldSnapshot, maxWaitMs = 12_000): Promise<boolean> {
+async function waitUntilLogCoversSnapshot(snapshot: WorldSnapshot, maxWaitMs = 15_000): Promise<boolean> {
   if (snapshot.logLength <= gameLog.length) return true;
   return waitForGameLogDocumentSync({
     targetLength: snapshot.logLength,
@@ -252,35 +227,48 @@ async function waitUntilLogCoversSnapshot(snapshot: WorldSnapshot, maxWaitMs = 1
 
 async function resolveStoredWorldSnapshot(
   gameId: string,
-  maxWaitMs = 12_000,
+  maxWaitMs = 15_000,
 ): Promise<WorldSnapshot | undefined> {
-  const local = getLocalPersistedWorldSnapshot(gameId);
-  if (local) {
-    console.log('[worldSnapshot] Using local snapshot', {
-      logLength: local.logLength,
+  let snapshot = pickBestWorldSnapshot(
+    readLocalWorldSnapshot(gameId),
+    gameState.get('worldSnapshot') as WorldSnapshot | undefined,
+  );
+
+  if (!snapshot) {
+    console.log('[worldSnapshot] No local or Yjs snapshot candidates');
+    return undefined;
+  }
+
+  console.log('[worldSnapshot] Selected snapshot candidate', {
+    logLength: snapshot.logLength,
+    currentLogLength: gameLog.length,
+    playAreas: snapshot.playAreas.length,
+    barrierId: snapshot.barrierId,
+  });
+
+  if (snapshot.logLength > gameLog.length) {
+    console.log('[worldSnapshot] Waiting for Yjs log to sync before applying snapshot');
+    await waitUntilLogCoversSnapshot(snapshot, maxWaitMs);
+    snapshot =
+      pickBestWorldSnapshot(
+        readLocalWorldSnapshot(gameId),
+        gameState.get('worldSnapshot') as WorldSnapshot | undefined,
+      ) ?? snapshot;
+  }
+
+  if (snapshot.logLength > gameLog.length) {
+    const localBackup = readLocalWorldSnapshot(gameId);
+    if (localBackup?.playAreas?.length && localBackup.logLength <= gameLog.length) {
+      devLog.warn('[worldSnapshot] Using local snapshot after Yjs sync wait');
+      return localBackup;
+    }
+    console.log('[worldSnapshot] Snapshot logLength still ahead of game log — not applying', {
+      snapshotLogLength: snapshot.logLength,
       currentLogLength: gameLog.length,
     });
-    return local;
-  }
-
-  let snapshot = getStoredWorldSnapshot();
-  if (snapshot) return snapshot;
-
-  const raw = gameState.get('worldSnapshot') as WorldSnapshot | undefined;
-  if (!raw?.playAreas?.length || raw.logLength <= gameLog.length) {
     return undefined;
   }
 
-  console.log('[worldSnapshot] Waiting for game log before applying snapshot', {
-    snapshotLogLength: raw.logLength,
-    currentLogLength: gameLog.length,
-  });
-  const ready = await waitUntilLogCoversSnapshot(raw, maxWaitMs);
-  if (!ready) {
-    console.log('[worldSnapshot] Timed out waiting for log to cover snapshot');
-    return undefined;
-  }
-  snapshot = getStoredWorldSnapshot();
   return snapshot;
 }
 
@@ -668,7 +656,10 @@ function publishSnapshotForBarrier(barrier: SyncBarrier) {
   });
 }
 
-function publishPersistentWorldSnapshot(onPublished?: (logLength: number) => void) {
+function publishPersistentWorldSnapshot(
+  onPublished?: (logLength: number) => void,
+  options?: { allowNonHost?: boolean },
+) {
   if (!Object.values(playAreas).some(area => Boolean(area))) {
     logReloadOther('publish-persistent-skipped-no-areas');
     return;
@@ -687,6 +678,10 @@ function publishPersistentWorldSnapshot(onPublished?: (logLength: number) => voi
       const activeBarrier = gameState.get('syncBarrier') as SyncBarrier | undefined;
       if (activeBarrier && activeBarrier.status === 'pending') {
         logReloadOther('publish-persistent-transact-abort-barrier-pending');
+        return;
+      }
+      if (!options?.allowNonHost && !isSyncHost()) {
+        logReloadOther('publish-persistent-transact-abort-not-host');
         return;
       }
       if (!safeSetWorldSnapshot(snapshot)) {
@@ -780,6 +775,17 @@ export async function acquireWorldSnapshot(
 
   await waitForGameLogDocumentSync({ minLength: 1, maxWaitMs: 10_000 });
 
+  const candidate = pickBestWorldSnapshot(
+    readLocalWorldSnapshot(gameId),
+    gameState.get('worldSnapshot') as WorldSnapshot | undefined,
+  );
+  if (candidate && candidate.logLength > gameLog.length) {
+    await waitForGameLogDocumentSync({
+      targetLength: candidate.logLength,
+      maxWaitMs: 15_000,
+    });
+  }
+
   const fromPeers = await requestSnapshotFromPeers(gameId, playerSessionId, 12_000);
   if (fromPeers) {
     console.log('[worldSnapshot] Reconnected from peer snapshot');
@@ -800,15 +806,44 @@ export function setupLocalWorldSnapshotSync(getGameId: () => string | undefined)
     const gameId = getGameId();
     if (gameId) persistLocalWorldSnapshot(gameId);
   });
+
+  const flushLocalSnapshot = () => {
+    const gameId = getGameId();
+    if (gameId) persistLocalWorldSnapshot(gameId);
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', flushLocalSnapshot);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushLocalSnapshot();
+    });
+  }
 }
 
 export function setupPersistentSnapshotPublisher(getGameId?: () => string | undefined) {
   if (!gameState) return;
 
-  setupLocalWorldSnapshotSync(getGameId ?? (() => undefined));
+  const resolveGameId = getGameId ?? (() => undefined);
+  setupLocalWorldSnapshotSync(resolveGameId);
 
   let lastPublishedLogLength = 0;
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const flushPersistentSnapshot = (options?: { allowNonHost?: boolean }) => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = undefined;
+    }
+    const gameId = resolveGameId();
+    if (gameId) persistLocalWorldSnapshot(gameId);
+    publishPersistentWorldSnapshot(publishedLength => {
+      lastPublishedLogLength = publishedLength;
+    }, options);
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', () => flushPersistentSnapshot({ allowNonHost: true }));
+  }
 
   const publishIfNeeded = () => {
     const currentLogLength = gameLog.length;

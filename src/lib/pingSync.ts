@@ -83,12 +83,12 @@ function resolvePingToWorld(ping: PingPayload) {
   return { position, normal };
 }
 
-function spawnPing(ping: PingPayload) {
+function spawnPing(ping: PingPayload, remote = false) {
   const world = resolvePingToWorld(ping);
   if (!world) return;
 
   if (ping.type) {
-    spawnVideoPing(world.position, world.normal, ping.type);
+    spawnVideoPing(world.position, world.normal, ping.type, { remote });
     return;
   }
 
@@ -178,6 +178,7 @@ function applyRemotePing(clientId: number, ping: PingPayload | undefined) {
         new Vector3().fromArray(ping.position),
         new Vector3().fromArray(ping.normal ?? DEFAULT_WATERDROP_NORMAL),
         ping.type,
+        { remote: true },
       );
     } else {
       spawnWaterdrop(ping.position, ping.normal ?? DEFAULT_WATERDROP_NORMAL, ping.color);
@@ -185,7 +186,7 @@ function applyRemotePing(clientId: number, ping: PingPayload | undefined) {
     return;
   }
 
-  spawnPing(ping);
+  spawnPing(ping, true);
 }
 
 export function handlePingAwarenessChanges(change: {

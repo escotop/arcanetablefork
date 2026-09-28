@@ -35,7 +35,7 @@ import {
 import { useParams } from '@solidjs/router';
 import { createSignal, For, Show } from 'solid-js';
 import { resolvePlayerColor, syncLocalPlayerColor } from '../playerColor';
-import { playTapSound } from '../sounds';
+import { previewLocalVolumeSound, previewRemoteVolumeSound } from '../sounds';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -257,7 +257,7 @@ export default function SettingsOverlay(props: {
             value={[settings.localSoundVolume]}
             onChange={([volume]) => {
               setSettings('localSoundVolume', volume);
-              playTapSound(false, { preview: true });
+              previewLocalVolumeSound();
             }}>
             <div class='flex gap-4 w-full mb-2'>
               <SliderLabel>Your sound volume</SliderLabel>
@@ -276,7 +276,7 @@ export default function SettingsOverlay(props: {
             value={[settings.remoteSoundVolume]}
             onChange={([volume]) => {
               setSettings('remoteSoundVolume', volume);
-              playTapSound(true, { preview: true });
+              previewRemoteVolumeSound();
             }}>
             <div class='flex gap-4 w-full mb-2'>
               <SliderLabel>Other players&apos; sound volume</SliderLabel>

@@ -1,5 +1,5 @@
 import { Vector3 } from 'three';
-import { getProjectionVec } from './globals';
+import { getProjectionVec, settings } from './globals';
 import { getPingTune } from './pingTuneSettings';
 import { getPingType, PING_TYPES, type PingTypeId } from './pingTypes';
 
@@ -240,14 +240,21 @@ export function clearVideoPings() {
 }
 
 /** Play a greenscreen ping video at a table point, projected to 2D screen space. */
-export function spawnVideoPing(worldPosition: Vector3, _worldNormal: Vector3, pingType: PingTypeId) {
+export function spawnVideoPing(
+  worldPosition: Vector3,
+  _worldNormal: Vector3,
+  pingType: PingTypeId,
+  options?: { remote?: boolean },
+) {
   const screen = getProjectionVec(worldPosition.clone());
   if (!screen) return;
 
   ensurePingChromaFilter();
 
   const tune = getPingTune(pingType);
-  const { video, ready } = acquirePlaybackVideo(pingType, tune.volume <= 0);
+  const userVolume = options?.remote ? settings.remoteSoundVolume : settings.localSoundVolume;
+  const effectiveVolume = Math.max(0, Math.min(1, tune.volume * userVolume));
+  const { video, ready } = acquirePlaybackVideo(pingType, effectiveVolume <= 0);
 
   const root = document.createElement('div');
   root.style.cssText = [
@@ -280,8 +287,8 @@ export function spawnVideoPing(worldPosition: Vector3, _worldNormal: Vector3, pi
 
   const begin = () => {
     suppressBrowserVideoUi();
-    video.volume = Math.max(0, Math.min(1, tune.volume));
-    video.muted = tune.volume <= 0;
+    video.volume = effectiveVolume;
+    video.muted = effectiveVolume <= 0;
     video.currentTime = 0;
     void video.play().catch(cleanup);
   };

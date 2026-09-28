@@ -1,3 +1,4 @@
+import { debounce } from 'lodash-es';
 import { isEventCatchUpComplete, settings } from './globals';
 
 type SoundId = 'draw' | 'tap' | 'counterUp' | 'counterDown' | 'playCard' | 'shuffleDeck' | 'turn' | 'coinFlip' | 'diceRoll';
@@ -71,6 +72,30 @@ export function playCoinFlipSound(options?: PlaySoundOptions) {
 
 export function playDiceRollSound(options?: PlaySoundOptions) {
   playAudio('diceRoll', false, options);
+}
+
+const VOLUME_PREVIEW_DEBOUNCE_MS = 320;
+
+const scheduleLocalVolumePreview = debounce(
+  () => playTapSound(false, { preview: true }),
+  VOLUME_PREVIEW_DEBOUNCE_MS,
+  { trailing: true },
+);
+
+const scheduleRemoteVolumePreview = debounce(
+  () => playTapSound(true, { preview: true }),
+  VOLUME_PREVIEW_DEBOUNCE_MS,
+  { trailing: true },
+);
+
+/** Debounced tap preview while dragging the local volume slider. */
+export function previewLocalVolumeSound() {
+  scheduleLocalVolumePreview();
+}
+
+/** Debounced tap preview while dragging the remote volume slider. */
+export function previewRemoteVolumeSound() {
+  scheduleRemoteVolumePreview();
 }
 
 interface CardModifiers {
