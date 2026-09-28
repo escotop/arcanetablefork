@@ -1,4 +1,4 @@
-import { Component, createSignal } from 'solid-js';
+import { Component, createMemo, createSignal } from 'solid-js';
 import { toast } from 'solid-sonner';
 import ChevronDownIcon from 'lucide-solid/icons/chevron-down';
 import { Button } from '~/components/ui/button';
@@ -17,6 +17,7 @@ export const ManageDecksDropdown: Component<{ onNewDeck: () => void }> = props =
   const [deckStore, setDeckStore] = createDeckStore();
   const [importing, setImporting] = createSignal(false);
   const [moxfieldImportOpen, setMoxfieldImportOpen] = createSignal(false);
+  const savedDeckCount = createMemo(() => Object.keys(deckStore.decks ?? {}).length);
   let importInput: HTMLInputElement | undefined;
 
   function onExportAll() {
@@ -59,14 +60,16 @@ export const ManageDecksDropdown: Component<{ onNewDeck: () => void }> = props =
           <ChevronDownIcon class='size-4 opacity-60' />
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end'>
-          <DropdownMenuItem onSelect={() => props.onNewDeck()}>New deck</DropdownMenuItem>
-          <DropdownMenuItem disabled={importing()} onSelect={() => importInput?.click()}>
-            {importing() ? 'Importing…' : 'Import zip'}
-          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => props.onNewDeck()}>Add a deck</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setMoxfieldImportOpen(true)}>
             Import from Moxfield
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onExportAll}>Export all decks</DropdownMenuItem>
+          <DropdownMenuItem disabled={importing()} onSelect={() => importInput?.click()}>
+            {importing() ? 'Importing…' : 'Import zip'}
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={savedDeckCount() === 0} onSelect={onExportAll}>
+            Export all decks
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <input

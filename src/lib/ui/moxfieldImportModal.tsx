@@ -174,12 +174,23 @@ export const MoxfieldImportModal: Component<MoxfieldImportModalProps> = props =>
   const [totalDeckCount, setTotalDeckCount] = createSignal(0);
   const [currentPage, setCurrentPage] = createSignal(0);
   const [totalPages, setTotalPages] = createSignal(0);
+  const [deckFilterText, setDeckFilterText] = createSignal('');
 
   let loadAbort: AbortController | undefined;
 
+  const filteredDecks = createMemo(() => {
+    const query = deckFilterText().trim().toLowerCase();
+    const list = decks();
+    if (!query) return list;
+    return list.filter(deck => {
+      const haystack = `${deck.name} ${deck.commanderName ?? ''}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  });
+
   const selectedCount = createMemo(() => decks().filter(deck => deck.selected).length);
   const allSelected = createMemo(
-    () => decks().length > 0 && decks().every(deck => deck.selected),
+    () => filteredDecks().length > 0 && filteredDecks().every(deck => deck.selected),
   );
   const hasMoreDecks = createMemo(() => currentPage() < totalPages());
 
@@ -194,6 +205,7 @@ export const MoxfieldImportModal: Component<MoxfieldImportModalProps> = props =>
     setTotalDeckCount(0);
     setCurrentPage(0);
     setTotalPages(0);
+    setDeckFilterText('');
     setLoading(false);
     setLoadingMore(false);
     setImporting(false);
@@ -241,7 +253,7 @@ export const MoxfieldImportModal: Component<MoxfieldImportModalProps> = props =>
       const result = await fetchMoxfieldUserPublicDecksPage(user, pageNumber, { signal });
       if (signal.aborted) return;
 
-      const items = result.decks.map(summary => deckListItemFromSummary(summary, true));
+      const items = result.decks.map(summary => deckListItemFromSummary(summary, false));
       if (append) {
         appendDecks(items);
       } else {
@@ -308,7 +320,10 @@ export const MoxfieldImportModal: Component<MoxfieldImportModalProps> = props =>
   }
 
   function toggleSelectAll(selected: boolean) {
-    setDecks(current => current.map(deck => ({ ...deck, selected })));
+    const visibleIds = new Set(filteredDecks().map(deck => deck.publicId));
+    setDecks(current =>
+      current.map(deck => (visibleIds.has(deck.publicId) ? { ...deck, selected } : deck)),
+    );
   }
 
   async function onImportSelected() {
@@ -374,6 +389,10 @@ export const MoxfieldImportModal: Component<MoxfieldImportModalProps> = props =>
                 <Show when={totalDeckCount() > 0}>
                   <p class='text-xs text-muted-foreground'>
                     Showing {decks().length} of {totalDeckCount()} decks
+                    <Show when={deckFilterText().trim()}>
+                      {' '}
+                      · {filteredDecks().length} matching search
+                    </Show>
                   </p>
                 </Show>
               </div>
@@ -381,14 +400,33 @@ export const MoxfieldImportModal: Component<MoxfieldImportModalProps> = props =>
                 type='button'
                 variant='outline'
                 size='sm'
-                disabled={importing() || loadingMore() || !decks().length}
+                disabled={importing() || loadingMore() || !filteredDecks().length}
                 onClick={() => toggleSelectAll(!allSelected())}>
                 {allSelected() ? 'Deselect all' : 'Select all'}
               </Button>
             </div>
 
-            <div class='grid max-h-[min(60vh,520px)] grid-cols-2 gap-3 overflow-y-auto p-1 sm:grid-cols-3'>
-              <Index each={decks()}>
+            <TextField>
+              <TextFieldLabel>Search decks</TextFieldLabel>
+              <TextFieldInput
+                placeholder='Deck or commander name…'
+                value={deckFilterText()}
+                disabled={importing() || !decks().length}
+                onInput={event => setDeckFilterText(event.currentTarget.value)}
+              />
+            </TextField>
+
+            <Show
+              when={filteredDecks().length > 0}
+              fallback={
+                <p class='py-10 text-center text-sm text-muted-foreground'>
+                  {deckFilterText().trim()
+                    ? 'No decks match your search.'
+                    : 'No decks to show.'}
+                </p>
+              }>
+              <div class='grid max-h-[min(60vh,520px)] grid-cols-2 gap-3 overflow-y-auto p-1 sm:grid-cols-3'>
+                <Index each={filteredDecks()}>
                 {deck => (
                   <MoxfieldDeckTile
                     publicId={deck().publicId}
@@ -402,7 +440,8 @@ export const MoxfieldImportModal: Component<MoxfieldImportModalProps> = props =>
                   />
                 )}
               </Index>
-            </div>
+              </div>
+            </Show>
 
             <Show when={hasMoreDecks()}>
               <div class='flex justify-center pt-1'>
