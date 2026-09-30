@@ -7,7 +7,7 @@ import { cancelAnimation, renderAnimations, serializeAnimation } from './lib/ani
 import { initBugGameLog, teardownBugGameLog } from './lib/bugGameLog';
 import { resolveHowItPlaysAdviceForDeck } from './lib/commanderBracket';
 import { getDeckStore } from './lib/deckStore';
-import { adjustCounterLabelHit, findCounterLabelIntersection, getCardMeshTetherPoint, resolvePtCounterSide, setCardData, setCounterLabelHoverTarget, setCounterLabelPointerHover, updateTextureAnimation } from './lib/card';
+import { adjustCounterLabelHit, findCounterLabelAtPointer, getCardMeshTetherPoint, resolvePtCounterSide, setCardData, setCounterLabelHoverTarget, setCounterLabelPointerHover, updateTextureAnimation } from './lib/card';
 import { clearSpanishPreview, clearSpanishPreviewForCard } from './lib/spanishCardPreview';
 import {
   CARD_STACK_OFFSET,
@@ -161,6 +161,8 @@ var container;
 let composer: EffectComposer;
 let raycaster: THREE.Raycaster;
 let mouse: THREE.Vector2;
+let pointerClientX = 0;
+let pointerClientY = 0;
 let cameraMouse: THREE.Vector2;
 let outlinePass: OutlinePass;
 let dragTargets: THREE.Object3D[];
@@ -1020,7 +1022,7 @@ function onContextMenu(event: PointerEvent) {
   intersects = filterEmptyStackZoneIntersections(intersects);
   if (!intersects.length) return;
 
-  const counterInteraction = findCounterLabelIntersection(intersects);
+  const counterInteraction = findCounterLabelAtPointer(event.clientX, event.clientY);
   if (counterInteraction) {
     const ptSide =
       counterInteraction.counterHit.counterId === 'pt'
@@ -1090,7 +1092,7 @@ function onDocumentClick(event: PointerEvent) {
 
   intersects = filterEmptyStackZoneIntersections(intersects);
 
-  const counterInteraction = findCounterLabelIntersection(intersects);
+  const counterInteraction = findCounterLabelAtPointer(event.clientX, event.clientY);
   if (counterInteraction) {
     const ptSide =
       counterInteraction.counterHit.counterId === 'pt'
@@ -1730,6 +1732,8 @@ function onDocumentMouseLeave() {
 }
 
 function updateMouse(event) {
+  pointerClientX = event.clientX;
+  pointerClientY = event.clientY;
   mouse.set(
     (event.clientX / window.innerWidth) * 2 - 1,
     -(event.clientY / window.innerHeight) * 2 + 1,
@@ -1967,11 +1971,15 @@ function clearHoverSignal() {
   cancelAnimation(focusCamera);
 }
 
-function highlightHover(intersects: THREE.Intersection<THREE.Object3D<THREE.Object3DEventMap>>[]) {
+function highlightHover(
+  intersects: THREE.Intersection<THREE.Object3D<THREE.Object3DEventMap>>[],
+  clientX: number,
+  clientY: number,
+) {
   let needsCleanup = false;
   let next;
   let target = intersects?.[0]?.object;
-  const counterInteraction = findCounterLabelIntersection(intersects);
+  const counterInteraction = findCounterLabelAtPointer(clientX, clientY);
   let counterHoverActive = false;
 
   if (counterInteraction) {
@@ -2192,7 +2200,7 @@ function render3d(delta: number) {
 
     intersects = filterEmptyStackZoneIntersections(intersects);
 
-    highlightHover(intersects);
+    highlightHover(intersects, pointerClientX, pointerClientY);
   }
 
   let signal = hoverSignal();

@@ -3,6 +3,7 @@ import set from 'lodash-es/set';
 import uniqBy from 'lodash-es/uniqBy';
 import { splitProps, untrack } from 'solid-js';
 import {
+  Box3,
   BoxGeometry,
   Color,
   LinearFilter,
@@ -16,6 +17,7 @@ import {
   SRGBColorSpace,
   Texture,
   UnsignedByteType,
+  Vector2,
   Vector3,
   Vector3Like,
 } from 'three';
@@ -37,6 +39,7 @@ import {
 } from './customCardArt';
 import {
   boxGeometry,
+  camera,
   cardBackTexture,
   cardLoadingTexture,
   cardsById,
@@ -214,15 +217,155 @@ export function resolveCounterLabelHit(object: Object3D | undefined): CounterLab
   }
 }
 
-export function findCounterLabelIntersection(
-  intersects: { object: Object3D; point: Vector3 }[],
-) {
-  for (const hit of intersects) {
-    const counterHit = resolveCounterLabelHit(hit.object);
-    if (counterHit && canAdjustCounterLabelHit(counterHit)) {
-      return { counterHit, point: hit.point };
+const counterLabelBoundsScratch = {
+  box: new Box3(),
+  corner: new Vector3(),
+  raycaster: new Raycaster(),
+  pointerNdc: new Vector2(),
+  cameraPos: new Vector3(),
+};
+
+type CounterLabelScreenBounds = {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
+function getCounterLabelScreenBounds(mesh: Mesh): CounterLabelScreenBounds {
+  const { box, corner } = counterLabelBoundsScratch;
+  mesh.updateWorldMatrix(true, false);
+  box.setFromObject(mesh);
+
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  const { min, max } = box;
+  for (let ix = 0; ix < 2; ix++) {
+    for (let iy = 0; iy < 2; iy++) {
+      for (let iz = 0; iz < 2; iz++) {
+        corner.set(
+          ix ? max.x : min.x,
+          iy ? max.y : min.y,
+          iz ? max.z : min.z,
+        );
+        corner.project(camera);
+        const sx = (corner.x * 0.5 + 0.5) * width;
+        const sy = (-corner.y * 0.5 + 0.5) * height;
+        minX = Math.min(minX, sx);
+        minY = Math.min(minY, sy);
+        maxX = Math.max(maxX, sx);
+        maxY = Math.max(maxY, sy);
+      }
     }
   }
+
+  return { minX, minY, maxX, maxY };
+}
+
+function pointerInCounterLabelBounds(
+  clientX: number,
+  clientY: number,
+  bounds: CounterLabelScreenBounds,
+  paddingPx = 6,
+) {
+  return (
+    clientX >= bounds.minX - paddingPx &&
+    clientX <= bounds.maxX + paddingPx &&
+    clientY >= bounds.minY - paddingPx &&
+    clientY <= bounds.maxY + paddingPx
+  );
+}
+
+function distanceSquaredToRectCenter(
+  clientX: number,
+  clientY: number,
+  bounds: CounterLabelScreenBounds,
+) {
+  const cx = (bounds.minX + bounds.maxX) / 2;
+  const cy = (bounds.minY + bounds.maxY) / 2;
+  const dx = clientX - cx;
+  const dy = clientY - cy;
+  return dx * dx + dy * dy;
+}
+
+function resolveCounterLabelPointerPoint(mesh: Mesh, clientX: number, clientY: number) {
+  const { raycaster, pointerNdc } = counterLabelBoundsScratch;
+  pointerNdc.set(
+    (clientX / window.innerWidth) * 2 - 1,
+    -(clientY / window.innerHeight) * 2 + 1,
+  );
+  raycaster.setFromCamera(pointerNdc, camera);
+  const hit = raycaster.intersectObject(mesh, false)[0];
+  if (hit) return hit.point.clone();
+  const fallback = new Vector3();
+  mesh.getWorldPosition(fallback);
+  return fallback;
+}
+
+function listAdjustableCounterLabelHits() {
+  const area = getLocalPlayArea();
+  if (!area?.isLocalPlayArea) return [] as CounterLabelHit[];
+
+  const hits: CounterLabelHit[] = [];
+  for (const card of area.battlefieldZone.cards) {
+    if (!card.mesh) continue;
+    for (const [counterId, meshObj] of Object.entries(card.modifiers)) {
+      if (NON_COUNTER_MODIFIER_MESH_KEYS.has(counterId)) continue;
+      const mesh = meshObj as Mesh;
+      if (!mesh?.userData?.isCounterLabel) continue;
+      const counterHit: CounterLabelHit = {
+        mesh,
+        cardId: card.id,
+        counterId: mesh.userData.counterId ?? counterId,
+      };
+      if (!canAdjustCounterLabelHit(counterHit)) continue;
+      hits.push(counterHit);
+    }
+  }
+  return hits;
+}
+
+/** Pick the counter label under the pointer (screen bounds), not raycast order. */
+export function findCounterLabelAtPointer(clientX: number, clientY: number) {
+  const { cameraPos } = counterLabelBoundsScratch;
+  camera.getWorldPosition(cameraPos);
+
+  type Candidate = {
+    counterHit: CounterLabelHit;
+    depth: number;
+    centerDistSq: number;
+  };
+  const candidates: Candidate[] = [];
+
+  for (const counterHit of listAdjustableCounterLabelHits()) {
+    const bounds = getCounterLabelScreenBounds(counterHit.mesh);
+    if (!pointerInCounterLabelBounds(clientX, clientY, bounds)) continue;
+
+    counterHit.mesh.getWorldPosition(counterLabelBoundsScratch.corner);
+    candidates.push({
+      counterHit,
+      depth: counterLabelBoundsScratch.corner.distanceToSquared(cameraPos),
+      centerDistSq: distanceSquaredToRectCenter(clientX, clientY, bounds),
+    });
+  }
+
+  if (!candidates.length) return undefined;
+
+  candidates.sort((a, b) => {
+    if (a.depth !== b.depth) return a.depth - b.depth;
+    return a.centerDistSq - b.centerDistSq;
+  });
+
+  const picked = candidates[0].counterHit;
+  return {
+    counterHit: picked,
+    point: resolveCounterLabelPointerPoint(picked.mesh, clientX, clientY),
+  };
 }
 
 export function resolvePtCounterSide(mesh: Mesh, worldPoint: Vector3): PtCounterSide {
@@ -293,14 +436,16 @@ export function adjustCounterLabelHit(
     return;
   }
 
+  const counterId = (hit.mesh.userData.counterId as string | undefined) ?? hit.counterId;
+
   area.modifyCard(card, modifiers => {
-    const previous = modifiers.counters?.[hit.counterId];
+    const previous = modifiers.counters?.[counterId];
     const nextValue = (previous ?? 0) + delta;
     return {
       ...modifiers,
       counters: {
         ...modifiers.counters,
-        [hit.counterId]: previous === undefined ? Math.max(1, nextValue) : nextValue,
+        [counterId]: previous === undefined ? Math.max(1, nextValue) : nextValue,
       },
     };
   });
@@ -1574,6 +1719,30 @@ function applyCounterLayout(
   applyCounterLabelAppearance(mesh, card.id, counter.id, labelText);
 }
 
+function compareCounterLabelLayoutOrder(
+  card: Card,
+  a: { counter: { id: string; name: string } },
+  b: { counter: { id: string; name: string } },
+) {
+  if (a.counter.id === 'token') return 1;
+  if (b.counter.id === 'token') return -1;
+
+  const cardCounterOrder = Object.keys(card.mesh?.userData.modifiers?.counters ?? {});
+  const globalCounterOrder = counters().map(counter => counter.id);
+
+  const rank = (counterId: string) => {
+    const onCard = cardCounterOrder.indexOf(counterId);
+    if (onCard >= 0) return onCard;
+    const global = globalCounterOrder.indexOf(counterId);
+    if (global >= 0) return 1000 + global;
+    return 10000;
+  };
+
+  const orderDiff = rank(a.counter.id) - rank(b.counter.id);
+  if (orderDiff !== 0) return orderDiff;
+  return a.counter.name.localeCompare(b.counter.name);
+}
+
 function updateCounterLayouts(card: Card, expanded: boolean) {
   if (!card.mesh) return;
 
@@ -1597,10 +1766,7 @@ function updateCounterLayouts(card: Card, expanded: boolean) {
         shouldRenderLoyaltyCounterOnCard(card, modifier.counter) &&
         (typeof modifier.value === 'number' || modifier.value),
     )
-    .sort((a, b) => {
-      if (a.value === b.value) return a.counter.name.localeCompare(b.counter.name);
-      return b.value - a.value;
-    });
+    .sort((a, b) => compareCounterLabelLayoutOrder(card, a, b));
 
   modifiers.forEach((modifier, index) => {
     applyCounterLayout(card, modifier.counter, modifier.value, index, expanded);
@@ -1723,10 +1889,7 @@ export function updateModifiers(card: Card) {
   }
 
   modifiers
-    .sort((a, b) => {
-      if (a.value === b.value) return a.counter.name.localeCompare(b.counter.name);
-      return b.value - a.value;
-    })
+    .sort((a, b) => compareCounterLabelLayoutOrder(card, a, b))
     .forEach((modifier, index) => {
       updateCounter(card, modifier.counter, modifier.value, index);
     });
