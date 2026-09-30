@@ -5,6 +5,7 @@ import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { cancelAnimation, renderAnimations, serializeAnimation } from './lib/animations';
 import { initBugGameLog, teardownBugGameLog } from './lib/bugGameLog';
+import { resolveHowItPlaysAdviceForDeck } from './lib/commanderBracket';
 import { getDeckStore } from './lib/deckStore';
 import { adjustCounterLabelHit, findCounterLabelIntersection, getCardMeshTetherPoint, resolvePtCounterSide, setCardData, setCounterLabelHoverTarget, setCounterLabelPointerHover, updateTextureAnimation } from './lib/card';
 import { clearSpanishPreview, clearSpanishPreviewForCard } from './lib/spanishCardPreview';

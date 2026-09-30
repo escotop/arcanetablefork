@@ -400,11 +400,7 @@ export default function SettingsOverlay(props: {
             </div>
             <div class='mt-4 space-y-2'>
               <Label>Sync debugging</Label>
-              <p class='text-sm text-muted-foreground'>
-                Export battlefield visibility snapshots and client errors from this table. Each
-                player keeps their own log; the zip includes every log synced through the game
-                room when available.
-              </p>
+             
               <Button
                 type='button'
                 variant='outline'
