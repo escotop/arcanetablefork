@@ -10,6 +10,7 @@ import {
   isLocalHandZone,
   sendEvent,
 } from './globals';
+import { logBugGameCardToBattlefield } from './bugGameLog';
 import { applyLoyaltyWhenPlayingToBattlefield } from './loyaltyCounter';
 import { playDrawSound } from './sounds';
 import { Deck } from './deck';
@@ -163,6 +164,21 @@ export async function transferCard<AddOptions extends {}>(
     }
 
     await toZone.addCard(card, addOptions);
+
+    if (toZone.zone === 'battlefield') {
+      logBugGameCardToBattlefield({
+        cardId: card.id,
+        cardName: card.detail?.name ?? card.id,
+        fromZone: fromZone?.zone,
+        ownerClientId: card.clientId ?? getLocalPlayerClientId(),
+        replay: isHistoricalLogReplayInProgress(),
+        locallyInitiated:
+          !preventTransmit &&
+          fromZone?.zone === 'hand' &&
+          isLocalHandZone(fromZone) &&
+          isEventCatchUpComplete(),
+      });
+    }
 
     if (textureZones.has(toZone.zone)) {
       const textureLoad = loadCardTextures(card).catch(error => {

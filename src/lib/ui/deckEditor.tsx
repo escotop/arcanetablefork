@@ -544,18 +544,31 @@ export const DeckEditor: Component<Props> = props => {
       setBracketResult(result);
       const bracket = getBracketEstimateFromResult(result);
       const advice = getHowItPlaysSection(result);
+      const previousBracket = deck.bracketEstimate;
       const persistedDeck = serializeDeck({
         ...unwrap(deck),
         bracketEstimate: bracket ?? undefined,
         howItPlaysAdvice: advice ?? undefined,
       });
-      setDeck({
-        bracketEstimate: persistedDeck.bracketEstimate,
-        howItPlaysAdvice: persistedDeck.howItPlaysAdvice,
-      });
-      setIsDirty(true);
-      if (isEditing()) {
-        props.onChange(persistedDeck);
+      const nextBracket = persistedDeck.bracketEstimate;
+      const nextAdvice = persistedDeck.howItPlaysAdvice;
+      const bracketUnchanged = previousBracket === nextBracket;
+
+      if (
+        deck.bracketEstimate !== nextBracket ||
+        deck.howItPlaysAdvice !== nextAdvice
+      ) {
+        setDeck({
+          bracketEstimate: nextBracket,
+          howItPlaysAdvice: nextAdvice,
+        });
+      }
+
+      if (!bracketUnchanged) {
+        setIsDirty(true);
+        if (isEditing()) {
+          props.onChange(persistedDeck);
+        }
       }
     } catch (error) {
       const message =

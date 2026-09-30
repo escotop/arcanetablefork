@@ -12,6 +12,7 @@ import {
   setIsIntitialized,
   setSelectedDeckId,
 } from '~/lib/globals';
+import { teardownBugGameLog } from '~/lib/bugGameLog';
 import { HotKeys } from '~/lib/shortcuts/hotkeys';
 import DeckPicker from '~/lib/ui/deckPicker';
 import GameLoadingOverlay from '~/lib/ui/gameLoadingOverlay';
@@ -51,6 +52,7 @@ const GamePage: Component = props => {
   });
 
   onCleanup(() => {
+    teardownBugGameLog();
     cleanup();
   });
 

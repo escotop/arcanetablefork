@@ -36,6 +36,7 @@ import { resetCustomCountersForSnapshot } from './ui/counterDialog';
 import { refreshMultiplayerSyncState } from './multiplayerSync';
 import { slimPlayAreaStateForSnapshot } from './gameLogEvents';
 import { devLog } from './devLog';
+import { logBugGameBattlefieldCheck } from './bugGameLog';
 import {
   logReloadOther,
   syncReloadOtherTraceFromState,
@@ -481,6 +482,10 @@ export async function applyWorldSnapshot(
   setEventCatchUpComplete(true);
   finishHistoricalLogReplay();
   if (gameId) persistLocalWorldSnapshot(gameId);
+  logBugGameBattlefieldCheck('world snapshot applied', {
+    snapshotLogLength: snapshot.logLength,
+    playAreas: snapshot.playAreas.length,
+  });
 }
 
 async function waitForBarrierSnapshot(barrierId: string, maxWaitMs: number): Promise<WorldSnapshot> {

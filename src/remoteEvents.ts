@@ -81,6 +81,7 @@ import {
   recordReplaySkip,
 } from './lib/loadProfile';
 import { logReloadOther } from './lib/reloadOtherPlayerDebug';
+import { appendBugGameLog } from './lib/bugGameLog';
 
 type Events = ReturnType<(typeof EventCreators)[keyof typeof EventCreators]>;
 type Event = { clientID: string; skipReplay?: boolean } & Events;
@@ -392,6 +393,11 @@ export function processEvents(): Promise<void> {
     .catch(error => {
       logReloadOther('process-events-drain-error', {
         error: error instanceof Error ? error.message : String(error),
+      });
+      appendBugGameLog('replay', 'processEvents drain failed', {
+        error: error instanceof Error ? error.message : String(error),
+        processedEvents: processedEvents(),
+        gameLogLength: gameLog.length,
       });
       Sentry.captureException(error);
       logger.error(error);

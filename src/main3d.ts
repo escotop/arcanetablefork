@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer';
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { cancelAnimation, renderAnimations, serializeAnimation } from './lib/animations';
-import { resolveHowItPlaysAdviceForDeck } from './lib/commanderBracket';
+import { initBugGameLog, teardownBugGameLog } from './lib/bugGameLog';
 import { getDeckStore } from './lib/deckStore';
 import { adjustCounterLabelHit, findCounterLabelIntersection, getCardMeshTetherPoint, resolvePtCounterSide, setCardData, setCounterLabelHoverTarget, setCounterLabelPointerHover, updateTextureAnimation } from './lib/card';
 import { clearSpanishPreview, clearSpanishPreviewForCard } from './lib/spanishCardPreview';
@@ -505,6 +505,7 @@ export async function localInit(gameOptions: GameOptions) {
   await profileAsync('globals.init (3d + indexeddb)', () => init(gameOptions), {
     gameId: gameOptions.gameId,
   });
+  initBugGameLog(gameOptions.gameId);
 
   const playerSessionId = getOrCreatePlayerSessionId(gameOptions.gameId);
   const storedJoin = getStoredJoinBinding(gameOptions.gameId);

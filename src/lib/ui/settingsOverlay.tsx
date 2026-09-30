@@ -57,7 +57,7 @@ import {
 } from '../globals';
 import { createPassTurnEvent } from '../createEvents';
 import { getPlayAreaPlayerName } from '../playAreaNameTag';
-import { copyPlayerDeckToClipboard } from '../deckExport';
+import { exportBugGameLogsZip, isBugGameLogActive } from '../bugGameLog';
 import { computeResetTurnOrderState, getActivePlayAreaClientIds, turnOrderState } from '../turnOrder';
 
 export default function SettingsOverlay(props: {
@@ -178,6 +178,17 @@ export default function SettingsOverlay(props: {
       props.onClose();
     } else {
       toast.error(`Could not switch to ${target.name}`);
+    }
+  }
+
+  function handleExportBugGameLog() {
+    const gameId = params.gameId;
+    if (!gameId) return;
+    try {
+      exportBugGameLogsZip(gameId);
+      toast.success('Bug game log exported');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not export bug game log');
     }
   }
 
@@ -386,6 +397,22 @@ export default function SettingsOverlay(props: {
                   />
                 </Button>
               </div>
+            </div>
+            <div class='mt-4 space-y-2'>
+              <Label>Sync debugging</Label>
+              <p class='text-sm text-muted-foreground'>
+                Export battlefield visibility snapshots and client errors from this table. Each
+                player keeps their own log; the zip includes every log synced through the game
+                room when available.
+              </p>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                disabled={!isBugGameLogActive()}
+                onClick={handleExportBugGameLog}>
+                Export bug game log
+              </Button>
             </div>
             <div class='mt-4 space-y-2'>
               <Label>Invite link</Label>
