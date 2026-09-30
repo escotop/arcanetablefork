@@ -1,6 +1,6 @@
 import { createSignal } from 'solid-js';
-import { Euler, Group, MathUtils, Matrix4, Quaternion, Vector3 } from 'three';
-import { applyPlayerTransform, camera, baseCameraQuaternion, isLocalCardGridSearchOpen, players, playAreas, table } from './globals';
+import { Euler, Group, MathUtils, Matrix4, Box3, Quaternion, Vector3 } from 'three';
+import { applyPlayerTransform, camera, baseCameraQuaternion, getLocalPlayArea, isLocalCardGridSearchOpen, orbitControls, players, playAreas, table } from './globals';
 import { getRegisteredClientIdForSession } from './playerSession';
 import type { PlayArea } from './playArea';
 
@@ -12,6 +12,42 @@ interface CameraViewState {
 let localCameraPosition: Vector3 | null = null;
 let localCameraQuaternion: Quaternion | null = null;
 let f3UserSaved = false;
+let topDownViewActive = false;
+let savedViewBeforeTopDown: CameraViewState | null = null;
+let savedTopDownViewParams: CameraViewParams | null = null;
+
+const TOP_DOWN_CAMERA_STORAGE_KEY = 'arcanetable-top-down-camera';
+
+function loadPersistedTopDownCameraView() {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(TOP_DOWN_CAMERA_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as CameraViewParams;
+    if (
+      typeof parsed.posX === 'number' &&
+      typeof parsed.posY === 'number' &&
+      typeof parsed.posZ === 'number' &&
+      typeof parsed.rotX === 'number' &&
+      typeof parsed.rotY === 'number' &&
+      typeof parsed.rotZ === 'number'
+    ) {
+      savedTopDownViewParams = parsed;
+    }
+  } catch {
+    savedTopDownViewParams = null;
+  }
+}
+
+loadPersistedTopDownCameraView();
+
+const tableCenterScratch = new Vector3();
+const tableNormalScratch = new Vector3();
+const tableSurfaceUpScratch = new Vector3();
+const lookAtMatrixScratch = new Matrix4();
+const tableBoundsScratch = new Box3();
+const tableBoundsSizeScratch = new Vector3();
+const battlefieldQuaternionScratch = new Quaternion();
 
 const playerCameraViews = new Map<number, CameraViewState>();
 
@@ -113,6 +149,134 @@ function applyViewState(state: CameraViewState) {
   camera.quaternion.copy(state.quaternion);
   camera.up.copy(worldUp);
   baseCameraQuaternion.copy(state.quaternion);
+}
+
+function getTableViewFocusPoint(target = tableCenterScratch) {
+  tableBoundsScratch.makeEmpty();
+  for (const area of Object.values(playAreas)) {
+    const mesh = area?.battlefieldZone?.mesh;
+    if (!mesh) continue;
+    mesh.updateMatrixWorld(true);
+    tableBoundsScratch.expandByObject(mesh);
+  }
+
+  if (!tableBoundsScratch.isEmpty()) {
+    return tableBoundsScratch.getCenter(target);
+  }
+
+  if (!table) return target.set(0, 0, 0);
+  table.updateMatrixWorld(true);
+  tableBoundsScratch.setFromObject(table);
+  return tableBoundsScratch.getCenter(target);
+}
+
+function createTableTopDownViewState(): CameraViewState | null {
+  if (!camera || !table) return null;
+
+  if (savedTopDownViewParams) {
+    return paramsToViewState(savedTopDownViewParams);
+  }
+
+  const orientArea = getLocalPlayArea() ?? getOrderedPlayAreas()[0];
+  const orientMesh = orientArea?.battlefieldZone?.mesh;
+  if (!orientMesh) return null;
+
+  orientMesh.updateMatrixWorld(true);
+  const center = getTableViewFocusPoint(new Vector3());
+
+  tableBoundsScratch.makeEmpty();
+  for (const area of Object.values(playAreas)) {
+    const mesh = area?.battlefieldZone?.mesh;
+    if (!mesh) continue;
+    mesh.updateMatrixWorld(true);
+    tableBoundsScratch.expandByObject(mesh);
+  }
+  if (tableBoundsScratch.isEmpty()) {
+    table.updateMatrixWorld(true);
+    tableBoundsScratch.setFromObject(table);
+  }
+  tableBoundsScratch.getSize(tableBoundsSizeScratch);
+  const span = Math.max(
+    tableBoundsSizeScratch.x,
+    tableBoundsSizeScratch.y,
+    tableBoundsSizeScratch.z,
+    220,
+  );
+
+  orientMesh.getWorldQuaternion(battlefieldQuaternionScratch);
+  tableNormalScratch.set(0, 0, 1).applyQuaternion(battlefieldQuaternionScratch).normalize();
+
+  tableSurfaceUpScratch.set(0, -1, 0).applyQuaternion(battlefieldQuaternionScratch);
+  tableSurfaceUpScratch.addScaledVector(
+    tableNormalScratch,
+    -tableSurfaceUpScratch.dot(tableNormalScratch),
+  );
+  if (tableSurfaceUpScratch.lengthSq() < 1e-6) {
+    tableSurfaceUpScratch.set(0, 1, 0).applyQuaternion(battlefieldQuaternionScratch);
+    tableSurfaceUpScratch.addScaledVector(
+      tableNormalScratch,
+      -tableSurfaceUpScratch.dot(tableNormalScratch),
+    );
+  }
+  tableSurfaceUpScratch.normalize();
+
+  const distance = span * 0.95 + 140;
+  const position = center.clone().add(tableNormalScratch.clone().multiplyScalar(distance));
+
+  lookAtMatrixScratch.lookAt(position, center, tableSurfaceUpScratch);
+  const quaternion = new Quaternion().setFromRotationMatrix(lookAtMatrixScratch);
+
+  return { position, quaternion };
+}
+
+export function isTableTopDownViewActive() {
+  return topDownViewActive;
+}
+
+export function hasSavedTopDownCameraView() {
+  return savedTopDownViewParams !== null;
+}
+
+export function saveTopDownCameraViewFromCurrent() {
+  savedTopDownViewParams = readCameraViewParams();
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(TOP_DOWN_CAMERA_STORAGE_KEY, JSON.stringify(savedTopDownViewParams));
+  }
+}
+
+export function resetTopDownCameraViewToAuto() {
+  savedTopDownViewParams = null;
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem(TOP_DOWN_CAMERA_STORAGE_KEY);
+  }
+}
+
+export function toggleTableTopDownCameraView() {
+  if (!camera || !table) return;
+
+  if (topDownViewActive) {
+    if (savedViewBeforeTopDown) {
+      applyViewState({
+        position: savedViewBeforeTopDown.position.clone(),
+        quaternion: savedViewBeforeTopDown.quaternion.clone(),
+      });
+    }
+    topDownViewActive = false;
+    savedViewBeforeTopDown = null;
+  } else {
+    savedViewBeforeTopDown = captureViewStateFromCamera();
+    const topDown = createTableTopDownViewState();
+    if (!topDown) return;
+    applyViewState(topDown);
+    topDownViewActive = true;
+  }
+
+  if (orbitControls) {
+    orbitControls.target.copy(getTableViewFocusPoint(new Vector3()));
+    orbitControls.update();
+  }
+
+  afterCameraViewChange?.(cameraViewPlayerIndex());
 }
 
 function storeViewState(index: number, state: CameraViewState) {
@@ -447,6 +611,8 @@ export function getCameraViewIndexForClientId(
 
 export function setCameraViewByPlayerIndex(orderedIndex: number) {
   if (!camera || !table) return;
+  topDownViewActive = false;
+  savedViewBeforeTopDown = null;
   syncF1ReferenceFromSlot();
   if (!localCameraPosition || !localCameraQuaternion) captureLocalCameraView();
   if (!localCameraPosition || !localCameraQuaternion) return;
@@ -502,6 +668,8 @@ export function setCameraViewMode(mode: 'local' | 'opponent') {
 
 export function resetCameraView() {
   setCameraViewPlayerIndex(0);
+  topDownViewActive = false;
+  savedViewBeforeTopDown = null;
   localCameraPosition = null;
   localCameraQuaternion = null;
   f3UserSaved = false;

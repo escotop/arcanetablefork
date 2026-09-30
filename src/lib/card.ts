@@ -7,6 +7,7 @@ import {
   BoxGeometry,
   Color,
   LinearFilter,
+  LinearMipmapLinearFilter,
   Material,
   Mesh,
   MeshStandardMaterial,
@@ -50,6 +51,7 @@ import {
   isEventCatchUpComplete,
   isLocalHandZone,
   playAreas,
+  renderer,
   scene,
   textureLoader,
   textureLoaderWorker,
@@ -142,6 +144,18 @@ export function refreshAllCardCounterLabels() {
       updateModifiers(card);
     }
   });
+}
+
+export async function refreshCachedCardFaceMaterials() {
+  await Promise.all(
+    [...cardTextureMaterialCache.values()].map(async promise => {
+      try {
+        configureCardFaceMaterial(await promise);
+      } catch {
+        /* cache miss or load failure */
+      }
+    }),
+  );
 }
 
 type LabelEmphasis = false | 'all' | 'left' | 'right';
@@ -487,8 +501,8 @@ export function createDeckProxyMesh() {
   mesh.userData.isDeckProxy = true;
   mesh.userData.location = 'deck';
   mesh.userData.isInteractive = true;
-  mesh.receiveShadow = true;
-  mesh.castShadow = true;
+  mesh.receiveShadow = false;
+  mesh.castShadow = false;
   return mesh;
 }
 
@@ -544,7 +558,7 @@ export function createCardGeometry(card: Card, cache?: Map<string, ImageBitmap>)
   alphaMap = alphaMap ?? textureLoader.load(`/alphaMap.webp`);
   if (alphaMap.channel === undefined) alphaMap.channel = 0;
   let loadingMat = new MeshStandardMaterial({ map: cardLoadingTexture, alphaMap });
-  loadingMat.transparent = true;
+  configureCardFaceMaterial(loadingMat);
 
   let { mesh: _, modifiers, ...shared } = card;
 
@@ -572,8 +586,8 @@ export function createCardGeometry(card: Card, cache?: Map<string, ImageBitmap>)
     setCardData(mesh, 'publicCardBack', cardBackMat.clone());
     setCardData(mesh, 'cardBack', cardBackMat.clone());
   }
-  mesh.receiveShadow = true;
-  mesh.castShadow = true;
+  mesh.receiveShadow = false;
+  mesh.castShadow = false;
   return mesh;
 }
 
@@ -709,7 +723,9 @@ export async function loadCardTextures(
   const frontPromise = frontLoaded
     ? Promise.resolve()
     : loadTextureMaterial(front, cache).then(mat => {
-        card.mesh.material[4] = mat.clone();
+        const faceMat = mat.clone();
+        configureCardFaceMaterial(faceMat);
+        card.mesh.material[4] = faceMat;
       });
 
   if (back) {
@@ -1038,6 +1054,7 @@ type ImageUriSource =
       art?: Record<string, string>;
       large?: string;
       normal?: string;
+      png?: string;
       art_crop?: string;
     };
 
@@ -1047,7 +1064,7 @@ export function resolveImageUrl(
 ) {
   if (!uris) return undefined;
 
-  const direct = uris.large ?? uris.normal;
+  const direct = uris.png ?? uris.large ?? uris.normal;
   if (format === 'scryfall' && direct) return direct;
 
   const full = Object.values(uris.full ?? {});
@@ -1066,8 +1083,28 @@ export function getCardImage(card: DetailedCardEntry | Card, face = 0) {
   return normalizeTextureUrl(resolveImageUrl(getImageUris(card, face)));
 }
 
-function getNearestPowerOfTwo(value: number) {
-  return 2 ** Math.round(Math.log2(value));
+const MAX_CARD_TEXTURE_DIMENSION = 2048;
+
+function clampTextureBitmap(bitmap: ImageBitmap): ImageBitmap {
+  const { width, height } = bitmap;
+  const maxDim = Math.max(width, height);
+  if (maxDim <= MAX_CARD_TEXTURE_DIMENSION) return bitmap;
+
+  const scale = MAX_CARD_TEXTURE_DIMENSION / maxDim;
+  const targetWidth = Math.max(1, Math.round(width * scale));
+  const targetHeight = Math.max(1, Math.round(height * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return bitmap;
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+  bitmap.close();
+  return createImageBitmap(canvas);
 }
 
 function shouldLoadTextureOnMainThread(url: string) {
@@ -1103,24 +1140,6 @@ async function decodeTextureBlob(blob: Blob): Promise<ImageBitmap> {
   }
 }
 
-function resizeTextureBitmap(bitmap: ImageBitmap) {
-  const width = getNearestPowerOfTwo(bitmap.width);
-  const height = getNearestPowerOfTwo(bitmap.height);
-  if (width === bitmap.width && height === bitmap.height) {
-    return bitmap;
-  }
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return bitmap;
-
-  ctx.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
-  return createImageBitmap(canvas);
-}
-
 async function loadTextureBitmapViaImage(url: string): Promise<ImageBitmap> {
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
@@ -1130,8 +1149,8 @@ async function loadTextureBitmapViaImage(url: string): Promise<ImageBitmap> {
     img.src = url;
   });
 
-  const width = getNearestPowerOfTwo(image.naturalWidth || image.width);
-  const height = getNearestPowerOfTwo(image.naturalHeight || image.height);
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -1141,7 +1160,8 @@ async function loadTextureBitmapViaImage(url: string): Promise<ImageBitmap> {
   ctx.translate(0, height);
   ctx.scale(1, -1);
   ctx.drawImage(image, 0, 0, width, height);
-  return createImageBitmap(canvas);
+  const bitmap = await createImageBitmap(canvas);
+  return clampTextureBitmap(bitmap);
 }
 
 async function loadTextureBitmapMainThread(url: string): Promise<ImageBitmap> {
@@ -1161,7 +1181,7 @@ async function loadTextureBitmapMainThread(url: string): Promise<ImageBitmap> {
 
   const blob = await response.blob();
   const bitmap = await decodeTextureBlob(blob);
-  return resizeTextureBitmap(bitmap);
+  return clampTextureBitmap(bitmap);
 }
 
 async function loadTextureBitmapWithUrl(loadUrl: string): Promise<ImageBitmap> {
@@ -1188,27 +1208,43 @@ async function loadTextureBitmap(url: string): Promise<ImageBitmap> {
   throw lastError ?? new Error(`Failed to load texture: ${url}`);
 }
 
+function applyCardFaceTextureSampling(map: Texture) {
+  map.generateMipmaps = true;
+  map.minFilter = LinearMipmapLinearFilter;
+  map.magFilter = LinearFilter;
+  map.anisotropy = renderer?.capabilities.getMaxAnisotropy?.() ?? 8;
+}
+
+function configureCardFaceMaterial(mat: MeshStandardMaterial) {
+  mat.envMapIntensity = 0;
+  if (mat.map) applyCardFaceTextureSampling(mat.map);
+  alphaMap = alphaMap ?? textureLoader.load(`/alphaMap.webp`);
+  if (alphaMap.channel === undefined) alphaMap.channel = 0;
+  mat.alphaMap = alphaMap;
+  mat.transparent = false;
+  mat.alphaTest = 0.45;
+  mat.depthWrite = true;
+  mat.needsUpdate = true;
+}
+
 function createCardTextureMaterial(image: ImageBitmap) {
   const map = new Texture(image);
   map.colorSpace = SRGBColorSpace;
   map.format = RGBAFormat;
   map.type = UnsignedByteType;
   map.channel = 0;
+  applyCardFaceTextureSampling(map);
   map.needsUpdate = true;
 
   const mat = new MeshStandardMaterial({
     color: 0xffffff,
     map,
-    alphaMap,
   });
-  mat.transparent = true;
-  mat.needsUpdate = true;
+  configureCardFaceMaterial(mat);
   return mat;
 }
 
 export function createCardFrontMaterial(image: ImageBitmap) {
-  alphaMap = alphaMap ?? textureLoader.load(`/alphaMap.webp`);
-  if (alphaMap.channel === undefined) alphaMap.channel = 0;
   return createCardTextureMaterial(image);
 }
 

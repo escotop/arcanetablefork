@@ -3,7 +3,10 @@ import { camera, gui, table } from './globals';
 import {
   getActiveCameraViewLabel,
   getCameraCoordinateSpaceLabel,
+  hasSavedTopDownCameraView,
   readCameraViewParams,
+  resetTopDownCameraViewToAuto,
+  saveTopDownCameraViewFromCurrent,
   setCameraViewByPlayerIndex,
   writeCameraViewParams,
 } from './cameraView';
@@ -25,6 +28,17 @@ const viewActions = {
   f2: () => previewPlayerView(1),
   f3: () => previewPlayerView(2),
   f4: () => previewPlayerView(3),
+};
+
+const topDownViewActions = {
+  saveTab: () => {
+    saveTopDownCameraViewFromCurrent();
+    syncCameraDebugGuiFromActiveView();
+  },
+  resetTab: () => {
+    resetTopDownCameraViewToAuto();
+    syncCameraDebugGuiFromActiveView();
+  },
 };
 
 let cameraDebugGuiReady = false;
@@ -251,6 +265,19 @@ export function setupCameraDebugGui() {
   views.add(viewActions, 'f3').name('F3 preview');
   views.add(viewActions, 'f4').name('F4 preview');
 
+  const topDownFolder = folder.addFolder('Tab top-down view');
+  topDownFolder
+    .add(topDownViewActions, 'saveTab')
+    .name('Save current as Tab view');
+  topDownFolder
+    .add(topDownViewActions, 'resetTab')
+    .name('Reset Tab view (auto)');
+  topDownFolder
+    .add({ saved: () => (hasSavedTopDownCameraView() ? 'custom' : 'auto') }, 'saved')
+    .name('Tab preset')
+    .disable();
+  topDownFolder.open();
+
   styleCameraGui();
   gui.show();
   cameraGuiVisible = true;
@@ -265,14 +292,15 @@ export function resetCameraDebugGui() {
   guiControllers = [];
 }
 
-export function toggleCameraDebugGui() {
+export function setCameraDebugGuiVisible(visible: boolean) {
   if (!gui) return;
-  if (!cameraDebugGuiReady) {
+  if (visible && !cameraDebugGuiReady) {
     setupCameraDebugGui();
     return;
   }
+  if (!cameraDebugGuiReady) return;
 
-  cameraGuiVisible = !cameraGuiVisible;
+  cameraGuiVisible = visible;
   if (cameraGuiVisible) {
     styleCameraGui();
     gui.show();
@@ -282,6 +310,16 @@ export function toggleCameraDebugGui() {
     focusedSliderController = null;
     updateFocusedControllerHighlight();
   }
+}
+
+export function toggleCameraDebugGui() {
+  if (!gui) return;
+  if (!cameraDebugGuiReady) {
+    setupCameraDebugGui();
+    return;
+  }
+
+  setCameraDebugGuiVisible(!cameraGuiVisible);
 }
 
 export function isCameraDebugGuiVisible() {

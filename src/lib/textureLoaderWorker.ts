@@ -1,8 +1,6 @@
 import * as Comlink from 'comlink';
 
-function getNearestPowerOfTwo(value: number) {
-  return Math.pow(2, Math.round(Math.log2(value)));
-}
+const MAX_CARD_TEXTURE_DIMENSION = 2048;
 
 async function decodeTextureBlob(blob: Blob): Promise<ImageBitmap> {
   try {
@@ -21,6 +19,26 @@ async function decodeTextureBlob(blob: Blob): Promise<ImageBitmap> {
   }
 }
 
+function clampTextureBitmap(bitmap: ImageBitmap): ImageBitmap {
+  const { width, height } = bitmap;
+  const maxDim = Math.max(width, height);
+  if (maxDim <= MAX_CARD_TEXTURE_DIMENSION) return bitmap;
+
+  const scale = MAX_CARD_TEXTURE_DIMENSION / maxDim;
+  const targetWidth = Math.max(1, Math.round(width * scale));
+  const targetHeight = Math.max(1, Math.round(height * scale));
+
+  const offscreenCanvas = new OffscreenCanvas(targetWidth, targetHeight);
+  const ctx = offscreenCanvas.getContext('2d');
+  if (!ctx) return bitmap;
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+  bitmap.close();
+  return createImageBitmap(offscreenCanvas);
+}
+
 const TextureLoaderWorkerObj = {
   async loadTexture(url: string) {
     const response = await fetch(url, { mode: 'cors', credentials: 'omit' });
@@ -34,18 +52,7 @@ const TextureLoaderWorkerObj = {
     }
 
     const image = await decodeTextureBlob(await response.blob());
-
-    const width = getNearestPowerOfTwo(image.width);
-    const height = getNearestPowerOfTwo(image.height);
-
-    const offscreenCanvas = new OffscreenCanvas(width, height);
-
-    const ctx = offscreenCanvas.getContext('2d');
-    ctx?.drawImage(image, 0, 0, width, height);
-    image.close();
-
-    const blob = await offscreenCanvas.convertToBlob({ type: 'image/png' });
-    return createImageBitmap(blob);
+    return clampTextureBitmap(image);
   },
 };
 

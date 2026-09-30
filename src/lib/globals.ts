@@ -343,6 +343,7 @@ export const SOUND_VOLUME_STEP = 0.05;
 
 export const [settings, setSettings] = createLocalStore('settings', {
   enableCameraTilt: true,
+  cameraControlPanelOpen: false,
   focusPanelScale: 1,
   playerColor: undefined as string | undefined,
   localSoundVolume: 0.65,
@@ -721,13 +722,23 @@ export async function init({ gameId }) {
 
   baseCameraQuaternion = camera.quaternion.clone();
 
-  renderer = new WebGLRenderer();
+  renderer = new WebGLRenderer({ antialias: true });
   renderer.shadowMap.enabled = true;
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.domElement.draggable = true;
   renderer.setClearColor(0x05050e);
-  renderer.domElement.style.width = '100vw';
+  renderer.domElement.style.width = '100%';
+  renderer.domElement.style.height = '100%';
+  renderer.domElement.style.display = 'block';
+
+  const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+  cardBackTexture.anisotropy = maxAnisotropy;
+  cardBackTexture.minFilter = THREE.LinearMipmapLinearFilter;
+  cardBackTexture.magFilter = THREE.LinearFilter;
+  cardLoadingTexture.anisotropy = maxAnisotropy;
+  cardLoadingTexture.minFilter = THREE.LinearMipmapLinearFilter;
+  cardLoadingTexture.magFilter = THREE.LinearFilter;
 
   const { focusWidth, focusHeight } = getFocusPanelDimensions();
 

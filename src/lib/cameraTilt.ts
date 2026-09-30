@@ -9,6 +9,7 @@ import {
   LOOK_STRENGTH_X,
   LOOK_STRENGTH_Y,
 } from './constants';
+import { isTableTopDownViewActive } from './cameraView';
 import { baseCameraQuaternion, camera, isCameraTiltBlocked, isSpectating, settings } from './globals';
 
 export type CameraTiltDirection = 'left' | 'right' | 'top';
@@ -166,6 +167,7 @@ export function activateCameraTilt(direction: CameraTiltDirection) {
 }
 
 export function animateCameraLook(ndcX: number, ndcY: number) {
+  if (isTableTopDownViewActive()) return;
   updateCameraTiltHints(ndcX, ndcY);
   updateCameraTiltUntilt(ndcX, ndcY);
   applyCameraTiltAnimation();

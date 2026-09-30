@@ -1,13 +1,11 @@
 import uniqBy from 'lodash-es/uniqBy';
 import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer';
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { cancelAnimation, renderAnimations, serializeAnimation } from './lib/animations';
 import { initBugGameLog, teardownBugGameLog } from './lib/bugGameLog';
 import { resolveHowItPlaysAdviceForDeck } from './lib/commanderBracket';
 import { getDeckStore } from './lib/deckStore';
-import { adjustCounterLabelHit, findCounterLabelAtPointer, getCardMeshTetherPoint, resolvePtCounterSide, setCardData, setCounterLabelHoverTarget, setCounterLabelPointerHover, updateTextureAnimation } from './lib/card';
+import { adjustCounterLabelHit, findCounterLabelAtPointer, getCardMeshTetherPoint, refreshCachedCardFaceMaterials, resolvePtCounterSide, setCardData, setCounterLabelHoverTarget, setCounterLabelPointerHover, updateTextureAnimation } from './lib/card';
 import { clearSpanishPreview, clearSpanishPreviewForCard } from './lib/spanishCardPreview';
 import {
   CARD_STACK_OFFSET,
@@ -158,7 +156,6 @@ import { createRestackEvent, createTransferCardEvent } from './lib/createEvents'
 
 var container;
 
-let composer: EffectComposer;
 let raycaster: THREE.Raycaster;
 let mouse: THREE.Vector2;
 let pointerClientX = 0;
@@ -610,10 +607,6 @@ export async function localInit(gameOptions: GameOptions) {
   setupCss3dRenderer(container);
   markLoadProfile('canvas + css3d renderer');
 
-  composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
-  markLoadProfile('postprocessing composer');
-
   // TODO: these document listeners are never cleaned up!
   renderer.domElement.addEventListener('mousemove', onRendererMouseMove, false);
   renderer.domElement.addEventListener('contextmenu', onContextMenu, false);
@@ -645,6 +638,7 @@ export async function localInit(gameOptions: GameOptions) {
     gameLogLength: gameLog.length,
     hasDeck: !!gameOptions.deck,
   });
+  void refreshCachedCardFaceMaterials();
   startAnimating();
 }
 
@@ -1699,8 +1693,6 @@ function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
 
-  composer.setSize(window.innerWidth, window.innerHeight);
-
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
 
@@ -2215,7 +2207,7 @@ function render3d(delta: number) {
   }
 
   // camera.lookAt(scene.position);
-  composer.render();
+  renderer.render(scene, camera);
   css3dRenderer?.render(scene, camera);
   patchCss3dPointerEvents();
 

@@ -21,7 +21,6 @@ import { computeNextTurnState } from '../turnOrder';
 import { Card } from '../constants';
 import { getOrderedPlayAreas } from '../cameraView';
 import { dismissZoomPanel, navigateKeyboardHandHover, setKeyboardHandHover, setCameraViewByPlayerIndex } from '../../main3d';
-import { toggleCameraDebugGui } from '../cameraDebugGui';
 
 export function HotKeys() {
   const cardMesh = () => hoverSignal()?.mesh;
@@ -121,7 +120,7 @@ export function HotKeys() {
     window.addEventListener('keydown', onFunctionKeyDown);
 
     const onCameraGuiKeyDown = (event: KeyboardEvent) => {
-      // Camera GUI disabled
+      // Camera GUI hidden from UI; leave disabled unless re-enabled in settings.
       return;
     };
 
