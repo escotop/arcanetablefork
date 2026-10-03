@@ -10,7 +10,7 @@ import {
   isLocalHandZone,
   sendEvent,
 } from './globals';
-import { logBugGameCardToBattlefield } from './bugGameLog';
+import { logBugGameCardToBattlefield, logBugGameCardZoneTransfer } from './bugGameLog';
 import { applyLoyaltyWhenPlayingToBattlefield } from './loyaltyCounter';
 import { playDrawSound } from './sounds';
 import { Deck } from './deck';
@@ -165,18 +165,34 @@ export async function transferCard<AddOptions extends {}>(
 
     await toZone.addCard(card, addOptions);
 
+    const logLocallyInitiated =
+      !preventTransmit && isEventCatchUpComplete() && !isHistoricalLogReplayInProgress();
+    const zoneTransferMeta = {
+      cardId: card.id,
+      cardName: card.detail?.name ?? card.id,
+      fromZone: fromZone?.zone,
+      ownerClientId: card.clientId ?? getLocalPlayerClientId(),
+      replay: isHistoricalLogReplayInProgress(),
+      locallyInitiated: logLocallyInitiated,
+      phase: preventTransmit ? ('remote-apply' as const) : ('local-apply' as const),
+    };
+
     if (toZone.zone === 'battlefield') {
       logBugGameCardToBattlefield({
-        cardId: card.id,
-        cardName: card.detail?.name ?? card.id,
-        fromZone: fromZone?.zone,
-        ownerClientId: card.clientId ?? getLocalPlayerClientId(),
-        replay: isHistoricalLogReplayInProgress(),
+        cardId: zoneTransferMeta.cardId,
+        cardName: zoneTransferMeta.cardName,
+        fromZone: zoneTransferMeta.fromZone,
+        ownerClientId: zoneTransferMeta.ownerClientId,
+        replay: zoneTransferMeta.replay,
         locallyInitiated:
-          !preventTransmit &&
+          logLocallyInitiated &&
           fromZone?.zone === 'hand' &&
-          isLocalHandZone(fromZone) &&
-          isEventCatchUpComplete(),
+          isLocalHandZone(fromZone),
+      });
+    } else {
+      logBugGameCardZoneTransfer({
+        ...zoneTransferMeta,
+        toZone: toZone.zone,
       });
     }
 

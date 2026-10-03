@@ -1,6 +1,7 @@
 import { strToU8, zipSync } from 'fflate';
 import { subscribeClientErrors } from './clientErrorReporting';
 import {
+  cardsById,
   gameLog,
   gameState,
   getLocalPlayerClientId,
@@ -63,6 +64,17 @@ export function appendBugGameLog(category: string, message: string, details?: Re
   scheduleBugLogSync();
 }
 
+export function getGameSyncSnapshot() {
+  const logLength = gameLog?.length ?? 0;
+  const processed = processedEvents();
+  return {
+    gameLogLength: logLength,
+    processedEvents: processed,
+    syncLag: logLength - processed,
+    localClientId: getLocalPlayerClientId(),
+  };
+}
+
 export function getBattlefieldVisibilitySnapshot() {
   const seats = Object.values(playAreas)
     .filter((area): area is NonNullable<typeof area> => !!area)
@@ -70,23 +82,71 @@ export function getBattlefieldVisibilitySnapshot() {
       clientId: area.clientId,
       name: getPlayAreaPlayerName(area),
       battlefieldCards: area.battlefieldZone.cards.length,
+      graveyardCards: area.graveyardZone.cards.length,
+      exileCards: area.exileZone.cards.length,
     }))
     .sort((left, right) => left.clientId - right.clientId);
 
   const totalBattlefieldCards = seats.reduce((sum, seat) => sum + seat.battlefieldCards, 0);
+  const totalGraveyardCards = seats.reduce((sum, seat) => sum + seat.graveyardCards, 0);
+  const totalExileCards = seats.reduce((sum, seat) => sum + seat.exileCards, 0);
 
   return {
     totalBattlefieldCards,
+    totalGraveyardCards,
+    totalExileCards,
     seats,
-    gameLogLength: gameLog?.length ?? 0,
-    processedEvents: processedEvents(),
+    ...getGameSyncSnapshot(),
+  };
+}
+
+function syncVisibilityBase(extra?: Record<string, unknown>) {
+  return {
+    ...getBattlefieldVisibilitySnapshot(),
+    ...extra,
   };
 }
 
 export function logBugGameBattlefieldCheck(context: string, extra?: Record<string, unknown>) {
-  appendBugGameLog('battlefield-visibility', context, {
-    ...getBattlefieldVisibilitySnapshot(),
-    ...extra,
+  appendBugGameLog('battlefield-visibility', context, syncVisibilityBase(extra));
+}
+
+export function logBugGameSyncVisibility(message: string, extra?: Record<string, unknown>) {
+  appendBugGameLog('sync-visibility', message, syncVisibilityBase(extra));
+}
+
+export function bugGameActorFromEvent(event: { clientID?: unknown; type?: string }) {
+  const actorClientId = Number(event.clientID);
+  const localClientId = getLocalPlayerClientId();
+  return {
+    eventType: event.type,
+    actorClientId: Number.isFinite(actorClientId) ? actorClientId : undefined,
+    remoteActor:
+      Number.isFinite(actorClientId) &&
+      localClientId !== undefined &&
+      actorClientId !== localClientId,
+  };
+}
+
+export function logBugGameCardZoneTransfer(options: {
+  cardId: string;
+  cardName: string;
+  fromZone?: string;
+  toZone: string;
+  ownerClientId?: number;
+  replay: boolean;
+  locallyInitiated: boolean;
+  phase: 'local-apply' | 'remote-apply';
+}) {
+  logBugGameSyncVisibility(`card zone transfer (${options.phase})`, {
+    cardId: options.cardId,
+    cardName: options.cardName,
+    fromZone: options.fromZone,
+    toZone: options.toZone,
+    ownerClientId: options.ownerClientId,
+    replay: options.replay,
+    locallyInitiated: options.locallyInitiated,
+    phase: options.phase,
   });
 }
 
@@ -105,6 +165,90 @@ export function logBugGameCardToBattlefield(options: {
     ownerClientId: options.ownerClientId,
     replay: options.replay,
     locallyInitiated: options.locallyInitiated,
+  });
+  logBugGameCardZoneTransfer({
+    ...options,
+    toZone: 'battlefield',
+    phase: 'local-apply',
+  });
+}
+
+export function logBugGameRemoteTransferOutcome(
+  event: { clientID?: unknown; type?: string; payload?: Record<string, unknown> },
+  outcome: 'applied' | 'dropped',
+  reason?: string,
+  extra?: Record<string, unknown>,
+) {
+  const fromZoneId = event.payload?.fromZoneId as string | undefined;
+  const toZoneId = event.payload?.toZoneId as string | undefined;
+  const userData = event.payload?.userData as { id?: string; name?: string } | undefined;
+  logBugGameSyncVisibility(`remote transferCard ${outcome}`, {
+    ...bugGameActorFromEvent(event),
+    outcome,
+    reason,
+    fromZoneId,
+    toZoneId,
+    cardId: userData?.id,
+    cardName: userData?.name,
+    ...extra,
+  });
+}
+
+export function logBugGameSyncAction(
+  action: 'tap' | 'flip' | 'animateObject' | 'restack',
+  message: string,
+  event: { clientID?: unknown; type?: string; payload?: Record<string, unknown> },
+  extra?: Record<string, unknown>,
+) {
+  const userData = event.payload?.userData as Record<string, unknown> | undefined;
+  logBugGameSyncVisibility(message, {
+    action,
+    ...bugGameActorFromEvent(event),
+    cardId: userData?.id,
+    ...extra,
+  });
+}
+
+export function logBugGameSyncEventDropped(
+  event: { clientID?: unknown; type?: string },
+  reason: string,
+  extra?: Record<string, unknown>,
+) {
+  logBugGameSyncVisibility('sync event dropped', {
+    ...bugGameActorFromEvent(event),
+    reason,
+    ...extra,
+  });
+}
+
+export function logBugGameMissingCardForEvent(
+  event: { clientID?: unknown; type?: string; payload?: Record<string, unknown> },
+  cardId: string,
+) {
+  logBugGameSyncVisibility('event missing card', {
+    ...bugGameActorFromEvent(event),
+    cardId,
+    knownIdCount: cardsById.size,
+  });
+}
+
+export function logBugGameProcessSyncAnomaly(
+  kind: 'log-behind-processed' | 'reset-replay' | 'entry-failed',
+  extra: Record<string, unknown>,
+) {
+  logBugGameSyncVisibility(`process events: ${kind}`, extra);
+}
+
+export function logBugGameTapLocal(card: {
+  userData: { id?: string; isTapped?: boolean; location?: string };
+}) {
+  logBugGameSyncVisibility('tap initiated locally', {
+    action: 'tap',
+    cardId: card.userData.id,
+    isTapped: card.userData.isTapped,
+    location: card.userData.location,
+    locallyInitiated: true,
+    remoteActor: false,
   });
 }
 

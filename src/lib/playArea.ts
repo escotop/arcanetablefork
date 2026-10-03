@@ -58,6 +58,7 @@ import {
   createTransferCardEvent,
   SKIP_REPLAY,
 } from './createEvents';
+import { logBugGameTapLocal } from './bugGameLog';
 import { getPlayAreaPlayerName } from './playAreaNameTag';
 import { buildCardCounterChangeLogs } from './cardCounterLogs';
 
@@ -886,6 +887,7 @@ export class PlayArea {
       setCardData(cardMesh, 'isTapped', !cardMesh.userData.isTapped);
       if (this.isLocalPlayArea && isEventCatchUpComplete()) {
         dispatchGameEvent(createTapEvent(cardMesh));
+        logBugGameTapLocal(cardMesh);
       }
     }
 

@@ -81,7 +81,14 @@ import {
   recordReplaySkip,
 } from './lib/loadProfile';
 import { logReloadOther } from './lib/reloadOtherPlayerDebug';
-import { appendBugGameLog } from './lib/bugGameLog';
+import {
+  appendBugGameLog,
+  logBugGameMissingCardForEvent,
+  logBugGameProcessSyncAnomaly,
+  logBugGameRemoteTransferOutcome,
+  logBugGameSyncAction,
+  logBugGameSyncEventDropped,
+} from './lib/bugGameLog';
 
 type Events = ReturnType<(typeof EventCreators)[keyof typeof EventCreators]>;
 type Event = { clientID: string; skipReplay?: boolean } & Events;
@@ -338,17 +345,21 @@ async function drainProcessEvents() {
     return;
   }
   if (processedEvents() > gameLog.length) {
-    logReloadOther('process-events-log-behind-processed', {
+    const behind = {
       processed: processedEvents(),
       logLength: gameLog.length,
-    });
+    };
+    logReloadOther('process-events-log-behind-processed', behind);
+    logBugGameProcessSyncAnomaly('log-behind-processed', behind);
     await waitForGameLogCatchUp({ maxWaitMs: 3_000 });
   }
   if (processedEvents() > gameLog.length) {
-    logReloadOther('process-events-reset-replay', {
+    const reset = {
       processed: processedEvents(),
       logLength: gameLog.length,
-    });
+    };
+    logReloadOther('process-events-reset-replay', reset);
+    logBugGameProcessSyncAnomaly('reset-replay', reset);
     resetGameSceneForReplay();
   }
 
@@ -362,11 +373,13 @@ async function drainProcessEvents() {
     try {
       await processGameLogEntry(srcEvent);
     } catch (error) {
-      logReloadOther('process-events-entry-failed', {
+      const failed = {
         index: processedEvents(),
         type: srcEvent?.type,
         error: error instanceof Error ? error.message : String(error),
-      });
+      };
+      logReloadOther('process-events-entry-failed', failed);
+      logBugGameProcessSyncAnomaly('entry-failed', failed);
       throw error;
     }
     setProcessedEvents(e => e + 1);
@@ -681,10 +694,12 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
   let card = resolveEventCard(cardId, playArea);
 
   if (event.payload?.userData?.isLocalOnly && event.clientID !== getLocalPlayerClientId()) {
+    logBugGameSyncEventDropped(event, 'isLocalOnly');
     return;
   }
 
   if (cardId && !card && event.type !== 'createCard') {
+    logBugGameMissingCardForEvent(event, String(cardId));
     Sentry.captureException(new Error('card is undefined'), {
       tags: { event_type: event.type },
       extra: { missingId: cardId, knownIdCount: cardsById.size, payload: event.payload },
@@ -884,7 +899,13 @@ const EVENTS = {
   playerCustomCounter() {},
   animateObject(event: Event, playArea: PlayArea) {
     const target = resolveAnimationTarget(event.payload?.userData?.id, playArea);
-    if (!target) return;
+    if (!target) {
+      logBugGameSyncAction('animateObject', 'animateObject dropped (no target)', event, {
+        outcome: 'dropped',
+        reason: 'missing-target',
+      });
+      return;
+    }
 
     if (event.payload?.userData) {
       const [_, cloneable] = splitUserdata(event.payload.userData);
@@ -897,12 +918,22 @@ const EVENTS = {
       opts.completeOnCancel = true;
     }
     animateObject(target, opts);
+    if (isRemotePlayerEvent(event)) {
+      logBugGameSyncAction('animateObject', 'animateObject applied', event, {
+        outcome: 'applied',
+        targetId: target.userData?.id,
+        location: target.userData?.location,
+      });
+    }
   },
   async transferCard(event: Event, playArea: PlayArea, card: Card) {
     const fromZone = resolveZoneFromEvent(event.payload.fromZoneId, playArea);
     const toZone = resolveZoneFromEvent(event.payload.toZoneId, playArea);
 
-    if (!fromZone && !toZone) return;
+    if (!fromZone && !toZone) {
+      logBugGameRemoteTransferOutcome(event, 'dropped', 'missing-from-and-to-zone');
+      return;
+    }
 
     if (!card && fromZone?.zone === 'deck') {
       const deck = fromZone as Deck;
@@ -917,15 +948,25 @@ const EVENTS = {
       }
     }
 
-    if (!card) return;
+    if (!card) {
+      logBugGameRemoteTransferOutcome(event, 'dropped', 'unresolved-card');
+      return;
+    }
 
     let resolvedFromZone = fromZone;
     if (!isCardInZoneOrOnMesh(card, resolvedFromZone)) {
-      if (isCardInZoneOrOnMesh(card, toZone)) return;
+      if (isCardInZoneOrOnMesh(card, toZone)) {
+        logBugGameRemoteTransferOutcome(event, 'dropped', 'already-in-target-zone');
+        return;
+      }
       const actualZone = findZoneContainingCard(card, playArea);
       if (actualZone) {
         resolvedFromZone = actualZone;
       } else if (resolvedFromZone?.zone !== 'deck') {
+        logBugGameRemoteTransferOutcome(event, 'dropped', 'card-not-in-expected-from-zone', {
+          expectedFromZone: resolvedFromZone?.zone,
+          toZone: toZone?.zone,
+        });
         return;
       }
     }
@@ -937,7 +978,10 @@ const EVENTS = {
       ensureCardMesh(card, clientId);
     }
 
-    if (!card.mesh) return;
+    if (!card.mesh) {
+      logBugGameRemoteTransferOutcome(event, 'dropped', 'missing-card-mesh');
+      return;
+    }
 
     if (event.payload?.userData) {
       applyEventUserData(card, event.payload.userData);
@@ -969,6 +1013,13 @@ const EVENTS = {
     }
 
     await transferCard(card, resolvedFromZone, toZone, transferOptions);
+    if (isRemotePlayerEvent(event)) {
+      logBugGameRemoteTransferOutcome(event, 'applied', undefined, {
+        fromZone: resolvedFromZone?.zone,
+        toZone: toZone?.zone,
+        cardName: card.detail?.name ?? card.id,
+      });
+    }
     if (card.mesh && toZone?.zone === 'battlefield' && replaying) {
       applyCardOrientation(card.mesh);
     }
@@ -981,11 +1032,27 @@ const EVENTS = {
   },
   async restack(event: ReturnType<typeof EventCreators.createRestackEvent>, playArea: PlayArea) {
     const zone = resolveZoneFromEvent(event.payload.zoneId, playArea);
-    if (zone && zone.zone !== 'battlefield') return;
+    if (zone && zone.zone !== 'battlefield') {
+      logBugGameSyncAction('restack', 'restack dropped', event, {
+        outcome: 'dropped',
+        reason: 'non-battlefield-zone',
+      });
+      return;
+    }
 
+    const requestedIds = event.payload.items.map(item => item.id);
     const items = event.payload.items
       .map(item => resolveEventCard(item.id, playArea)?.mesh)
       .filter(Boolean);
+
+    if (isRemotePlayerEvent(event)) {
+      logBugGameSyncAction('restack', 'restack applied', event, {
+        outcome: 'applied',
+        requestedCount: requestedIds.length,
+        resolvedCount: items.length,
+        missingIds: requestedIds.filter(id => !resolveEventCard(id, playArea)?.mesh),
+      });
+    }
 
     await restackItems(new Vector3().fromArray(event.payload.anchor), items);
 
@@ -1040,23 +1107,52 @@ const EVENTS = {
     zone?.addCard(card, options);
   },
   tap(event: Event, playArea: PlayArea, card: Card) {
-    if (!card?.mesh) return;
+    if (!card?.mesh) {
+      logBugGameSyncAction('tap', 'tap dropped', event, {
+        outcome: 'dropped',
+        reason: 'missing-card-mesh',
+      });
+      return;
+    }
 
     const isReplay = shouldSyncOrientationFromEvents();
     playTapSound(isRemotePlayerEvent(event));
 
     if (isReplay) {
       playArea?.tap(card.mesh, { skipAnimation: true, syncOnly: true });
+      logBugGameSyncAction('tap', 'tap applied (replay)', event, {
+        outcome: 'applied',
+        isTapped: card.mesh.userData.isTapped,
+        location: card.mesh.userData.location,
+      });
       return;
     }
 
     if (isRemotePlayerEvent(event)) {
       playArea?.tap(card.mesh, { syncOnly: true });
+      logBugGameSyncAction('tap', 'tap applied (remote)', event, {
+        outcome: 'applied',
+        isTapped: card.mesh.userData.isTapped,
+        location: card.mesh.userData.location,
+      });
     }
   },
   async flip(event: Event, playArea: PlayArea, card: Card) {
-    if (!card?.mesh) return;
+    if (!card?.mesh) {
+      logBugGameSyncAction('flip', 'flip dropped', event, {
+        outcome: 'dropped',
+        reason: 'missing-card-mesh',
+      });
+      return;
+    }
     playArea?.applyFlipVisual(card.mesh, { animate: isEventCatchUpComplete() });
+    if (isRemotePlayerEvent(event)) {
+      logBugGameSyncAction('flip', 'flip applied (remote)', event, {
+        outcome: 'applied',
+        isFlipped: card.mesh.userData.isFlipped,
+        location: card.mesh.userData.location,
+      });
+    }
     if (card.mesh.userData.isDoubleSided) {
       await loadCardTextures(card);
       if (!isEventCatchUpComplete() || isHistoricalLogReplayInProgress()) {
