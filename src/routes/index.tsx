@@ -14,7 +14,7 @@ import { isBrokenDeckCoverUrl } from '~/lib/deckCoverPreview';
 import { DeckEditor } from '~/lib/ui/deckEditor';
 import { compareDecksByBracket } from '~/lib/commanderBracket';
 import BracketEstimateTag from '~/lib/ui/bracketEstimateTag';
-import { DeckBracketFilterBar, matchesBracketFilter, type BracketFilter } from '~/lib/ui/deckBracketFilter';
+import { DeckBracketFilterBar, matchesDeckPanelFilters, type BracketFilter } from '~/lib/ui/deckBracketFilter';
 import { ManageDecksDropdown } from '~/lib/ui/manageDecksButton';
 import PencilIcon from 'lucide-solid/icons/pencil';
 
@@ -45,10 +45,11 @@ const LandingPage: Component = () => {
   const [deckStore, setDeckStore] = createDeckStore();
   const [editingDeck, setEditingDeck] = createSignal<Deck>();
   const [bracketFilter, setBracketFilter] = createSignal<BracketFilter>('all');
+  const [deckSearchQuery, setDeckSearchQuery] = createSignal('');
 
   const decks = createMemo(() => listDeckIds(deckStore));
   const filteredDecks = createMemo(() =>
-    decks().filter(deck => matchesBracketFilter(deck, bracketFilter())),
+    decks().filter(deck => matchesDeckPanelFilters(deck, bracketFilter(), deckSearchQuery())),
   );
 
   createEffect(() => {
@@ -141,12 +142,14 @@ const LandingPage: Component = () => {
                   class='mb-4'
                   value={bracketFilter()}
                   onChange={setBracketFilter}
+                  searchQuery={deckSearchQuery()}
+                  onSearchChange={setDeckSearchQuery}
                 />
                 <Show
                   when={filteredDecks().length > 0}
                   fallback={
                     <p class='text-sm text-muted-foreground'>
-                      No decks match this bracket filter.
+                      No decks match your search or bracket filter.
                     </p>
                   }>
                   <div class='grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4'>

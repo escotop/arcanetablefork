@@ -1,7 +1,9 @@
-import { Component, For } from 'solid-js';
+import { Component, For, Show } from 'solid-js';
 import { Button } from '~/components/ui/button';
+import { TextField, TextFieldInput } from '~/components/ui/text-field';
 import { Deck } from '~/lib/constants';
 import { getBracketColor, getBracketTagLabel } from '~/lib/commanderBracket';
+import { getCommanderNames } from '~/lib/deckCommander';
 
 export type BracketFilter = 'all' | 'none' | 1 | 2 | 3 | 4 | 5;
 
@@ -25,13 +27,49 @@ export function matchesBracketFilter(
   return deck.bracketEstimate === filter;
 }
 
+export function matchesDeckSearch(
+  deck: Pick<Deck, 'name' | 'inPlay'> | undefined,
+  query: string,
+) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return true;
+  if (!deck) return false;
+
+  if ((deck.name ?? '').toLowerCase().includes(normalized)) return true;
+
+  const commanders = getCommanderNames(Object.values(deck.inPlay ?? {}));
+  return commanders.some(name => name.toLowerCase().includes(normalized));
+}
+
+export function matchesDeckPanelFilters(
+  deck: Pick<Deck, 'bracketEstimate' | 'name' | 'inPlay'> | undefined,
+  bracketFilter: BracketFilter,
+  searchQuery: string,
+) {
+  return matchesBracketFilter(deck, bracketFilter) && matchesDeckSearch(deck, searchQuery);
+}
+
 export const DeckBracketFilterBar: Component<{
   value: BracketFilter;
   onChange(filter: BracketFilter): void;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
   class?: string;
 }> = props => (
-  <div class={`flex flex-wrap items-center gap-2 ${props.class ?? ''}`}>
-    <span class='text-sm text-muted-foreground'>Bracket</span>
+  <div class={`flex flex-wrap items-center gap-3 ${props.class ?? ''}`}>
+    <Show when={props.onSearchChange}>
+      <TextField class='min-w-[11rem] flex-1 basis-44 max-w-sm'>
+        <TextFieldInput
+          type='search'
+          placeholder='Search decks or commanders…'
+          value={props.searchQuery ?? ''}
+          onInput={event => props.onSearchChange?.(event.currentTarget.value)}
+          aria-label='Search decks'
+        />
+      </TextField>
+    </Show>
+    <div class='flex flex-wrap items-center gap-2'>
+      <span class='text-sm text-muted-foreground'>Bracket</span>
     <For each={BRACKET_FILTER_OPTIONS}>
       {option => (
         <Button
@@ -52,5 +90,6 @@ export const DeckBracketFilterBar: Component<{
         </Button>
       )}
     </For>
+    </div>
   </div>
 );

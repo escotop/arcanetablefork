@@ -17,7 +17,7 @@ import { exportAllDecksZip, mergeImportedDecks, parseDecksZip } from '../deckBul
 import PencilIcon from 'lucide-solid/icons/pencil';
 import { DeckEditor } from './deckEditor';
 import BracketEstimateTag from './bracketEstimateTag';
-import { DeckBracketFilterBar, matchesBracketFilter, type BracketFilter } from './deckBracketFilter';
+import { DeckBracketFilterBar, matchesDeckPanelFilters, type BracketFilter } from './deckBracketFilter';
 import { Deck } from '../constants';
 import { produce, unwrap } from 'solid-js/store';
 
@@ -42,6 +42,17 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
     props.selectedDeckId ?? deckStore?.systems[cardSystemStore.system]?.[0],
   );
   const [bracketFilter, setBracketFilter] = createSignal<BracketFilter>('all');
+  const [deckSearchQuery, setDeckSearchQuery] = createSignal('');
+
+  function deckMatchesFilters(deckId: string) {
+    return matchesDeckPanelFilters(deckStore.decks[deckId], bracketFilter(), deckSearchQuery());
+  }
+
+  function filterDeckIds(deckIds: string[]) {
+    return deckIds.filter(id => deckMatchesFilters(id));
+  }
+
+  const hasMatchingDecks = createMemo(() => allDeckIds().some(id => deckMatchesFilters(id)));
 
   function allDeckIds() {
     const ids = new Set<string>();
@@ -56,22 +67,15 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
     return [...ids];
   }
 
-  function filterDeckIds(deckIds: string[]) {
-    return deckIds.filter(id => matchesBracketFilter(deckStore.decks[id], bracketFilter()));
-  }
-
-  const hasMatchingDecks = createMemo(() =>
-    allDeckIds().some(id => matchesBracketFilter(deckStore.decks[id], bracketFilter())),
-  );
-
   createEffect(() => {
     if (!props.onSelectDeck) return;
 
     bracketFilter();
+    deckSearchQuery();
     const selected = currentSelection();
-    if (selected && matchesBracketFilter(deckStore.decks[selected], bracketFilter())) return;
+    if (selected && deckMatchesFilters(selected)) return;
 
-    const next = allDeckIds().find(id => matchesBracketFilter(deckStore.decks[id], bracketFilter()));
+    const next = allDeckIds().find(id => deckMatchesFilters(id));
     if (next) {
       handleSelect(next);
       return;
@@ -188,13 +192,19 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
               <DialogTitle>{props.title ?? 'Your Decks'}</DialogTitle>
             </DialogHeader>
             <div class='flex min-h-0 flex-1 flex-col px-6 pt-2'>
-              <DeckBracketFilterBar class='shrink-0 pb-4' value={bracketFilter()} onChange={setBracketFilter} />
+              <DeckBracketFilterBar
+                class='shrink-0 pb-4'
+                value={bracketFilter()}
+                onChange={setBracketFilter}
+                searchQuery={deckSearchQuery()}
+                onSearchChange={setDeckSearchQuery}
+              />
               <div class='min-h-0 flex-1 overflow-y-auto p-1 pb-4'>
                 <Show
                   when={hasMatchingDecks()}
                   fallback={
                     <p class='text-sm text-muted-foreground'>
-                      No decks match this bracket filter.
+                      No decks match your search or bracket filter.
                     </p>
                   }>
                   <div>
