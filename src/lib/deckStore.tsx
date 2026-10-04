@@ -13,6 +13,13 @@ import {
 import { applyCustomArtToEntry } from './customCardArt';
 import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
 import {
+  getMemoryDeckStore,
+  hydrateDeckStoreFromIndexedDB,
+  persistDeckStore,
+  rememberDeckStoreInMemory,
+  normalizeAndMaybeMigrateDeckStore,
+} from './deckPersistence';
+import {
   computeDeckContentHash,
   getHydratedDeck,
   setHydratedDeck,
@@ -37,8 +44,15 @@ export const createDeckStore = () => {
 
   const flushDeckStore = () => {
     if (!latestRaw) return;
-    localStorage.setItem('mtgplayer-decks', JSON.stringify(latestRaw));
+    persistDeckStore(latestRaw);
   };
+
+  rememberDeckStoreInMemory(deckStore);
+  hydrateDeckStoreFromIndexedDB(loaded => {
+    setStore(loaded);
+    rememberDeckStoreInMemory(loaded);
+    latestRaw = loaded;
+  });
 
   if (typeof window !== 'undefined') {
     window.addEventListener('beforeunload', flushDeckStore);
@@ -56,26 +70,32 @@ export const createDeckStore = () => {
 
 interface DeckStore {
   decks: Record<string, Deck>;
-  systems: Record<string, CardSystem[]>;
+  systems: Record<string, string[]>;
+}
+
+function persistDeckStoreQuiet(store: DeckStore) {
+  persistDeckStore(store, { quiet: true });
 }
 
 export function getDeckStore(): DeckStore {
+  const cached = getMemoryDeckStore();
+  if (cached) return cached as DeckStore;
+
   let storeString = localStorage.getItem('mtgplayer-decks') ?? localStorage.getItem('decks');
   if (!storeString) return defaultDeckStore;
   let store = JSON.parse(storeString) as DeckStore;
+  let migrated = false;
 
   if (Array.isArray(store.decks)) {
-    let deckEntries = store.decks.map<[string, Deck]>(deck => {
+    let deckEntries = (store.decks as Deck[]).map<[string, Deck]>(deck => {
       const id = deck.id ?? nanoid();
       return [id, { ...deck, id }];
     });
     store.decks = Object.fromEntries(deckEntries);
     store.systems ??= { unsorted: [] };
     store.systems.unsorted.push(...deckEntries.map(entry => entry[0]));
-    localStorage.setItem('mtgplayer-decks', JSON.stringify(store));
+    migrated = true;
   }
-
-  let migrated = false;
 
   Object.entries(store.decks ?? {}).forEach(([id, deck]) => {
     let nextDeck = deck;
@@ -97,7 +117,7 @@ export function getDeckStore(): DeckStore {
   });
 
   if (migrated) {
-    localStorage.setItem('mtgplayer-decks', JSON.stringify(store));
+    persistDeckStoreQuiet(store);
   }
 
   const legacySystemIds = ['scry-server-mtg', 'unsorted'];
@@ -112,7 +132,7 @@ export function getDeckStore(): DeckStore {
   }
 
   if (migrated) {
-    localStorage.setItem('mtgplayer-decks', JSON.stringify(store));
+    persistDeckStoreQuiet(store);
   }
 
   for (const system of Object.keys(store.systems ?? {})) {
@@ -134,10 +154,8 @@ export function getDeckStore(): DeckStore {
     store.systems[system] = (store.systems[system] ?? []).filter(id => Boolean(id) && store.decks[id]);
   }
 
-  if (migrated) {
-    localStorage.setItem('mtgplayer-decks', JSON.stringify(store));
-  }
-
+  store = normalizeAndMaybeMigrateDeckStore(store, persistDeckStoreQuiet);
+  rememberDeckStoreInMemory(store);
   return store;
 }
 
@@ -149,6 +167,7 @@ const DEFAULT_DECK = {
 };
 
 export { findDeckEntryMatch, getCardKey } from './deckEntryMatch';
+export { serializeDeck } from './deckSerialize';
 
 function needsCardHydration(card: DetailedCardEntry) {
   if (!card.detail?.name) return true;
@@ -293,33 +312,6 @@ async function applyCustomArtToHydratedDeck(deck: Deck) {
   if (deck.tokens) await refreshEntries(deck.tokens);
 
   return deck;
-}
-
-export function serializeDeck(deck: Deck) {
-  const serializedDeck = { ...deck, cards: {}, inPlay: {}, sideboard: {}, tokens: {} };
-
-  for (const [name, card] of Object.entries(deck.cards)) {
-    if (card.qty < 1) continue;
-    serializedDeck.cards[name] = { ...card, detail: undefined };
-  }
-
-  for (const [name, card] of Object.entries(deck.inPlay ?? {})) {
-    if (card.qty < 1) continue;
-    serializedDeck.inPlay[name] = { ...card, detail: undefined };
-  }
-
-  for (const [name, card] of Object.entries(deck.sideboard ?? {})) {
-    if (card.qty < 1) continue;
-    serializedDeck.sideboard[name] = { ...card, detail: undefined };
-  }
-
-  for (const [name, card] of Object.entries(deck.tokens ?? {})) {
-    if (card.qty < 1) continue;
-    serializedDeck.tokens[name] = { ...card, detail: undefined };
-  }
-
-  Object.assign(serializedDeck, getDeckCoverMetadata(deck));
-  return serializedDeck;
 }
 
 export function CardSystemProvider(props: ParentProps) {

@@ -13,6 +13,7 @@ import { cardsById, colorHashLight, gameLog, getActiveGameId, getLocalPlayArea, 
 import { iterateGameLogEvents } from '../playerSession';
 import { sha1 } from '../utils';
 import { getDeckStore } from '../deckStore';
+import { persistDeckStore } from '../deckPersistence';
 import type { Counter } from '../constants';
 import { devLog } from '../devLog';
 import { loadGameMeta } from '../gameMeta';
@@ -154,7 +155,7 @@ function persistCounterToDeckStore(counter: Counter) {
   deck.counters ??= [];
   if (deck.counters.some(existing => existing.id === counter.id)) return;
   deck.counters.push(counter);
-  localStorage.setItem('mtgplayer-decks', JSON.stringify(deckStore));
+  persistDeckStore(deckStore, { quiet: true });
 }
 
 export function registerCustomCounter(counter: Counter, creatorClientId?: number) {
