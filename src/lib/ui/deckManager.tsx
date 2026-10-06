@@ -14,6 +14,8 @@ import { createDeckStore } from '../deckStore';
 import { useCardSystemContext } from '../cardSystemContext';
 import { colorHashDark } from '../globals';
 import { exportAllDecksZip, mergeImportedDecks, parseDecksZip } from '../deckBulkTransfer';
+import { resetDocumentScroll } from '../documentScrollLock';
+import { MoxfieldImportModal } from './moxfieldImportModal';
 import PencilIcon from 'lucide-solid/icons/pencil';
 import { DeckEditor } from './deckEditor';
 import BracketEstimateTag from './bracketEstimateTag';
@@ -30,6 +32,8 @@ interface DeckManagerDialogProps {
   onSelectDeck?: (id: string) => void;
   footerStart?: JSX.Element;
   footer?: JSX.Element;
+  hideBulkTransfer?: boolean;
+  showMoxfieldImport?: boolean;
 }
 
 export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
@@ -37,6 +41,7 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
   const [cardSystemStore] = useCardSystemContext();
   const [editingDeck, setEditingDeck] = createSignal<Deck>();
   const [importing, setImporting] = createSignal(false);
+  const [moxfieldImportOpen, setMoxfieldImportOpen] = createSignal(false);
   let importInput: HTMLInputElement | undefined;
   const [selectedDeckId, setSelectedDeckId] = createSignal(
     props.selectedDeckId ?? deckStore?.systems[cardSystemStore.system]?.[0],
@@ -198,6 +203,18 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
                 onChange={setBracketFilter}
                 searchQuery={deckSearchQuery()}
                 onSearchChange={setDeckSearchQuery}
+                searchBarEnd={
+                  props.showMoxfieldImport ? (
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      class='shrink-0 whitespace-nowrap'
+                      onClick={() => setMoxfieldImportOpen(true)}>
+                      Add from Moxfield
+                    </Button>
+                  ) : undefined
+                }
               />
               <div class='min-h-0 flex-1 overflow-y-auto p-1 pb-4'>
                 <Show
@@ -264,29 +281,31 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
               </div>
             </div>
             <DialogFooter class='shrink-0 flex-wrap gap-2 border-t border-border bg-background px-6 py-4 sm:justify-between'>
-                <div class='flex flex-wrap gap-2 mr-auto'>
-                  <Button variant='ghost' type='button' onClick={onExportAll}>
-                    Export all
-                  </Button>
-                  <Button
-                    variant='ghost'
-                    type='button'
-                    disabled={importing()}
-                    onClick={() => importInput?.click()}>
-                    {importing() ? 'Importing…' : 'Import in bulk'}
-                  </Button>
-                  <input
-                    ref={importInput}
-                    type='file'
-                    accept='.zip,application/zip'
-                    class='hidden'
-                    onChange={e => {
-                      const file = e.currentTarget.files?.[0];
-                      if (file) void onImportFile(file);
-                    }}
-                  />
-                </div>
-                <div class='flex flex-wrap gap-2 justify-end'>
+                <Show when={!props.hideBulkTransfer}>
+                  <div class='mr-auto flex flex-wrap gap-2'>
+                    <Button variant='ghost' type='button' onClick={onExportAll}>
+                      Export all
+                    </Button>
+                    <Button
+                      variant='ghost'
+                      type='button'
+                      disabled={importing()}
+                      onClick={() => importInput?.click()}>
+                      {importing() ? 'Importing…' : 'Import in bulk'}
+                    </Button>
+                    <input
+                      ref={importInput}
+                      type='file'
+                      accept='.zip,application/zip'
+                      class='hidden'
+                      onChange={e => {
+                        const file = e.currentTarget.files?.[0];
+                        if (file) void onImportFile(file);
+                      }}
+                    />
+                  </div>
+                </Show>
+                <div class='flex flex-wrap gap-2 justify-end sm:ml-auto'>
                   {props.footerStart}
                   <Button variant='outline' type='button' onClick={() => setEditingDeck({})}>
                     Create Deck
@@ -300,6 +319,15 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
               </DialogFooter>
           </DialogContent>
         </Dialog>
+      </Show>
+      <Show when={props.showMoxfieldImport}>
+        <MoxfieldImportModal
+          open={moxfieldImportOpen()}
+          onOpenChange={open => {
+            setMoxfieldImportOpen(open);
+            if (!open) resetDocumentScroll();
+          }}
+        />
       </Show>
     </>
   );

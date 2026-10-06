@@ -64,6 +64,8 @@ export default function DeckPicker(props: Props) {
         <DeckManagerDialog
           open
           hideClose
+          hideBulkTransfer
+          showMoxfieldImport
           title='Select A Deck'
           selectedDeckId={selectedDeckId()}
           onSelectDeck={setSelectedDeckId}

@@ -22,6 +22,10 @@ export interface MoxfieldDeckSummary {
   publicUrl?: string;
   viewCount?: number;
   likeCount?: number;
+  bracket?: number | null;
+  userBracket?: number | null;
+  autoBracket?: number | null;
+  ignoreBrackets?: boolean;
   mainCardId?: string;
   commanders?: MoxfieldCardEntry[] | Record<string, MoxfieldCardEntry>;
   deckCommanders?: MoxfieldCardEntry[] | Record<string, MoxfieldCardEntry>;
@@ -61,6 +65,10 @@ export interface MoxfieldDeck {
   publicId?: string;
   name?: string;
   format?: string;
+  bracket?: number | null;
+  userBracket?: number | null;
+  autoBracket?: number | null;
+  ignoreBrackets?: boolean;
   mainboard?: Record<string, MoxfieldCardEntry>;
   sideboard?: Record<string, MoxfieldCardEntry>;
   commanders?: Record<string, MoxfieldCardEntry>;
@@ -71,6 +79,7 @@ export interface MoxfieldDeckListItem {
   publicId: string;
   name: string;
   format?: string;
+  bracketEstimate?: number;
   commanderName?: string;
   commanderImageUrl?: string;
   selected: boolean;

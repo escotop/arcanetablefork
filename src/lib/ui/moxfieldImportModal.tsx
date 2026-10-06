@@ -32,6 +32,7 @@ import {
 } from '~/lib/moxfield/client';
 import { importMoxfieldDecks } from '~/lib/moxfield/import';
 import type { MoxfieldDeckListItem } from '~/lib/moxfield/types';
+import BracketEstimateTag from './bracketEstimateTag';
 
 interface MoxfieldImportModalProps {
   open: boolean;
@@ -42,6 +43,7 @@ interface MoxfieldDeckTileProps {
   publicId: string;
   name: string;
   selected: boolean;
+  bracketEstimate?: number;
   commanderName?: string;
   commanderImageUrl?: string;
   disabled: boolean;
@@ -151,6 +153,11 @@ const MoxfieldDeckTile: Component<MoxfieldDeckTileProps> = props => {
           </svg>
         </Show>
       </div>
+      <Show when={props.bracketEstimate != null}>
+        <div class='pointer-events-none absolute right-2 top-2 z-10'>
+          <BracketEstimateTag bracket={props.bracketEstimate} />
+        </div>
+      </Show>
       <div class='pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent px-2 pb-2 pt-8'>
         <p class='line-clamp-2 text-sm font-semibold text-white'>{props.name}</p>
         <Show when={props.commanderName}>
@@ -432,6 +439,7 @@ export const MoxfieldImportModal: Component<MoxfieldImportModalProps> = props =>
                     publicId={deck().publicId}
                     name={deck().name}
                     selected={deck().selected}
+                    bracketEstimate={deck().bracketEstimate}
                     commanderName={deck().commanderName}
                     commanderImageUrl={deck().commanderImageUrl}
                     disabled={importing()}

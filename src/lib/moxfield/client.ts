@@ -1,5 +1,6 @@
 import type { CardEntryDetail } from '../constants';
 import { getCardNamed } from '../scryfall/client';
+import { getMoxfieldDeckBracket } from './bracket';
 import type {
   MoxfieldDeck,
   MoxfieldDeckListItem,
@@ -150,6 +151,7 @@ export function deckListItemFromSummary(
     publicId: summary.publicId,
     name: summary.name?.trim() || 'Untitled deck',
     format: summary.format,
+    bracketEstimate: getMoxfieldDeckBracket(summary),
     selected,
   };
 }

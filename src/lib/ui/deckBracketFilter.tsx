@@ -1,4 +1,4 @@
-import { Component, For, Show } from 'solid-js';
+import { Component, For, JSX, Show } from 'solid-js';
 import { Button } from '~/components/ui/button';
 import { TextField, TextFieldInput } from '~/components/ui/text-field';
 import { Deck } from '~/lib/constants';
@@ -54,19 +54,23 @@ export const DeckBracketFilterBar: Component<{
   onChange(filter: BracketFilter): void;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
+  searchBarEnd?: JSX.Element;
   class?: string;
 }> = props => (
   <div class={`flex flex-wrap items-center gap-3 ${props.class ?? ''}`}>
     <Show when={props.onSearchChange}>
-      <TextField class='min-w-[11rem] flex-1 basis-44 max-w-sm'>
-        <TextFieldInput
-          type='search'
-          placeholder='Search decks or commanders…'
-          value={props.searchQuery ?? ''}
-          onInput={event => props.onSearchChange?.(event.currentTarget.value)}
-          aria-label='Search decks'
-        />
-      </TextField>
+      <div class='flex min-w-[11rem] flex-1 basis-52 max-w-lg items-center gap-2'>
+        <TextField class='min-w-0 flex-1'>
+          <TextFieldInput
+            type='search'
+            placeholder='Search decks or commanders…'
+            value={props.searchQuery ?? ''}
+            onInput={event => props.onSearchChange?.(event.currentTarget.value)}
+            aria-label='Search decks'
+          />
+        </TextField>
+        {props.searchBarEnd}
+      </div>
     </Show>
     <div class='flex flex-wrap items-center gap-2'>
       <span class='text-sm text-muted-foreground'>Bracket</span>

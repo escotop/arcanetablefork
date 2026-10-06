@@ -8,6 +8,7 @@ import {
 } from '../deckImportLookup';
 import { MTG_CARD_SYSTEM } from '../mtgCardSystem';
 import { COMMANDER_CATEGORY } from '../deckCommander';
+import { getMoxfieldDeckBracket } from './bracket';
 import { fetchMoxfieldDeck } from './client';
 import type { MoxfieldCardEntry } from './types';
 
@@ -55,12 +56,15 @@ export async function importMoxfieldDeck(publicId: string): Promise<Deck> {
   const importEntries = [...cardEntries, ...sideboardEntries];
   const resolvedCards = await fetchCardInfoForImport(importEntries, cache);
 
+  const bracketEstimate = getMoxfieldDeckBracket(moxfieldDeck);
+
   return {
     id: nanoid(),
     name: moxfieldDeck.name?.trim() || 'Imported deck',
     version: 2,
     system: MTG_CARD_SYSTEM.id,
     startingLife: 40,
+    bracketEstimate,
     cards: buildImportedSection(cardEntries, resolvedCards),
     inPlay: buildImportedInPlay(cardEntries, inPlayIndices, resolvedCards),
     sideboard: sideboardEntries.length
