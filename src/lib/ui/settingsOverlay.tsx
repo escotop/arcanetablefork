@@ -59,6 +59,7 @@ import { createPassTurnEvent } from '../createEvents';
 import { getPlayAreaPlayerName } from '../playAreaNameTag';
 import { exportBugGameLogsZip, isBugGameLogActive } from '../bugGameLog';
 import { computeResetTurnOrderState, getActivePlayAreaClientIds, turnOrderState } from '../turnOrder';
+import { copyPlayerDeckToClipboard } from '../deckExport';
 import PlayerBracketEstimate from './playerBracketEstimate';
 
 export default function SettingsOverlay(props: {
