@@ -329,7 +329,8 @@ function listAdjustableCounterLabelHits() {
   for (const card of area.battlefieldZone.cards) {
     if (!card.mesh) continue;
     for (const [counterId, meshObj] of Object.entries(card.modifiers)) {
-      if (NON_COUNTER_MODIFIER_MESH_KEYS.has(counterId)) continue;
+      // `pt` is in NON_COUNTER_MODIFIER_MESH_KEYS for layout/cleanup but is still clickable.
+      if (counterId !== 'pt' && NON_COUNTER_MODIFIER_MESH_KEYS.has(counterId)) continue;
       const mesh = meshObj as Mesh;
       if (!mesh?.userData?.isCounterLabel) continue;
       const counterHit: CounterLabelHit = {
