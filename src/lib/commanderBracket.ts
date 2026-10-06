@@ -1,5 +1,6 @@
 import { gzipSync } from 'fflate';
 import { DetailedCardEntry } from './constants';
+import { getCardKey } from './deckEntryMatch';
 import { getCommanderNames, isCommanderCard } from './deckCommander';
 
 const COMMANDER_BRACKET_API = '/api/commander-bracket';
@@ -198,8 +199,30 @@ export function getHowItPlaysSection(
   };
 }
 
-export function getDeckEntriesForBracketEstimate(deck: { cards?: Record<string, DetailedCardEntry> }) {
-  return Object.values(deck.cards ?? {}).filter(card => card.qty > 0);
+export function getDeckEntriesForBracketEstimate(deck: {
+  cards?: Record<string, DetailedCardEntry>;
+  inPlay?: Record<string, DetailedCardEntry>;
+}) {
+  const merged = new Map<string, DetailedCardEntry>();
+
+  for (const card of [
+    ...Object.values(deck.cards ?? {}),
+    ...Object.values(deck.inPlay ?? {}),
+  ]) {
+    if ((card.qty ?? 0) < 1) continue;
+    const key = getCardKey(card);
+    const existing = merged.get(key);
+    if (existing) {
+      existing.qty = (existing.qty ?? 0) + (card.qty ?? 0);
+      if (isCommanderCard(card) && !isCommanderCard(existing)) {
+        existing.categories = card.categories;
+      }
+    } else {
+      merged.set(key, { ...card });
+    }
+  }
+
+  return [...merged.values()];
 }
 
 export async function resolveHowItPlaysAdviceForDeck(deck?: {

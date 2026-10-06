@@ -4,6 +4,7 @@ import { createStore, SetStoreFunction } from 'solid-js/store';
 import {
   BoxGeometry,
   EdgesGeometry,
+  Group,
   LineBasicMaterial,
   LineSegments,
   Mesh,
@@ -19,6 +20,12 @@ import {
   CARD_HEIGHT,
   CARD_STACK_OFFSET,
   CARD_THICKNESS,
+  ACTIVE_TURN_BATTLEFIELD_OUTLINE_COLOR,
+  ACTIVE_TURN_BATTLEFIELD_OUTLINE_Z,
+  BATTLEFIELD_OUTLINE_LAYERS,
+  BATTLEFIELD_OUTLINE_Z,
+  BATTLEFIELD_OUTLINE_Z_DEPTH,
+  BATTLEFIELD_ZONE_Z,
   CARD_ZONE_COLOR,
   CardZone,
   ZONE_OUTLINE_COLOR,
@@ -32,6 +39,12 @@ export class CardArea implements CardZone<{ positionArray?: [number, number, num
   public observable: CardZone['observable'];
   private setObservable: SetStoreFunction<CardZone['observable']>;
   private destroyReactivity(): void;
+  private outlineMaterial: LineBasicMaterial;
+  private outlineLine?: LineSegments;
+  private edgesGeometry?: EdgesGeometry;
+  private outlineLines: LineSegments[] = [];
+  private outlineGroup?: Group;
+  private turnOutlineActive = false;
 
   constructor(
     public zone: string,
@@ -47,13 +60,19 @@ export class CardArea implements CardZone<{ positionArray?: [number, number, num
     this.mesh.position.setY(-50);
     this.mesh.receiveShadow = true;
     let edges = new EdgesGeometry(geometry);
-    let lineSegments = new LineSegments(
-      edges,
-      new LineBasicMaterial({ color: ZONE_OUTLINE_COLOR }),
-    );
-    lineSegments.userData.isOrnament = true;
-    lineSegments.position.setZ(0.125);
-    this.mesh.add(lineSegments);
+    this.outlineMaterial = new LineBasicMaterial({ color: ZONE_OUTLINE_COLOR });
+    if (zone === 'battlefield') {
+      this.edgesGeometry = edges;
+      this.outlineGroup = new Group();
+      this.outlineGroup.userData.isOrnament = true;
+      this.mesh.add(this.outlineGroup);
+      this.rebuildBattlefieldOutlineLayers();
+    } else {
+      this.outlineLine = new LineSegments(edges, this.outlineMaterial);
+      this.outlineLine.userData.isOrnament = true;
+      this.outlineLine.position.setZ(BATTLEFIELD_OUTLINE_Z);
+      this.mesh.add(this.outlineLine);
+    }
     zonesById.set(id, this);
 
     createRoot(destroy => {
@@ -63,7 +82,7 @@ export class CardArea implements CardZone<{ positionArray?: [number, number, num
       });
     });
 
-    this.mesh.position.setZ(2.5);
+    this.mesh.position.setZ(BATTLEFIELD_ZONE_Z);
   }
 
   addCard(card: Card, { skipAnimation = false, positionArray } = {}) {
@@ -153,6 +172,52 @@ export class CardArea implements CardZone<{ positionArray?: [number, number, num
     if (this.cards.some(entry => entry.id === card.id)) return;
     this.cards.push(card);
     this.setObservable('cardCount', this.cards.length);
+  }
+
+  rebuildBattlefieldOutlineLayers() {
+    if (this.zone !== 'battlefield' || !this.outlineGroup || !this.edgesGeometry) return;
+
+    for (const line of this.outlineLines) {
+      this.outlineGroup.remove(line);
+      line.geometry.dispose();
+    }
+    this.outlineLines = [];
+
+    const layers = Math.max(1, Math.round(BATTLEFIELD_OUTLINE_LAYERS));
+    for (let i = 0; i < layers; i++) {
+      const line = new LineSegments(this.edgesGeometry, this.outlineMaterial);
+      line.userData.isOrnament = true;
+      this.outlineGroup.add(line);
+      this.outlineLines.push(line);
+    }
+    this.applyBattlefieldOutlineLayout();
+  }
+
+  applyBattlefieldOutlineLayout() {
+    if (this.zone !== 'battlefield' || !this.outlineLines.length) return;
+
+    const baseZ = this.turnOutlineActive
+      ? ACTIVE_TURN_BATTLEFIELD_OUTLINE_Z
+      : BATTLEFIELD_OUTLINE_Z;
+    const depth = Math.max(0, BATTLEFIELD_OUTLINE_Z_DEPTH);
+    const layers = this.outlineLines.length;
+    const renderOrder = this.turnOutlineActive ? 2 : 0;
+
+    for (let i = 0; i < layers; i++) {
+      const t = layers === 1 ? 0 : i / (layers - 1);
+      const line = this.outlineLines[i];
+      line.position.z = baseZ + t * depth;
+      line.renderOrder = renderOrder;
+    }
+  }
+
+  setTurnOutlineHighlight(active: boolean) {
+    if (this.zone !== 'battlefield') return;
+    this.turnOutlineActive = active;
+    this.outlineMaterial.color.setHex(
+      active ? ACTIVE_TURN_BATTLEFIELD_OUTLINE_COLOR : ZONE_OUTLINE_COLOR,
+    );
+    this.applyBattlefieldOutlineLayout();
   }
 
   getSerializable() {

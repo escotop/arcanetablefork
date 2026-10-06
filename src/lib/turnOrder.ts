@@ -13,6 +13,43 @@ import { playTurnSound } from './sounds';
 export interface TurnOrderState {
   order: number[];
   activeIndex: number;
+  round?: number;
+}
+
+function defaultRound(state?: Pick<TurnOrderState, 'round'> | null) {
+  const round = state?.round;
+  return typeof round === 'number' && round >= 1 ? round : 1;
+}
+
+function didCompleteRound(previous: TurnOrderState, next: TurnOrderState) {
+  const length = previous.order.length;
+  return length > 1 && previous.activeIndex === length - 1 && next.activeIndex === 0;
+}
+
+function deriveRoundFromPassTurnLog(): number {
+  let round = 1;
+  let previous: TurnOrderState | null = null;
+
+  for (const event of iterateGameLogEvents(gameLog)) {
+    if (event.type !== 'passTurn') continue;
+    const next = event.payload?.turnOrder as TurnOrderState | undefined;
+    if (!next?.order?.length) continue;
+    if (typeof next.round === 'number' && next.round >= 1) {
+      round = next.round;
+      previous = next;
+      continue;
+    }
+    if (previous && didCompleteRound(previous, next)) {
+      round += 1;
+    }
+    previous = next;
+  }
+
+  return round;
+}
+
+export function getRoundNumber(state: TurnOrderState | null = turnOrderState()): number {
+  return defaultRound(state);
 }
 
 const TURN_ORDER_KEY = 'turnOrder';
@@ -74,7 +111,7 @@ export function sanitizeTurnOrder(
   }
 
   if (!order.length) {
-    return { order: [], activeIndex: 0 };
+    return { order: [], activeIndex: 0, round: defaultRound(state) };
   }
 
   const previousActive = state.order[state.activeIndex];
@@ -83,25 +120,26 @@ export function sanitizeTurnOrder(
     activeIndex = Math.min(state.activeIndex, order.length - 1);
   }
 
-  return { order, activeIndex };
+  return { order, activeIndex, round: defaultRound(state) };
 }
 
 export function computeResetTurnOrderState(): TurnOrderState {
   const activeIds = getActivePlayAreaClientIds();
   if (!activeIds.length) {
-    return { order: [], activeIndex: 0 };
+    return { order: [], activeIndex: 0, round: 1 };
   }
 
   return {
     order: shuffleArray(activeIds),
     activeIndex: 0,
+    round: 1,
   };
 }
 
 export function computeNextTurnState(): TurnOrderState {
   const activeIds = getActivePlayAreaClientIds();
   if (!activeIds.length) {
-    return { order: [], activeIndex: 0 };
+    return { order: [], activeIndex: 0, round: 1 };
   }
 
   const current = readTurnOrderState();
@@ -110,14 +148,23 @@ export function computeNextTurnState(): TurnOrderState {
     return {
       order: shuffleArray(activeIds),
       activeIndex: 0,
+      round: 1,
     };
   }
 
   const sanitized = sanitizeTurnOrder(current);
-  return {
+  const nextIndex = (sanitized.activeIndex + 1) % sanitized.order.length;
+  const nextState = {
     order: sanitized.order,
-    activeIndex: (sanitized.activeIndex + 1) % sanitized.order.length,
+    activeIndex: nextIndex,
+    round: defaultRound(sanitized),
   };
+
+  if (didCompleteRound(sanitized, nextState)) {
+    nextState.round += 1;
+  }
+
+  return nextState;
 }
 
 export function getActiveTurnClientId(state: TurnOrderState | null = turnOrderState()): number | undefined {
@@ -154,19 +201,32 @@ function lastPassTurnFromLog(): TurnOrderState | null {
 export function syncTurnOrderAfterLogReplay() {
   const persisted = readTurnOrderState();
   if (persisted?.order.length) {
-    setTurnOrderState(sanitizeTurnOrder(persisted));
+    let next = sanitizeTurnOrder(persisted);
+    if (next.round == null) {
+      next = { ...next, round: deriveRoundFromPassTurnLog() };
+      writeTurnOrderState(next);
+    }
+    setTurnOrderState(readTurnOrderState());
+    syncBattlefieldTurnOutlineHighlight();
     return;
   }
 
   const fromLog = lastPassTurnFromLog();
   if (!fromLog?.order.length) {
     setTurnOrderState(null);
+    syncBattlefieldTurnOutlineHighlight();
     return;
   }
 
-  const next = sanitizeTurnOrder(fromLog);
-  writeTurnOrderState(next);
+  let next = sanitizeTurnOrder(fromLog);
+  if (next.round == null) {
+    next = { ...next, round: deriveRoundFromPassTurnLog() };
+    writeTurnOrderState(next);
+  } else {
+    writeTurnOrderState(next);
+  }
   setTurnOrderState(readTurnOrderState());
+  syncBattlefieldTurnOutlineHighlight();
 }
 
 export function shouldApplyPassTurnFromLogEvent() {
@@ -199,6 +259,15 @@ export function removePlayerFromTurnOrder(clientId: number) {
   writeTurnOrderState(sanitizeTurnOrder({ order, activeIndex }));
 }
 
+export function syncBattlefieldTurnOutlineHighlight() {
+  const activeId = getActiveTurnClientId();
+  for (const area of Object.values(playAreas)) {
+    if (!area) continue;
+    const isActive = activeId !== undefined && area.clientId === activeId;
+    area.battlefieldZone.setTurnOutlineHighlight(isActive);
+  }
+}
+
 export function initTurnOrderSync() {
   let previousActive: number | undefined;
   let initialized = false;
@@ -222,6 +291,7 @@ export function initTurnOrderSync() {
 
     initialized = true;
     previousActive = active;
+    syncBattlefieldTurnOutlineHighlight();
   };
 
   sync();

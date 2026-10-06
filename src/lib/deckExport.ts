@@ -42,7 +42,7 @@ function collectPlayAreaDeckCards(playArea: PlayArea): Card[] {
   ];
 }
 
-export function buildPlayAreaDeckExportContent(playArea: PlayArea): string {
+function aggregatePlayAreaDeckEntries(playArea: PlayArea): Record<string, DetailedCardEntry> {
   const cards: Record<string, DetailedCardEntry> = {};
 
   for (const card of collectPlayAreaDeckCards(playArea)) {
@@ -59,7 +59,15 @@ export function buildPlayAreaDeckExportContent(playArea: PlayArea): string {
     cards[key] = entry;
   }
 
-  return formatDeckExportContent({ cards });
+  return cards;
+}
+
+export function buildDetailedDeckEntriesFromPlayArea(playArea: PlayArea): DetailedCardEntry[] {
+  return Object.values(aggregatePlayAreaDeckEntries(playArea));
+}
+
+export function buildPlayAreaDeckExportContent(playArea: PlayArea): string {
+  return formatDeckExportContent({ cards: aggregatePlayAreaDeckEntries(playArea) });
 }
 
 export function getPlayerDeckExportContent(clientId: number, gameId: string): string | undefined {

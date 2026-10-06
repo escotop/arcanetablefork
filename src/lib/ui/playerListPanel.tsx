@@ -34,12 +34,17 @@ import {
 
 } from '../commanderTracking';
 
-import { getLifeBarPlayersInTurnOrder, type LifeBarPlayer } from '../playAreaNameTag';
+import {
+  getLifeBarPlayersInTurnOrder,
+  getPlayAreaPlayerEntry,
+  type LifeBarPlayer,
+} from '../playAreaNameTag';
 
-import { turnOrderState } from '../turnOrder';
+import { getRoundNumber, turnOrderState } from '../turnOrder';
 
 import { getCameraViewIndexForClientId, getOrderedPlayAreas, setCameraViewByPlayerIndex } from '../cameraView';
 
+import { LifeReadoutWithDelta } from './lifeChangeFlash';
 import { LifeField } from './playerMenu';
 
 import PlayingCardsFanIcon from '~/lib/icons/playing-cards-fan.svg';
@@ -188,13 +193,10 @@ const CommanderHealthPopover: Component<{
                     <div onClick={stopPropagation} onPointerDown={stopPointer}>
 
                       <LifeField
-
                         compact
-
                         life={target.life}
-
+                        lifeFeedback={false}
                         title={`${target.name} commander health`}
-
                         onLifeChange={life =>
 
                           setTrackedOpponentCommanderLife(target.sessionId, life)
@@ -259,7 +261,13 @@ const PlayerListRow: Component<{ player: LifeBarPlayer }> = props => {
 
   const handCount = createMemo(() => playerHandCount(props.player.clientId));
 
-
+  const life = createMemo(() => {
+    players();
+    const area = playAreas[props.player.clientId];
+    const entry = area ? getPlayAreaPlayerEntry(area) : undefined;
+    if (typeof entry?.life === 'number') return entry.life;
+    return props.player.life ?? 0;
+  });
 
   return (
 
@@ -292,11 +300,14 @@ const PlayerListRow: Component<{ player: LifeBarPlayer }> = props => {
 
 
 
-      <div class={styles.lifeReadout} title='Life'>
-
-        {props.player.life ?? 0}
-
-      </div>
+      <LifeReadoutWithDelta
+        class={styles.lifeReadout}
+        title='Life'
+        value={life()}
+        playSound={false}
+        showDeltaFlash={!props.player.isLocal}
+        seatClientId={props.player.clientId}
+      />
 
 
 
@@ -341,17 +352,12 @@ export function LocalPlayerPanel() {
 
 
   const rowClass = () =>
-
     [
-
       styles.playerRow,
-
+      styles.localPlayerRow,
       localPlayer()?.isActiveTurn ? styles.playerRowActiveTurn : '',
-
     ]
-
       .filter(Boolean)
-
       .join(' ');
 
 
@@ -386,47 +392,28 @@ export function LocalPlayerPanel() {
 
 
 
-          <div onClick={stopPropagation} onPointerDown={stopPointer}>
-
+          <div
+            class={styles.localPlayerControls}
+            onClick={stopPropagation}
+            onPointerDown={stopPointer}>
             <LifeField
-
               compact
-
               life={localLife()}
-
               onLifeChange={life => {
-
                 const localState = provider.awareness.getLocalState();
-
                 provider.awareness.setLocalState({
-
                   ...localState,
-
                   life,
-
                 });
-
                 const gameId = getActiveGameId();
-
                 if (gameId) updateGameMetaLife(gameId, life, localState.commanderLife);
-
               }}
-
             />
 
-          </div>
-
-
-
-          <Show when={isMagicCardSystem(cardSystem)}>
-
-            <div onClick={stopPropagation} onPointerDown={stopPointer}>
-
+            <Show when={isMagicCardSystem(cardSystem)}>
               <CommanderHealthPopover editable />
-
-            </div>
-
-          </Show>
+            </Show>
+          </div>
 
         </div>
 
@@ -441,35 +428,28 @@ export function LocalPlayerPanel() {
 
 
 export default function PlayerListPanel() {
-
   const tablePlayers = createMemo(() => {
-
     players();
-
     turnOrderState();
-
     Object.values(playAreas);
-
     return getLifeBarPlayersInTurnOrder(turnOrderState());
-
   });
 
-
+  const roundNumber = createMemo(() => {
+    turnOrderState();
+    return getRoundNumber();
+  });
 
   return (
-
     <Show when={tablePlayers().length > 0}>
-
       <div class={styles.playerListPanel}>
-
-        <For each={tablePlayers()}>{player => <PlayerListRow player={player} />}</For>
-
+        <div class={styles.roundHeader}>Round {roundNumber()}</div>
+        <For each={tablePlayers()} by={player => player.clientId}>
+          {player => <PlayerListRow player={player} />}
+        </For>
       </div>
-
     </Show>
-
   );
-
 }
 
 

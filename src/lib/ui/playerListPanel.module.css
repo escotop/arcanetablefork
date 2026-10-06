@@ -15,6 +15,16 @@
   text-align: left;
 }
 
+.roundHeader {
+  padding: 0.1rem 0.5rem 0.3rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
+}
+
 .playerRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -88,6 +98,8 @@
 }
 
 .lifeReadout {
+  position: relative;
+  overflow: visible;
   display: flex;
   height: 1.75rem;
   min-width: 2.75rem;
@@ -170,4 +182,36 @@
   box-shadow: 0 8px 32px hsla(0 0% 0% / 0.22);
   padding: 0.35rem;
   text-align: left;
+}
+
+.localPlayerPanel .localPlayerRow {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.localPlayerPanel .localPlayerRow:hover {
+  background: hsl(var(--muted) / 0.45);
+}
+
+.localPlayerPanel .localPlayerRow.playerRowActiveTurn {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px hsl(45 93% 58% / 0.55);
+}
+
+.localPlayerControls {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.2rem 0.35rem;
+  border-radius: 0.45rem;
+  background: hsl(var(--background) / 0.95);
+  box-shadow:
+    inset 0 0 0 1px hsl(var(--border) / 0.65),
+    0 1px 2px hsla(0 0% 0% / 0.12);
+}
+
+.localPlayerPanel .localPlayerRow:hover .localPlayerControls {
+  background: hsl(var(--card));
+  box-shadow:
+    inset 0 0 0 1px hsl(var(--border) / 0.75),
+    0 1px 3px hsla(0 0% 0% / 0.18);
 }

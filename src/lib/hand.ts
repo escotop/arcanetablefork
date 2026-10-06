@@ -100,7 +100,7 @@ export class Hand implements CardZone {
     this.mesh.userData.zone = 'hand';
     this.mesh.userData.zoneId = id;
     this.mesh.setRotationFromEuler(HAND_ROTATION.clone());
-    this.mesh.position.set(0, -105, 10);
+    this.mesh.position.set(0, -105, 1);
     this.mesh.userData.id = id;
     this.mesh.userData.resting = this.mesh.position.clone();
     this.zone = 'hand';

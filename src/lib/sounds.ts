@@ -54,6 +54,11 @@ export function playCounterDownSound(remote = false, options?: PlaySoundOptions)
   playAudio('counterDown', remote, options);
 }
 
+export function playLifeChangeSound(delta: number, remote = false) {
+  if (delta > 0) playCounterUpSound(remote);
+  else if (delta < 0) playCounterDownSound(remote);
+}
+
 export function playPlayCardSound(remote = false, options?: PlaySoundOptions) {
   playAudio('playCard', remote, options);
 }

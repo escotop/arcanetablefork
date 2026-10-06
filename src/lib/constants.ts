@@ -7,6 +7,17 @@ export const CARD_THICKNESS = 0.3 / 4;
 export const CARD_STACK_OFFSET = 2.4;
 
 export const ZONE_OUTLINE_COLOR = 0x000;
+/** Battlefield edge highlight while this seat has the turn (matches player list active turn). */
+export const ACTIVE_TURN_BATTLEFIELD_OUTLINE_COLOR = 0xfacc15;
+/** Default battlefield zone height in play-area local space (hand sits at z≈1). */
+export const BATTLEFIELD_ZONE_Z = 2.5;
+/** Battlefield edge line offset on the zone mesh (local Z). */
+export const BATTLEFIELD_OUTLINE_Z = 0;
+/** Raised on active turn so the border clears neighboring battlefields without moving the zone. */
+export const ACTIVE_TURN_BATTLEFIELD_OUTLINE_Z = 0.05;
+/** Z span of the outline from base layer to top layer (local Z). */
+export const BATTLEFIELD_OUTLINE_Z_DEPTH = 0.26;
+export const BATTLEFIELD_OUTLINE_LAYERS = 2;
 export const CARD_ZONE_COLOR = 0x1a1533;
 export const TABLE_COLOR = 0x2c1b4e;
 

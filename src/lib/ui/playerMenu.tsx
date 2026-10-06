@@ -1,4 +1,4 @@
-import { Component, createMemo, createSignal, For, Show } from 'solid-js';
+import { Component, createEffect, createMemo, createSignal, For, on, Show } from 'solid-js';
 import { Card } from '~/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '~/components/ui/collapsible';
 import {
@@ -29,6 +29,8 @@ import { turnOrderState } from '../turnOrder';
 import { counters, localCustomCounters, openCounterDialog } from './counterDialog';
 import ChevronDownIcon from 'lucide-solid/icons/chevron-down';
 import ChevronUpIcon from 'lucide-solid/icons/chevron-up';
+import { LifeDeltaLayer, LifeReadoutWithDelta, useLifeDeltaFlash } from './lifeChangeFlash';
+import lifeFlashStyles from './lifeChangeFlash.module.css';
 
 function switchToCameraView(clientId: number, playerSessionId?: string) {
   const viewIndex = getCameraViewIndexForClientId(clientId, playerSessionId);
@@ -45,20 +47,38 @@ const LifeReadout: Component<{ value: number; title: string }> = props => {
   const className =
     'flex h-10 min-w-[5rem] shrink-0 items-center justify-center rounded-md border border-input bg-background px-2 text-base font-semibold tabular-nums';
 
-  return (
-    <div title={props.title} class={className}>
-      {props.value}
-    </div>
-  );
+  return <LifeReadoutWithDelta value={props.value} title={props.title} class={className} />;
 };
 
 export const LifeField: Component<{
   life: number;
   title?: string;
   compact?: boolean;
+  /** Flash/sound for life total changes; off for commander (CM) tracking fields. */
+  lifeFeedback?: boolean;
   onLifeChange: (life: number) => void;
 }> = props => {
+  const lifeFeedback = () => props.lifeFeedback !== false;
+  const { floaters, showDelta } = useLifeDeltaFlash();
+  let skipExternalLifeFlash = false;
   const [draft, setDraft] = createSignal<string | null>(null);
+
+  createEffect(
+    on(
+      () => props.life,
+      (value, previous) => {
+        if (!lifeFeedback()) return;
+        if (skipExternalLifeFlash) {
+          skipExternalLifeFlash = false;
+          return;
+        }
+        if (previous !== undefined && value !== previous) {
+          showDelta(value - previous);
+        }
+      },
+      { defer: true },
+    ),
+  );
   const displayValue = () => draft() ?? String(props.life);
   const fieldHeightClass = () => (props.compact ? 'h-9' : 'h-11');
   const fieldClass = () =>
@@ -79,36 +99,48 @@ export const LifeField: Component<{
     if (raw === null) return;
     const next = parseLifeInput(raw, props.life);
     setDraft(null);
-    if (next !== undefined) props.onLifeChange(next);
+    if (next !== undefined) applyLifeChange(next);
+  }
+
+  function applyLifeChange(next: number) {
+    const delta = next - props.life;
+    if (delta && lifeFeedback()) showDelta(delta);
+    skipExternalLifeFlash = true;
+    props.onLifeChange(next);
   }
 
   function adjust(delta: number) {
     setDraft(null);
-    props.onLifeChange(props.life + delta);
+    applyLifeChange(props.life + delta);
   }
 
   return (
     <div class='flex items-center gap-1'>
-      <TextField
-        style={{ width: fieldWidth() }}
-        value={displayValue()}
-        onChange={value => setDraft(value)}>
-        <TextFieldInput
-          type='text'
-          inputMode='numeric'
-          title={props.title ?? 'Life, +N/-N relative, or expressions like 40-6'}
-          class={fieldClass()}
-          onBlur={commit}
-          onKeyDown={e => {
-            if (e.key === 'Enter') {
-              e.currentTarget.blur();
-            } else if (e.key === 'Escape') {
-              setDraft(null);
-              e.currentTarget.blur();
-            }
-          }}
-        />
-      </TextField>
+      <div class={lifeFlashStyles.shell} style={{ width: fieldWidth() }}>
+        <Show when={lifeFeedback()}>
+          <LifeDeltaLayer floaters={floaters()} />
+        </Show>
+        <TextField
+          class='w-full'
+          value={displayValue()}
+          onChange={value => setDraft(value)}>
+          <TextFieldInput
+            type='text'
+            inputMode='numeric'
+            title={props.title ?? 'Life, +N/-N relative, or expressions like 40-6'}
+            class={fieldClass()}
+            onBlur={commit}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.currentTarget.blur();
+              } else if (e.key === 'Escape') {
+                setDraft(null);
+                e.currentTarget.blur();
+              }
+            }}
+          />
+        </TextField>
+      </div>
       <div class={buttonColumnClass()}>
         <button
           type='button'
@@ -211,6 +243,7 @@ export const LocalPlayer: Component<{ isActiveTurn?: boolean; life?: number; com
                             </span>
                             <LifeField
                               life={target.life}
+                              lifeFeedback={false}
                               title={`${target.name} commander health`}
                               onLifeChange={life =>
                                 setTrackedOpponentCommanderLife(target.sessionId, life)

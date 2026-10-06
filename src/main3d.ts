@@ -151,7 +151,8 @@ import {
   markLoadProfile,
   profileAsync,
 } from './lib/loadProfile';
-import { initTurnOrderSync } from './lib/turnOrder';
+import { resetPlayerLifeDeltaTracking, syncLifeDeltasFromAwareness } from './lib/playerLifeDeltaFlash';
+import { initTurnOrderSync, syncBattlefieldTurnOutlineHighlight } from './lib/turnOrder';
 import { createRestackEvent, createTransferCardEvent } from './lib/createEvents';
 
 var container;
@@ -520,7 +521,12 @@ export async function localInit(gameOptions: GameOptions) {
   dragTargets = [];
 
   provider.awareness.on('change', change => {
-    let newPlayers = Array.from(provider.awareness.getStates().entries()).map(([id, entry]) => ({
+    const states = Array.from(provider.awareness.getStates().entries()) as [
+      number,
+      Record<string, unknown>,
+    ][];
+    syncLifeDeltasFromAwareness(states);
+    let newPlayers = states.map(([id, entry]) => ({
       entry,
       id,
     }));
@@ -533,8 +539,13 @@ export async function localInit(gameOptions: GameOptions) {
     });
   });
 
+  const initialAwarenessStates = Array.from(provider.awareness.getStates().entries()) as [
+    number,
+    Record<string, unknown>,
+  ][];
+  syncLifeDeltasFromAwareness(initialAwarenessStates);
   setPlayers(
-    Array.from(provider.awareness.getStates().entries()).map(([id, entry]) => ({
+    initialAwarenessStates.map(([id, entry]) => ({
       entry,
       id,
     })),
@@ -661,6 +672,7 @@ export function readjustPlayAreas() {
     applyPlayerTransform(playArea.mesh, index);
     playArea?.updatePositions();
   });
+  syncBattlefieldTurnOutlineHighlight();
 }
 
 export async function loadDeckAndJoin(

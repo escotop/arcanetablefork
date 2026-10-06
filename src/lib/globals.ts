@@ -67,6 +67,7 @@ import { clearWaterdrops } from './waterdropEffect';
 import { clearPingSync } from './pingSync';
 import { clearVideoPings } from './pingVideoEffect';
 import { resetCameraView, captureLocalCameraView } from './cameraView';
+import { resetPlayerLifeDeltaTracking } from './playerLifeDeltaFlash';
 import { setupCameraDebugGui, resetCameraDebugGui } from './cameraDebugGui';
 import { clearSpanishPreview } from './spanishCardPreview';
 import { devLog } from './devLog';
@@ -1093,6 +1094,7 @@ export function cleanup() {
   
   setAnimating(false);
   setPlayers([]);
+  resetPlayerLifeDeltaTracking();
   setSelectedDeckId();
   setCapturedErrors([]);
   setIsSpectating(false);

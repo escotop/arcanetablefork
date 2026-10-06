@@ -59,6 +59,7 @@ import { createPassTurnEvent } from '../createEvents';
 import { getPlayAreaPlayerName } from '../playAreaNameTag';
 import { exportBugGameLogsZip, isBugGameLogActive } from '../bugGameLog';
 import { computeResetTurnOrderState, getActivePlayAreaClientIds, turnOrderState } from '../turnOrder';
+import PlayerBracketEstimate from './playerBracketEstimate';
 
 export default function SettingsOverlay(props: {
   isOpen: boolean;
@@ -326,6 +327,13 @@ export default function SettingsOverlay(props: {
                             {player.name}
                             {player.isLocal ? ' (you)' : ''}
                           </p>
+                          <Show when={params.gameId}>
+                            <PlayerBracketEstimate
+                              clientId={player.clientId}
+                              gameId={params.gameId}
+                              active={props.isOpen}
+                            />
+                          </Show>
                         </div>
                         <div class='flex shrink-0 items-center gap-2'>
                           <Button

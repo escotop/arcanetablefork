@@ -1,5 +1,13 @@
 import { DEFAULT_COMMANDER_LIFE } from './constants';
-import { gameState, getLocalPlayerClientId, playAreas, players, provider } from './globals';
+import {
+  gameState,
+  getActiveGameId,
+  getLocalPlayerClientId,
+  playAreas,
+  players,
+  provider,
+} from './globals';
+import { updateGameMetaLife } from './gameMeta';
 import type { PlayArea } from './playArea';
 import type { TurnOrderState } from './turnOrder';
 import type { PlayerAwarenessSnapshot } from './gameStateSnapshot';
@@ -168,7 +176,7 @@ function sortCommanderHealthTargets(
 }
 
 function toPlainTracking(tracking: Record<string, OpponentCommanderEntry>) {
-  const plain: Record<string, { name: string; life: number; clientId?: number }> = {};
+  const plain: Record<string, OpponentCommanderEntry> = {};
   for (const [sessionId, entry] of Object.entries(tracking)) {
     plain[sessionId] = {
       name: entry.name,
@@ -177,6 +185,23 @@ function toPlainTracking(tracking: Record<string, OpponentCommanderEntry>) {
     };
   }
   return plain;
+}
+
+/** CM changes on an opponent's commander mirror to this seat's life total. */
+function applyLocalPlayerLifeDelta(delta: number) {
+  if (!delta || !provider?.awareness) return;
+
+  const localState = provider.awareness.getLocalState();
+  const baseLife = localState?.life;
+  if (typeof baseLife !== 'number') return;
+
+  const nextLife = baseLife + delta;
+  provider.awareness.setLocalState({
+    ...localState,
+    life: nextLife,
+  });
+  const gameId = getActiveGameId();
+  if (gameId) updateGameMetaLife(gameId, nextLife, localState.commanderLife);
 }
 
 function writeOpponentCommanderTracking(tracking: Record<string, OpponentCommanderEntry>) {
@@ -314,6 +339,11 @@ export function setTrackedOpponentCommanderLife(sessionId: string, life: number)
   const tracking = readOpponentCommanderTracking();
   const existing = tracking[sessionId];
   if (!existing || existing.life === life) return;
+
+  const cmDelta = life - existing.life;
+  if (cmDelta) {
+    applyLocalPlayerLifeDelta(cmDelta);
+  }
 
   writeOpponentCommanderTracking({
     ...tracking,

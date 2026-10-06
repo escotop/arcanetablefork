@@ -14,12 +14,10 @@ import { useSearchParams } from '@solidjs/router';
 import {
   contextMenuSignal,
   customCardSpawnScreenPoint,
-  dispatchGameEvent,
   onConcede,
   setCustomCardSpawnScreenPoint,
 } from '~/lib/globals';
-import { createPassTurnEvent } from '~/lib/createEvents';
-import { computeNextTurnState } from '~/lib/turnOrder';
+import { dispatchPassTurn } from '~/lib/passTurnAction';
 import { Button } from '~/components/ui/button';
 import MoveSubMenu from './move-submenu';
 import { useMenuContext } from './context';
@@ -55,7 +53,7 @@ export default function TableMenuItems(props: MenuActionsProps) {
         component={menuCtx.item}
         class='w-full'
         onClick={() => {
-          dispatchGameEvent(createPassTurnEvent(computeNextTurnState()));
+          dispatchPassTurn();
         }}>
         Pass Turn <Dynamic component={menuCtx.shortcut}>space</Dynamic>
       </Dynamic>

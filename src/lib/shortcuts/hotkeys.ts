@@ -16,8 +16,8 @@ import { canPeekFaceDownBattlefieldCardInFocusPanel } from '../utils';
 import { drawCards, searchDeck } from './commands/deck';
 import { untapAll, adjustBattlefieldCardsPowerToughness, getPowerToughnessDeltaFromKey } from './commands/field';
 import { activateSpanishPreview } from '../spanishCardPreview';
-import { createPassTurnEvent } from '../createEvents';
-import { computeNextTurnState } from '../turnOrder';
+import { dispatchPassTurn } from '../passTurnAction';
+import { debounce } from 'lodash-es';
 import { Card } from '../constants';
 import { getOrderedPlayAreas } from '../cameraView';
 import { dismissZoomPanel, navigateKeyboardHandHover, setKeyboardHandHover, setCameraViewByPlayerIndex } from '../../main3d';
@@ -133,7 +133,7 @@ export function HotKeys() {
     });
 
     hotkeys('space', function () {
-      dispatchGameEvent(createPassTurnEvent(computeNextTurnState()));
+      dispatchPassTurn();
     });
 
     hotkeys('d', function () {
@@ -152,12 +152,19 @@ export function HotKeys() {
       selection.clearSelection();
     });
 
+    const cloneSelectedCards = debounce(
+      () => {
+        const area = playArea();
+        if (!area) return;
+        cards().forEach(card => area.clone(card.id));
+      },
+      250,
+      { leading: true, trailing: false },
+    );
+
     hotkeys('ctrl+c,command+c', function (e) {
       e.preventDefault();
-      const area = requirePlayArea();
-      cards().map(card => {
-        area.clone(card.id);
-      });
+      cloneSelectedCards();
     });
 
     hotkeys('ctrl+e,command+e', function (e) {
@@ -275,10 +282,19 @@ export function HotKeys() {
       area.dismissFromZone(area.revealZone);
     });
 
+    const cloneBattlefieldSelection = debounce(
+      () => {
+        const area = playArea();
+        if (!area) return;
+        cards().forEach(card => area.clone(card?.mesh.userData.id));
+      },
+      250,
+      { leading: true, trailing: false },
+    );
+
     hotkeys('c', 'battlefield', function (e) {
       e.preventDefault();
-      const area = requirePlayArea();
-      cards().forEach(card => area.clone(card?.mesh.userData.id));
+      cloneBattlefieldSelection();
     });
 
     hotkeys('f', 'battlefield', function (e) {
