@@ -33,6 +33,11 @@ import {
 import { importMoxfieldDecks } from '~/lib/moxfield/import';
 import type { MoxfieldDeckListItem } from '~/lib/moxfield/types';
 import BracketEstimateTag from './bracketEstimateTag';
+import {
+  DeckBracketFilterBar,
+  matchesBracketFilter,
+  type BracketFilter,
+} from './deckBracketFilter';
 
 interface MoxfieldImportModalProps {
   open: boolean;
@@ -182,18 +187,26 @@ export const MoxfieldImportModal: Component<MoxfieldImportModalProps> = props =>
   const [currentPage, setCurrentPage] = createSignal(0);
   const [totalPages, setTotalPages] = createSignal(0);
   const [deckFilterText, setDeckFilterText] = createSignal('');
+  const [bracketFilter, setBracketFilter] = createSignal<BracketFilter>('all');
 
   let loadAbort: AbortController | undefined;
 
   const filteredDecks = createMemo(() => {
     const query = deckFilterText().trim().toLowerCase();
-    const list = decks();
-    if (!query) return list;
-    return list.filter(deck => {
+    const bracket = bracketFilter();
+    return decks().filter(deck => {
+      if (!matchesBracketFilter({ bracketEstimate: deck.bracketEstimate }, bracket)) {
+        return false;
+      }
+      if (!query) return true;
       const haystack = `${deck.name} ${deck.commanderName ?? ''}`.toLowerCase();
       return haystack.includes(query);
     });
   });
+
+  const hasActiveDeckFilters = createMemo(
+    () => Boolean(deckFilterText().trim()) || bracketFilter() !== 'all',
+  );
 
   const selectedCount = createMemo(() => decks().filter(deck => deck.selected).length);
   const allSelected = createMemo(
@@ -213,6 +226,7 @@ export const MoxfieldImportModal: Component<MoxfieldImportModalProps> = props =>
     setCurrentPage(0);
     setTotalPages(0);
     setDeckFilterText('');
+    setBracketFilter('all');
     setLoading(false);
     setLoadingMore(false);
     setImporting(false);
@@ -396,9 +410,9 @@ export const MoxfieldImportModal: Component<MoxfieldImportModalProps> = props =>
                 <Show when={totalDeckCount() > 0}>
                   <p class='text-xs text-muted-foreground'>
                     Showing {decks().length} of {totalDeckCount()} decks
-                    <Show when={deckFilterText().trim()}>
+                    <Show when={hasActiveDeckFilters()}>
                       {' '}
-                      · {filteredDecks().length} matching search
+                      · {filteredDecks().length} matching filters
                     </Show>
                   </p>
                 </Show>
@@ -423,12 +437,17 @@ export const MoxfieldImportModal: Component<MoxfieldImportModalProps> = props =>
               />
             </TextField>
 
+            <DeckBracketFilterBar
+              value={bracketFilter()}
+              onChange={setBracketFilter}
+            />
+
             <Show
               when={filteredDecks().length > 0}
               fallback={
                 <p class='py-10 text-center text-sm text-muted-foreground'>
-                  {deckFilterText().trim()
-                    ? 'No decks match your search.'
+                  {hasActiveDeckFilters()
+                    ? 'No decks match your search or bracket filter.'
                     : 'No decks to show.'}
                 </p>
               }>

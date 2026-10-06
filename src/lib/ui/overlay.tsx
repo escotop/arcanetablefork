@@ -46,7 +46,13 @@ import RandomToolsPanel from './randomToolsPanel';
 import PlayerListPanel, { LocalPlayerPanel } from './playerListPanel';
 import RevealMenu from './revealMenu';
 import TokenSearchMenu from './tokenMenu';
-import { useSearchParams } from '@solidjs/router';
+import { useNavigate, useSearchParams } from '@solidjs/router';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from '~/components/ui/alert-dialog';
 import SettingsOverlay from './settingsOverlay';
 import { PlayArea } from '../playArea';
 import Announcement from './announcement';
@@ -277,6 +283,8 @@ export default function Overlay() {
 
 export function MainMenu(props: { playArea?: PlayArea }) {
   let [isLogVisible, setIsLogVisible] = createSignal(false);
+  const [exitConfirmOpen, setExitConfirmOpen] = createSignal(false);
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const isDialogVisible = (dialog: string) => dialog === searchParams.dialog;
@@ -315,6 +323,32 @@ export function MainMenu(props: { playArea?: PlayArea }) {
             onOpen={() => setVisibleDialog('settings')}
             onClose={() => setVisibleDialog(undefined)}
           />
+          <MenubarItem class='w-full' onClick={() => setExitConfirmOpen(true)}>
+            Exit
+          </MenubarItem>
+          <AlertDialog open={exitConfirmOpen()} onOpenChange={setExitConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogTitle>Leave game?</AlertDialogTitle>
+              <AlertDialogDescription>
+                You will leave this table and return to the home page. Other players can keep
+                playing.
+              </AlertDialogDescription>
+              <div class='mt-4 flex justify-end gap-2'>
+                <Button type='button' variant='outline' onClick={() => setExitConfirmOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type='button'
+                  variant='destructive'
+                  onClick={() => {
+                    setExitConfirmOpen(false);
+                    navigate('/', { replace: true });
+                  }}>
+                  Exit
+                </Button>
+              </div>
+            </AlertDialogContent>
+          </AlertDialog>
         </MenubarMenu>
       </Menubar>
       <Show when={isLogVisible()}>
