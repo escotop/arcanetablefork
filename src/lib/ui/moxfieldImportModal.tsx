@@ -363,7 +363,9 @@ export const MoxfieldImportModal: Component<MoxfieldImportModalProps> = props =>
       });
       setDeckStore(merged);
       toast.success(`Imported ${imported.length} deck${imported.length === 1 ? '' : 's'}`);
+      setImporting(false);
       handleOpenChange(false);
+      return;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Import failed.');
     } finally {
@@ -501,14 +503,6 @@ export const MoxfieldImportModal: Component<MoxfieldImportModalProps> = props =>
           </Show>
 
           <div class='ml-auto flex gap-2'>
-            <Button
-              type='button'
-              variant='ghost'
-              disabled={loading() || importing()}
-              onClick={() => handleOpenChange(false)}>
-              Cancel
-            </Button>
-
             <Show
               when={step() === 'select'}
               fallback={
