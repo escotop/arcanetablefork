@@ -1616,14 +1616,19 @@ async function onDocumentDrop(event) {
           const hand = toZone as Hand;
           const card = cardsById.get(target.userData.id)!;
           const insertIndex = nextHandInsertIndex ?? hand.cards.indexOf(card);
-          dispatchGameEvent(
-            createTransferCardEvent(card, hand, hand, {
-              addOptions: {
-                insertIndex,
-                skipLocalAnimation: true,
-              },
-            }),
-          );
+          const transferEvent = createTransferCardEvent(card, hand, hand, {
+            addOptions: {
+              insertIndex,
+              skipLocalAnimation: true,
+            },
+          });
+          const extended = transferEvent.payload.extendedOptions;
+          await transferCard(card, hand, hand, {
+            preventTransmit: true,
+            addOptions: extended?.addOptions,
+            userData: extended?.userData,
+          });
+          dispatchGameEvent(transferEvent);
           if (nextHandInsertIndex !== undefined) nextHandInsertIndex++;
           shouldClearSelection = true;
           continue;
@@ -1646,18 +1651,23 @@ async function onDocumentDrop(event) {
           : toZone.mesh.worldToLocal(intersection.point.clone());
       expect(!!card, `card not found`, { card });
 
-      dispatchGameEvent(
-        createTransferCardEvent(card, fromZone, toZone, {
-          addOptions: {
-            ...(toZone.zone !== 'hand' ? { skipLocalAnimation: true } : {}),
-            ...(toZone.zone === 'deck'
-              ? { location: 'top' as const }
-              : toZone.zone === 'hand'
-                ? { insertIndex: nextHandInsertIndex ?? toZone.cards.length }
-                : { positionArray: position.toArray() }),
-          },
-        }),
-      );
+      const transferEvent = createTransferCardEvent(card, fromZone, toZone, {
+        addOptions: {
+          ...(toZone.zone !== 'hand' ? { skipLocalAnimation: true } : {}),
+          ...(toZone.zone === 'deck'
+            ? { location: 'top' as const }
+            : toZone.zone === 'hand'
+              ? { insertIndex: nextHandInsertIndex ?? toZone.cards.length }
+              : { positionArray: position.toArray() }),
+        },
+      });
+      const extended = transferEvent.payload.extendedOptions;
+      await transferCard(card, fromZone, toZone, {
+        preventTransmit: true,
+        addOptions: extended?.addOptions,
+        userData: extended?.userData,
+      });
+      dispatchGameEvent(transferEvent);
       if (toZone.zone === 'hand' && nextHandInsertIndex !== undefined) nextHandInsertIndex++;
       shouldClearSelection = true;
     }

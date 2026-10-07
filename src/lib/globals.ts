@@ -1011,6 +1011,7 @@ export async function flushDispatchEventQueue() {
       timing: batchTiming,
       events,
       clientID: events[0].clientID,
+      locallyApplied: true,
     };
     sanitizeGameLogEvent(event);
     safeGameLogPush([event]);

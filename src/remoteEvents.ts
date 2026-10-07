@@ -698,7 +698,11 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
     return;
   }
 
-  if (cardId && !card && event.type !== 'createCard') {
+  if (cardId && !card && event.type === 'modifyCard') {
+    return;
+  }
+
+  if (cardId && !card && event.type !== 'createCard' && event.type !== 'transferCard') {
     logBugGameMissingCardForEvent(event, String(cardId));
     Sentry.captureException(new Error('card is undefined'), {
       tags: { event_type: event.type },
@@ -949,6 +953,18 @@ const EVENTS = {
     }
 
     if (!card) {
+      const missingToZone = resolveZoneFromEvent(event.payload.toZoneId, playArea);
+      const missingFromZone = resolveZoneFromEvent(event.payload.fromZoneId, playArea);
+      const redundantDestroy =
+        !missingToZone ||
+        missingToZone.zone === 'graveyard' ||
+        missingToZone.zone === 'exile';
+      const redundantFromBattlefield =
+        missingFromZone?.zone === 'battlefield' || !missingFromZone;
+      if (redundantDestroy && redundantFromBattlefield) {
+        logBugGameRemoteTransferOutcome(event, 'dropped', 'already-applied-or-destroyed');
+        return;
+      }
       logBugGameRemoteTransferOutcome(event, 'dropped', 'unresolved-card');
       return;
     }
