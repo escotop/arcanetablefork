@@ -257,33 +257,43 @@ async function tryBatchReplayEvent(
   return false;
 }
 
+function expandBulkChildEvents(srcEvent: Event) {
+  return (srcEvent.events ?? [])
+    .map(e => {
+      e.clientID = srcEvent.clientID;
+      e.locallyApplied = srcEvent.locallyApplied;
+      return e;
+    })
+    .filter(e => !shouldSkipEventOnCatchUp(e));
+}
+
+function tryAddLogMessage(event: Event) {
+  try {
+    addLogMessage(event);
+  } catch (e) {
+    logReloadOther('process-events-add-log-failed', {
+      type: event.type,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    Sentry.captureException(e, 'addLogMessage');
+    logger.error(e);
+  }
+}
+
 async function processGameLogEntry(srcEvent: Event) {
   if (shouldSkipLocallyAppliedEvent(srcEvent)) {
     if (isLoadProfiling()) recordReplaySkip('local');
-    if (srcEvent.type !== 'bulk') {
-      try {
-        addLogMessage(srcEvent);
-      } catch (e) {
-        logReloadOther('process-events-add-log-failed', {
-          type: srcEvent.type,
-          error: e instanceof Error ? e.message : String(e),
-        });
-        Sentry.captureException(e, 'addLogMessage');
-        logger.error(e);
-      }
+    const eventsToLog =
+      srcEvent.type === 'bulk' ? expandBulkChildEvents(srcEvent) : [srcEvent];
+    for (const event of eventsToLog) {
+      tryAddLogMessage(event);
     }
     return;
   }
 
   if (srcEvent.type === 'bulk') {
     timing = srcEvent.timing;
-    events = srcEvent.events
-      .map(e => {
-        e.clientID = srcEvent.clientID;
-        e.locallyApplied = srcEvent.locallyApplied;
-        return e;
-      })
-      .filter(e => !shouldSkipEventOnCatchUp(e));
+    events = expandBulkChildEvents(srcEvent);
     if (isLoadProfiling()) recordReplayBatch(events.length);
     if (!events.length) return;
   } else {
@@ -301,17 +311,8 @@ async function processGameLogEntry(srcEvent: Event) {
       if (isLoadProfiling()) recordReplaySkip('catchUp');
       continue;
     }
-    try {
-      logReloadOther('process-events-handle-start', { type: event.type, clientID: event.clientID });
-      addLogMessage(event);
-    } catch (e) {
-      logReloadOther('process-events-add-log-failed', {
-        type: event.type,
-        error: e instanceof Error ? e.message : String(e),
-      });
-      Sentry.captureException(e, 'addLogMessage');
-      logger.error(e);
-    }
+    logReloadOther('process-events-handle-start', { type: event.type, clientID: event.clientID });
+    tryAddLogMessage(event);
     if (shouldSkipLocallyAppliedEvent(event)) {
       if (isLoadProfiling()) recordReplaySkip('local');
       continue;

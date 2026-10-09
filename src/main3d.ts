@@ -1625,6 +1625,7 @@ async function onDocumentDrop(event) {
           const extended = transferEvent.payload.extendedOptions;
           await transferCard(card, hand, hand, {
             preventTransmit: true,
+            localSounds: true,
             addOptions: extended?.addOptions,
             userData: extended?.userData,
           });
@@ -1664,6 +1665,7 @@ async function onDocumentDrop(event) {
       const extended = transferEvent.payload.extendedOptions;
       await transferCard(card, fromZone, toZone, {
         preventTransmit: true,
+        localSounds: true,
         addOptions: extended?.addOptions,
         userData: extended?.userData,
       });

@@ -12,7 +12,7 @@ import {
 } from './globals';
 import { logBugGameCardToBattlefield, logBugGameCardZoneTransfer } from './bugGameLog';
 import { applyLoyaltyWhenPlayingToBattlefield } from './loyaltyCounter';
-import { playDrawSound } from './sounds';
+import { playDrawSound, playPlayCardSound } from './sounds';
 import { Deck } from './deck';
 import { Hand } from './hand';
 import { serializeCardUserDataForLog } from './gameLogEvents';
@@ -30,6 +30,8 @@ interface ExtendedOptions<AddOptions extends DefaultAddOptions = {}> {
   addOptions?: AddOptions;
   userData?: unknown;
   preventTransmit?: boolean;
+  /** Play draw sound when applying locally with preventTransmit (e.g. drag-drop before dispatch). */
+  localSounds?: boolean;
 }
 
 // toZone and fromZone being undefined are actually valid in cases like tokens
@@ -41,6 +43,7 @@ export async function transferCard<AddOptions extends {}>(
     addOptions = {} as AddOptions,
     userData,
     preventTransmit = false,
+    localSounds = false,
   }: ExtendedOptions<AddOptions> = {},
 ) {
   if (!card) {
@@ -236,11 +239,22 @@ export async function transferCard<AddOptions extends {}>(
     toZone?.zone === 'hand' &&
     isLocalHandZone(toZone) &&
     fromZone?.zone !== 'hand' &&
-    !preventTransmit &&
     isEventCatchUpComplete() &&
-    !isHistoricalLogReplayInProgress()
+    !isHistoricalLogReplayInProgress() &&
+    (!preventTransmit || localSounds)
   ) {
     playDrawSound(false);
+  }
+
+  if (
+    fromZone?.zone === 'hand' &&
+    isLocalHandZone(fromZone) &&
+    toZone?.zone === 'battlefield' &&
+    isEventCatchUpComplete() &&
+    !isHistoricalLogReplayInProgress() &&
+    (!preventTransmit || localSounds)
+  ) {
+    playPlayCardSound(false);
   }
 
   if (!preventTransmit) {

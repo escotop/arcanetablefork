@@ -3,7 +3,12 @@ import { CatmullRomCurve3, Euler, Group, Mesh, MeshStandardMaterial, Object3D, Q
 import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import { getPlayAreaPlayerColor, textColorOnBackground } from './playerColor';
 import { animateObject, cancelAnimation } from './animations';
-import { playCounterSoundForModifierChange, playDrawSound, playShuffleDeckSound } from './sounds';
+import {
+  playCounterSoundForModifierChange,
+  playDrawSound,
+  playShuffleDeckSound,
+  playTapSound,
+} from './sounds';
 import { slimCardDetailForLog } from './gameLogEvents';
 import {
   applyCardOrientation,
@@ -886,6 +891,7 @@ export class PlayArea {
     if (!options.syncOnly) {
       setCardData(cardMesh, 'isTapped', !cardMesh.userData.isTapped);
       if (this.isLocalPlayArea && isEventCatchUpComplete()) {
+        playTapSound(false);
         dispatchGameEvent(createTapEvent(cardMesh));
         logBugGameTapLocal(cardMesh);
       }
