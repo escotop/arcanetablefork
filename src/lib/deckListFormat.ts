@@ -16,6 +16,10 @@ export function formatDeckListLine(card: CardEntry | DetailedCardEntry) {
   return parts.join(' ');
 }
 
+export function formatDeckPlainListLine(card: CardEntry | DetailedCardEntry) {
+  return `${card.qty} ${card.name}`;
+}
+
 export function formatDeckExportContent(deck: {
   cards: Record<string, DetailedCardEntry>;
   sideboard?: Record<string, DetailedCardEntry>;
@@ -27,6 +31,25 @@ export function formatDeckExportContent(deck: {
   const sideboardLines = Object.values(deck.sideboard ?? {})
     .filter(card => card.qty)
     .map(card => formatDeckListLine(card));
+
+  if (sideboardLines.length > 0) {
+    mainLines = [...mainLines, '', 'SIDEBOARD:', ...sideboardLines];
+  }
+
+  return mainLines.join('\n');
+}
+
+export function formatDeckPlainExportContent(deck: {
+  cards: Record<string, DetailedCardEntry>;
+  sideboard?: Record<string, DetailedCardEntry>;
+}): string {
+  let mainLines = Object.values(deck.cards)
+    .filter(card => card.qty)
+    .map(card => formatDeckPlainListLine(card));
+
+  const sideboardLines = Object.values(deck.sideboard ?? {})
+    .filter(card => card.qty)
+    .map(card => formatDeckPlainListLine(card));
 
   if (sideboardLines.length > 0) {
     mainLines = [...mainLines, '', 'SIDEBOARD:', ...sideboardLines];

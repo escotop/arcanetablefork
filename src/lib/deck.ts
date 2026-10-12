@@ -591,7 +591,13 @@ export function loadCardList(cardList: string): CardEntry[] {
 
 export { parseImportedCardList } from './deckParser';
 
-export { formatDeckListLine, getCardCollectorNumber, formatDeckExportContent } from './deckListFormat';
+export {
+  formatDeckListLine,
+  formatDeckPlainExportContent,
+  formatDeckPlainListLine,
+  getCardCollectorNumber,
+  formatDeckExportContent,
+} from './deckListFormat';
 export { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
 
 function normalizeSetCode(set?: string) {

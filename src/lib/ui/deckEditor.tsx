@@ -37,6 +37,7 @@ import {
   entryToPrintingOption,
   fetchCardInfo,
   formatDeckExportContent,
+  formatDeckPlainExportContent,
   getPrintingPreviewUrl,
   populateCardInfo,
   prefetchCardPrintings,
@@ -967,6 +968,12 @@ export const DeckEditor: Component<Props> = props => {
     trackDeep(deck.sideboard);
     return formatDeckExportContent(deck);
   });
+
+  const deckExportPlainContent = createMemo(() => {
+    trackDeep(deck.cards);
+    trackDeep(deck.sideboard);
+    return formatDeckPlainExportContent(deck);
+  });
   createEffect(() => {
     typeFilter();
     catalogTypeFilter();
@@ -1871,6 +1878,7 @@ export const DeckEditor: Component<Props> = props => {
           <ExportDeckModal
             open={exportDialogOpen()}
             content={deckExportContent()}
+            plainContent={deckExportPlainContent()}
             onClose={closeExportDialog}
           />
         </Show>

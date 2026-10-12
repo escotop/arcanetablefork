@@ -16,11 +16,12 @@ import CopyIcon from 'lucide-solid/icons/copy';
 interface Props {
   open: boolean;
   content: string;
+  plainContent: string;
   onClose(): void;
 }
 
 const ExportDeckModal: Component<Props> = props => {
-  const [copied, setCopied] = createSignal(false);
+  const [copied, setCopied] = createSignal<'full' | 'plain' | false>(false);
   let textareaRef: HTMLTextAreaElement | undefined;
 
   createEffect(() => {
@@ -29,13 +30,13 @@ const ExportDeckModal: Component<Props> = props => {
     textareaRef.select();
   });
 
-  async function handleCopy() {
-    if (!props.content) return;
+  async function copyText(text: string, mode: 'full' | 'plain') {
+    if (!text) return;
 
     try {
-      await navigator.clipboard.writeText(props.content);
-      setCopied(true);
-      toast.success('Deck list copied');
+      await navigator.clipboard.writeText(text);
+      setCopied(mode);
+      toast.success(mode === 'plain' ? 'Plain deck list copied' : 'Deck list copied');
       setTimeout(() => setCopied(false), 1500);
     } catch {
       textareaRef?.focus();
@@ -69,13 +70,24 @@ const ExportDeckModal: Component<Props> = props => {
               </TextField>
             </div>
 
-            <DialogFooter>
+            <DialogFooter class='gap-2 sm:justify-end'>
               <Button type='button' variant='outline' onClick={props.onClose}>
                 Close
               </Button>
-              <Button type='button' disabled={!props.content} onClick={handleCopy}>
+              <Button
+                type='button'
+                variant='outline'
+                disabled={!props.plainContent}
+                onClick={() => void copyText(props.plainContent, 'plain')}>
                 <CopyIcon class='mr-2 size-4' />
-                {copied() ? 'Copied!' : 'Copy to clipboard'}
+                {copied() === 'plain' ? 'Copied!' : 'Copy plain text'}
+              </Button>
+              <Button
+                type='button'
+                disabled={!props.content}
+                onClick={() => void copyText(props.content, 'full')}>
+                <CopyIcon class='mr-2 size-4' />
+                {copied() === 'full' ? 'Copied!' : 'Copy to clipboard'}
               </Button>
             </DialogFooter>
           </DialogContentExtended>
