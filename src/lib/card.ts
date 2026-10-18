@@ -395,7 +395,8 @@ export function canAdjustCounterLabelHit(hit: CounterLabelHit) {
   const area = getLocalPlayArea();
   if (!card?.mesh || !area?.isLocalPlayArea) return false;
   if (card.mesh.userData.location !== 'battlefield') return false;
-  if (card.mesh.userData.clientId !== getLocalPlayerClientId()) return false;
+  const onLocalBattlefield = area.battlefieldZone.cards.some(entry => entry.id === card.id);
+  if (!onLocalBattlefield) return false;
   return true;
 }
 

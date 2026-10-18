@@ -61,6 +61,8 @@ import { exportBugGameLogsZip, isBugGameLogActive } from '../bugGameLog';
 import { computeResetTurnOrderState, getActivePlayAreaClientIds, turnOrderState } from '../turnOrder';
 import { copyPlayerDeckToClipboard } from '../deckExport';
 import PlayerBracketEstimate from './playerBracketEstimate';
+import PlaymatPickerModal from './playmatPickerModal';
+import { syncLocalPlaymat, type SavedPlaymat } from '../playmat';
 
 export default function SettingsOverlay(props: {
   isOpen: boolean;
@@ -80,6 +82,7 @@ export default function SettingsOverlay(props: {
     null,
   );
   const [resetTurnConfirmOpen, setResetTurnConfirmOpen] = createSignal(false);
+  const [playmatPickerOpen, setPlaymatPickerOpen] = createSignal(false);
   const localPlayer = () =>
     players().find(player => player.id === provider?.awareness?.clientID)?.entry;
   const playerColor = () =>
@@ -100,6 +103,11 @@ export default function SettingsOverlay(props: {
   function setPlayerColor(color: string) {
     setSettings('playerColor', color);
     syncLocalPlayerColor(color);
+  }
+
+  function setPlaymat(playmat: SavedPlaymat | undefined) {
+    setSettings('playmat', playmat);
+    syncLocalPlaymat();
   }
 
   function handleExportGameState() {
@@ -313,6 +321,30 @@ export default function SettingsOverlay(props: {
               <span class='text-sm text-muted-foreground font-mono'>{playerColor()}</span>
             </div>
           </div>
+          <Show when={params.gameId}>
+            <div class='mt-4 space-y-2'>
+              <Label>Playmat</Label>
+              <div class='flex flex-wrap items-center gap-2'>
+                <Button type='button' variant='outline' onClick={() => setPlaymatPickerOpen(true)}>
+                  Set playmat
+                </Button>
+                <Show when={settings.playmat}>
+                  <Button type='button' variant='ghost' size='sm' onClick={() => setPlaymat(undefined)}>
+                    Quitar
+                  </Button>
+                </Show>
+              </div>
+              <Show when={settings.playmat}>
+                <p class='text-xs text-muted-foreground line-clamp-2'>{settings.playmat!.title}</p>
+              </Show>
+            </div>
+            <PlaymatPickerModal
+              open={playmatPickerOpen()}
+              onOpenChange={setPlaymatPickerOpen}
+              selected={settings.playmat}
+              onSelect={setPlaymat}
+            />
+          </Show>
           <Show when={params.gameId}>
             <div class='mt-4 space-y-2'>
               <Label>Players</Label>

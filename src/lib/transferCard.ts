@@ -129,7 +129,9 @@ export async function transferCard<AddOptions extends {}>(
       addOptions.destroy = true;
     }
     if (
-      (toZone.zone === 'graveyard' || toZone.zone === 'exile') &&
+      (toZone.zone === 'graveyard' ||
+        toZone.zone === 'exile' ||
+        toZone.zone === 'deck') &&
       card.mesh.userData.isClone
     ) {
       addOptions.destroy = true;

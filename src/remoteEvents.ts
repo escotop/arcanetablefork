@@ -17,6 +17,7 @@ import {
 import { Card } from './lib/constants';
 import type { CardId } from './game-engine/types';
 import { removeOpponentCommanderTracking } from './lib/commanderTracking';
+import { syncAllPlaymats } from './lib/playmat';
 import * as Sentry from '@sentry/solidstart';
 import {
   applyPlayerTransform,
@@ -798,6 +799,7 @@ export function syncPlayAreasFromGameLog() {
     applyJoinEvent(event);
   }
   logReloadOther('sync-playareas-from-gamelog-done', { joinCount: activeJoins.size });
+  syncAllPlaymats();
 }
 
 export function getActiveJoinClientIdsFromLog(): Set<number> {

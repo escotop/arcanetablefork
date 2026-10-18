@@ -46,6 +46,12 @@ import {
 export const WORLD_SNAPSHOT_VERSION = 1;
 
 const LOCAL_WORLD_SNAPSHOT_PREFIX = 'arcanetable-local-world-snapshot:';
+const LOCAL_SNAPSHOT_DEBOUNCE_MS = 2_500;
+/** Stay under typical ~5MB localStorage limits (UTF-16 overhead). */
+const LOCAL_SNAPSHOT_MAX_BYTES = 3_500_000;
+
+let localSnapshotDebounce: ReturnType<typeof setTimeout> | undefined;
+let lastPersistedLocalLogLength = -1;
 
 export interface SyncBarrier {
   id: string;
@@ -142,6 +148,7 @@ function capturePlayerAwareness(): PlayerAwarenessSnapshot[] {
       ? JSON.parse(JSON.stringify(entry.opponentCommanderTracking))
       : undefined,
     color: entry.color,
+    playmat: entry.playmat ? JSON.parse(JSON.stringify(entry.playmat)) : entry.playmat,
     counters: entry.counters ? { ...entry.counters } : undefined,
     isSpectating: entry.isSpectating,
   }));
@@ -191,20 +198,62 @@ function readLocalWorldSnapshot(gameId: string): WorldSnapshot | undefined {
   }
 }
 
-function persistLocalWorldSnapshot(gameId: string) {
+function pruneStaleLocalWorldSnapshots(activeGameId: string) {
+  const activeKey = `${LOCAL_WORLD_SNAPSHOT_PREFIX}${activeGameId}`;
+  for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith(LOCAL_WORLD_SNAPSHOT_PREFIX) || key === activeKey) continue;
+    localStorage.removeItem(key);
+  }
+}
+
+function persistLocalWorldSnapshot(gameId: string, options: { force?: boolean } = {}) {
   if (!gameId) return;
   if (!Object.values(playAreas).some(area => Boolean(area))) return;
 
   const snapshot = exportWorldSnapshot('local');
+  if (!options.force && snapshot.logLength === lastPersistedLocalLogLength) return;
+
+  const payload = JSON.stringify(snapshot);
+  if (payload.length > LOCAL_SNAPSHOT_MAX_BYTES) {
+    devLog.warn('[worldSnapshot] Local snapshot too large for localStorage; skipping persist', {
+      gameId,
+      bytes: payload.length,
+      logLength: snapshot.logLength,
+    });
+    return;
+  }
+
+  const storageKey = `${LOCAL_WORLD_SNAPSHOT_PREFIX}${gameId}`;
   try {
-    localStorage.setItem(`${LOCAL_WORLD_SNAPSHOT_PREFIX}${gameId}`, JSON.stringify(snapshot));
+    localStorage.setItem(storageKey, payload);
+    lastPersistedLocalLogLength = snapshot.logLength;
     devLog.debug('[worldSnapshot] Local snapshot saved', {
       gameId,
       logLength: snapshot.logLength,
     });
   } catch (error) {
+    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+      pruneStaleLocalWorldSnapshots(gameId);
+      try {
+        localStorage.setItem(storageKey, payload);
+        lastPersistedLocalLogLength = snapshot.logLength;
+        return;
+      } catch (retryError) {
+        devLog.warn('[worldSnapshot] Local snapshot save failed after prune', retryError);
+        return;
+      }
+    }
     devLog.warn('[worldSnapshot] Local snapshot save failed', error);
   }
+}
+
+function schedulePersistLocalWorldSnapshot(gameId: string) {
+  if (localSnapshotDebounce) clearTimeout(localSnapshotDebounce);
+  localSnapshotDebounce = setTimeout(() => {
+    localSnapshotDebounce = undefined;
+    persistLocalWorldSnapshot(gameId);
+  }, LOCAL_SNAPSHOT_DEBOUNCE_MS);
 }
 
 function pickBestWorldSnapshot(...candidates: (WorldSnapshot | undefined)[]): WorldSnapshot | undefined {
@@ -399,6 +448,7 @@ function restorePlayerAwareness(snapshots: PlayerAwarenessSnapshot[], gameId: st
     commanderLife: snapshot.commanderLife ?? localState.commanderLife,
     opponentCommanderTracking: snapshot.opponentCommanderTracking ?? localState.opponentCommanderTracking,
     color: snapshot.color ?? localState.color,
+    playmat: snapshot.playmat ?? localState.playmat,
     counters: snapshot.counters ?? localState.counters,
     isSpectating: snapshot.isSpectating ?? localState.isSpectating,
   });
@@ -809,12 +859,17 @@ export async function acquireWorldSnapshot(
 export function setupLocalWorldSnapshotSync(getGameId: () => string | undefined) {
   setOnGameLogProcessed(() => {
     const gameId = getGameId();
-    if (gameId) persistLocalWorldSnapshot(gameId);
+    if (gameId) schedulePersistLocalWorldSnapshot(gameId);
   });
 
   const flushLocalSnapshot = () => {
     const gameId = getGameId();
-    if (gameId) persistLocalWorldSnapshot(gameId);
+    if (!gameId) return;
+    if (localSnapshotDebounce) {
+      clearTimeout(localSnapshotDebounce);
+      localSnapshotDebounce = undefined;
+    }
+    persistLocalWorldSnapshot(gameId, { force: true });
   };
 
   if (typeof window !== 'undefined') {

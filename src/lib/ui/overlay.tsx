@@ -24,6 +24,7 @@ import {
   hoverSignal,
   isSpectating,
   onConcede,
+  players,
   playAreas,
   selection,
   setCardSearchModalData,
@@ -68,6 +69,7 @@ import {
   spanishPreviewUi,
 } from '../spanishCardPreview';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
+import { syncAllPlaymats, syncLocalPlaymat } from '../playmat';
 
 export default function Overlay() {
   let userData = () => hoverSignal()?.mesh?.userData;
@@ -96,6 +98,19 @@ export default function Overlay() {
   const isOwner = () => userData()?.clientId === getLocalPlayerClientId();
   const location = () => userData()?.location;
   const playArea = () => getLocalPlayArea();
+
+  createEffect(() => {
+    settings.playmat;
+    playArea();
+    syncLocalPlaymat();
+    syncAllPlaymats();
+  });
+
+  createEffect(() => {
+    players();
+    syncAllPlaymats();
+  });
+
   const focusCameraStyle = () => {
     if (hoverSignal()?.mesh?.userData?.location === 'hand') {
       return { right: `0px`, top: `0` };

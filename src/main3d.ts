@@ -102,6 +102,7 @@ import { Hand } from './lib/hand';
 import { PlayArea } from './lib/playArea';
 import { ensureLoyaltyCountersOnBattlefield } from './lib/loyaltyCounter';
 import { getPlayAreaPlayerName } from './lib/playAreaNameTag';
+import { syncAllPlaymats } from './lib/playmat';
 import { resolvePlayerColor } from './lib/playerColor';
 import { isPlayerNameTaken, PLAYER_NAME_TAKEN_MESSAGE } from './lib/playerNameAvailability';
 import { handlePingAwarenessChanges, isCardPingTarget, publishTablePingFromHit } from './lib/pingSync';
@@ -194,6 +195,7 @@ function applyReconnectedPlayerAwareness(gameId: string, playerSessionId: string
     'color',
     settings.playerColor ?? resolvePlayerColor({ name: meta?.name ?? localState.name }),
   );
+  provider.awareness.setLocalStateField('playmat', settings.playmat ?? null);
 }
 
 function waitForProviderSync(maxWaitMs = 8000): Promise<{
@@ -530,6 +532,7 @@ export async function localInit(gameOptions: GameOptions) {
     }));
     setPlayers(newPlayers);
     handlePingAwarenessChanges(change);
+    syncAllPlaymats();
     refreshMultiplayerSyncState();
     void processEvents().then(() => {
       syncPlayAreasFromGameLog();
@@ -548,6 +551,7 @@ export async function localInit(gameOptions: GameOptions) {
       id,
     })),
   );
+  syncAllPlaymats();
 
   onLocalPlayAreaChanged(area => {
     playArea = area;
@@ -843,6 +847,7 @@ export async function loadDeckAndJoin(
     'color',
     settings.playerColor ?? resolvePlayerColor({ name: settings.name }),
   );
+  provider.awareness.setLocalStateField('playmat', settings.playmat ?? null);
   await ensureLoyaltyCountersOnBattlefield(playArea);
   sendEvent({ type: 'join', payload: playArea.getLocalState() });
   counters.forEach(counter => sendEvent({ type: 'createCounter', payload: { counter } }));

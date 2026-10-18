@@ -5,6 +5,7 @@ import path from 'node:path';
 import { handleImageProxyRequest } from './scripts/image-proxy-handler.mjs';
 import { handleMoxfieldProxyRequest } from './scripts/moxfield-proxy-handler.mjs';
 import { handleScryfallProxyRequest } from './scripts/scryfall-proxy-handler.mjs';
+import { handleMtgplaymatsProxyRequest } from './scripts/mtgplaymats-proxy-handler.mjs';
 import { bodyForNodeResponse } from './scripts/node-response-body.mjs';
 
 function readRequestBody(req: NodeJS.ReadableStream): Promise<string | undefined> {
@@ -44,6 +45,16 @@ function proxyDevPlugin() {
         // Moxfield proxy
         if (req.url?.startsWith('/api/moxfield')) {
           const result = await handleMoxfieldProxyRequest(req.url);
+          res.statusCode = result.status;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.end(JSON.stringify(result.body));
+          return;
+        }
+
+        // MTGPlaymats catalog (Shopify products.json)
+        if (req.url?.startsWith('/api/mtgplaymats')) {
+          const result = await handleMtgplaymatsProxyRequest(req.url);
           res.statusCode = result.status;
           res.setHeader('Content-Type', 'application/json');
           res.setHeader('Access-Control-Allow-Origin', '*');

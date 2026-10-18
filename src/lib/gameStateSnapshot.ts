@@ -25,6 +25,7 @@ import {
 } from './playerSession';
 import { resetCustomCountersForSnapshot, restoreCustomCounters } from './ui/counterDialog';
 import { syncLocalPlayerColor } from './playerColor';
+import type { SavedPlaymat } from './playmat';
 
 export const GAME_STATE_SNAPSHOT_VERSION = 1;
 
@@ -36,6 +37,7 @@ export interface PlayerAwarenessSnapshot {
   commanderLife?: number;
   opponentCommanderTracking?: Record<string, { name: string; life: number; clientId?: number }>;
   color?: string;
+  playmat?: SavedPlaymat | null;
   counters?: Record<string, number>;
   isSpectating?: boolean;
 }
@@ -85,6 +87,7 @@ function capturePlayerAwareness(): PlayerAwarenessSnapshot[] {
       ? JSON.parse(JSON.stringify(entry.opponentCommanderTracking))
       : undefined,
     color: entry.color,
+    playmat: entry.playmat ? JSON.parse(JSON.stringify(entry.playmat)) : entry.playmat,
     counters: entry.counters ? { ...entry.counters } : undefined,
     isSpectating: entry.isSpectating,
   }));
@@ -170,6 +173,7 @@ function restoreLocalAwareness(snapshots: PlayerAwarenessSnapshot[], gameId: str
     commanderLife: snapshot.commanderLife ?? localState.commanderLife,
     opponentCommanderTracking: snapshot.opponentCommanderTracking ?? localState.opponentCommanderTracking,
     color: snapshot.color ?? localState.color,
+    playmat: snapshot.playmat ?? localState.playmat,
     counters: snapshot.counters ?? localState.counters,
     isSpectating: snapshot.isSpectating ?? localState.isSpectating,
   });

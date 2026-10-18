@@ -1,4 +1,10 @@
-const ALLOWED_HOST_SUFFIXES = ['wasabisys.com', 'mtgcardbuilder.com', 'wp.com'];
+const ALLOWED_HOST_SUFFIXES = [
+  'wasabisys.com',
+  'mtgcardbuilder.com',
+  'wp.com',
+  'shopify.com',
+  'mtgplaymats.com',
+];
 
 export function isAllowedImageHost(hostname) {
   return ALLOWED_HOST_SUFFIXES.some(

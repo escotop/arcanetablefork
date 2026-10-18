@@ -253,7 +253,13 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
       card.mesh!.position.copy(position);
       card.mesh!.rotation.set(0, 0, 0);
       this.mesh.position.set(70, -55, this.cards.length * CARD_THICKNESS + 2.5);
-      this.condenseMeshes();
+      if (destroy) {
+        this.removeCard(card.mesh!);
+        cleanupCard(card);
+        setHoverSignal();
+      } else {
+        this.condenseMeshes();
+      }
       return;
     }
 
@@ -317,7 +323,13 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
         }
       }
       this.mesh.position.set(70, -55, this.cards.length * CARD_THICKNESS + 2.5);
-      queueMicrotask(() => this.condenseMeshes());
+      if (destroy) {
+        this.removeCard(card.mesh!);
+        cleanupCard(card);
+        setHoverSignal();
+      } else {
+        queueMicrotask(() => this.condenseMeshes());
+      }
       return;
     }
 

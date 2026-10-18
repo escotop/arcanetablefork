@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid';
 import { CatmullRomCurve3, Euler, Group, Mesh, MeshStandardMaterial, Object3D, Quaternion, Vector3 } from 'three';
 import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import { getPlayAreaPlayerColor, textColorOnBackground } from './playerColor';
+import { syncLocalPlaymat } from './playmat';
 import { animateObject, cancelAnimation } from './animations';
 import {
   playCounterSoundForModifierChange,
@@ -967,6 +968,7 @@ export class PlayArea {
     this.revealZone.enableLocalFeatures();
     this.tokenSearchZone.enableLocalFeatures();
     this.attachLocalDeckListener();
+    syncLocalPlaymat();
   }
 
   prefetchTokenMenuCache() {
