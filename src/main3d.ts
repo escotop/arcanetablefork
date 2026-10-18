@@ -31,7 +31,6 @@ import {
   cardSystem,
   cardsById,
   clock,
-  DEFAULT_CARD_BACK,
   dispatchGameEvent,
   expect,
   flushDispatchEventQueue,
@@ -64,7 +63,6 @@ import {
   css3dRenderer,
   patchCss3dPointerEvents,
   setAnimating,
-  setCardBackTexture,
   setContextMenuSignal,
   setHoverSignal,
   syncFocusPanelFacePeekForHover,
@@ -103,6 +101,7 @@ import { PlayArea } from './lib/playArea';
 import { ensureLoyaltyCountersOnBattlefield } from './lib/loyaltyCounter';
 import { getPlayAreaPlayerName } from './lib/playAreaNameTag';
 import { syncAllPlaymats } from './lib/playmat';
+import { syncAllCardBacks, syncLocalCardBack, syncLocalCardBackAndWait } from './lib/savedCardBack';
 import { resolvePlayerColor } from './lib/playerColor';
 import { isPlayerNameTaken, PLAYER_NAME_TAKEN_MESSAGE } from './lib/playerNameAvailability';
 import { handlePingAwarenessChanges, isCardPingTarget, publishTablePingFromHit } from './lib/pingSync';
@@ -196,6 +195,7 @@ function applyReconnectedPlayerAwareness(gameId: string, playerSessionId: string
     settings.playerColor ?? resolvePlayerColor({ name: meta?.name ?? localState.name }),
   );
   provider.awareness.setLocalStateField('playmat', settings.playmat ?? null);
+  provider.awareness.setLocalStateField('mpcCardBack', settings.mpcCardBack ?? null);
 }
 
 function waitForProviderSync(maxWaitMs = 8000): Promise<{
@@ -351,9 +351,6 @@ async function finalizeReconnectedPlayArea(
   const meta = loadGameMeta(gameId);
   if (meta?.cardSystemUri && initCardSystem) {
     await profileAsync('card system init', () => initCardSystem(meta.cardSystemUri!));
-    await profileAsync('card back texture', () =>
-      setCardBackTexture(cardSystem.cardBack ?? DEFAULT_CARD_BACK),
-    );
   }
 
   applyReconnectedPlayerAwareness(gameId, playerSessionId);
@@ -371,13 +368,14 @@ async function finalizeReconnectedPlayArea(
   restoreCustomCounters(gameId);
   restorePlayAreaTokenPrintings(area, gameId);
   area.prefetchTokenMenuCache();
-
   markLoadProfile('reclaim play area ready', { joinClientId: area.clientId, cardCount: area.deck.cards.length });
-  void area.loadTextures();
-  renderer?.compile(scene, camera);
-  markLoadProfile('renderer compile (reconnect)');
   finishHistoricalLogReplay();
   setEventCatchUpComplete(true);
+  await profileAsync('reload play area textures (reconnect)', () => area.loadTextures());
+  syncAllCardBacks();
+  await profileAsync('card back texture (reconnect)', () => syncLocalCardBackAndWait());
+  renderer?.compile(scene, camera);
+  markLoadProfile('renderer compile (reconnect)');
   return true;
 }
 
@@ -406,9 +404,6 @@ async function reclaimLocalPlayArea(
   const meta = loadGameMeta(gameId);
   if (meta?.cardSystemUri && initCardSystem) {
     await profileAsync('card system init', () => initCardSystem(meta.cardSystemUri!));
-    await profileAsync('card back texture', () =>
-      setCardBackTexture(cardSystem.cardBack ?? DEFAULT_CARD_BACK),
-    );
   }
 
   applyReconnectedPlayerAwareness(gameId, playerSessionId);
@@ -431,11 +426,13 @@ async function reclaimLocalPlayArea(
   area.prefetchTokenMenuCache();
 
   markLoadProfile('reclaim play area ready', { joinClientId, cardCount: area.deck.cards.length });
-  void area.loadTextures();
-  renderer?.compile(scene, camera);
-  markLoadProfile('renderer compile (reconnect)');
   finishHistoricalLogReplay();
   setEventCatchUpComplete(true);
+  await profileAsync('reload play area textures (reconnect)', () => area.loadTextures());
+  syncAllCardBacks();
+  await profileAsync('card back texture (reconnect)', () => syncLocalCardBackAndWait());
+  renderer?.compile(scene, camera);
+  markLoadProfile('renderer compile (reconnect)');
   return true;
 }
 
@@ -533,6 +530,7 @@ export async function localInit(gameOptions: GameOptions) {
     setPlayers(newPlayers);
     handlePingAwarenessChanges(change);
     syncAllPlaymats();
+    syncAllCardBacks();
     refreshMultiplayerSyncState();
     void processEvents().then(() => {
       syncPlayAreasFromGameLog();
@@ -552,6 +550,7 @@ export async function localInit(gameOptions: GameOptions) {
     })),
   );
   syncAllPlaymats();
+  syncAllCardBacks();
 
   onLocalPlayAreaChanged(area => {
     playArea = area;
@@ -560,7 +559,10 @@ export async function localInit(gameOptions: GameOptions) {
     keyboardHandHoverMouseLock = undefined;
     readjustPlayAreas();
     scheduleBattlefieldOrientationSync();
-    void area.loadTextures();
+    void area.loadTextures().then(() => {
+      syncLocalCardBack();
+      syncAllCardBacks();
+    });
   });
 
   initTurnOrderSync();
@@ -808,9 +810,7 @@ export async function loadDeckAndJoin(
 
   let counters = deck?.counters ?? [];
 
-  await profileAsync('card back texture (new game)', () =>
-    setCardBackTexture(unwrap(settings.cardSystem.cardBack) ?? DEFAULT_CARD_BACK),
-  );
+  await profileAsync('card back texture (new game)', () => syncLocalCardBack());
 
   playArea = await profileAsync('PlayArea.FromDeck', () =>
     PlayArea.FromDeck(provider.awareness.clientID, deck),
@@ -848,6 +848,7 @@ export async function loadDeckAndJoin(
     settings.playerColor ?? resolvePlayerColor({ name: settings.name }),
   );
   provider.awareness.setLocalStateField('playmat', settings.playmat ?? null);
+  provider.awareness.setLocalStateField('mpcCardBack', settings.mpcCardBack ?? null);
   await ensureLoyaltyCountersOnBattlefield(playArea);
   sendEvent({ type: 'join', payload: playArea.getLocalState() });
   counters.forEach(counter => sendEvent({ type: 'createCounter', payload: { counter } }));

@@ -74,6 +74,7 @@ import { devLog } from './devLog';
 import { getPlayAreaPlayerEntry } from './playAreaNameTag';
 import { resolvePlayerColor, syncLocalPlayerColor } from './playerColor';
 import type { SavedPlaymat } from './playmat';
+import type { SavedCardBack } from './savedCardBack';
 
 export function expect(test: boolean, message: string, ...supplemental: any) {
   if (!test) {
@@ -365,6 +366,7 @@ export const [settings, setSettings] = createLocalStore('settings', {
   focusPanelScale: 1,
   playerColor: undefined as string | undefined,
   playmat: undefined as SavedPlaymat | undefined,
+  mpcCardBack: undefined as SavedCardBack | undefined,
   localSoundVolume: 0.65,
   remoteSoundVolume: 0.4,
 });

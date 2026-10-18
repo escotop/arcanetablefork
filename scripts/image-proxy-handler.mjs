@@ -4,6 +4,9 @@ const ALLOWED_HOST_SUFFIXES = [
   'wp.com',
   'shopify.com',
   'mtgplaymats.com',
+  'googleusercontent.com',
+  'google.com',
+  'gstatic.com',
 ];
 
 export function isAllowedImageHost(hostname) {

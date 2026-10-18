@@ -3,6 +3,7 @@ import { CatmullRomCurve3, Euler, Group, Mesh, MeshStandardMaterial, Object3D, Q
 import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import { getPlayAreaPlayerColor, textColorOnBackground } from './playerColor';
 import { syncLocalPlaymat } from './playmat';
+import { applyCardBackForPlayArea, syncLocalCardBack } from './savedCardBack';
 import { animateObject, cancelAnimation } from './animations';
 import {
   playCounterSoundForModifierChange,
@@ -39,6 +40,7 @@ import {
   expect,
   flushDispatchEventQueue,
   getLocalPlayerClientId,
+  settings,
   isEventCatchUpComplete,
   notifyHowItPlaysMulligan,
   setPeekFilterText,
@@ -49,7 +51,12 @@ import {
 import { Hand } from './hand';
 import { transferCard } from './transferCard';
 import { getCardKey, hydrateDeck } from './deckStore';
-import { cardFromDeckEntry, preloadStackTextures, scheduleOpponentHandTexturePrefetch } from './cardLoading';
+import {
+  cardFromDeckEntry,
+  prefetchDeckTopCardArt,
+  preloadStackTextures,
+  scheduleOpponentHandTexturePrefetch,
+} from './cardLoading';
 import { Deck as DeckData, DetailedCardEntry } from './constants';
 import { profileAsync } from './loadProfile';
 import { appendSavedTokenPrintings, mergeTokenPrintings, prefetchTokenMenuEntries, resolveTokenMenuEntries, restorePlayAreaTokenPrintings } from './deckTokens';
@@ -969,6 +976,7 @@ export class PlayArea {
     this.tokenSearchZone.enableLocalFeatures();
     this.attachLocalDeckListener();
     syncLocalPlaymat();
+    syncLocalCardBack();
   }
 
   prefetchTokenMenuCache() {
@@ -1074,11 +1082,12 @@ export class PlayArea {
 
     playArea.tokenPrintings = hydratedDeck.tokens ?? {};
     playArea.deck.shuffle();
+    prefetchDeckTopCardArt(playArea.deck);
     playArea.loadTextures();
     return playArea;
   }
 
-  loadTextures() {
+  loadTextures(): Promise<void> {
     if (this.isLocalPlayArea) {
       const handJobs = this.hand.cards
         .filter(card => card.mesh)
@@ -1089,10 +1098,10 @@ export class PlayArea {
         preloadStackTextures(this.graveyardZone),
         preloadStackTextures(this.exileZone),
       ];
-      void Promise.all(jobs).finally(() => {
+      return Promise.all(jobs).finally(() => {
         this.reapplyBattlefieldOrientations();
+        void applyCardBackForPlayArea(this, settings.mpcCardBack);
       });
-      return;
     }
 
     scheduleOpponentHandTexturePrefetch(this.hand);
@@ -1102,8 +1111,9 @@ export class PlayArea {
       preloadStackTextures(this.graveyardZone),
       preloadStackTextures(this.exileZone),
     ];
-    void Promise.all(jobs).finally(() => {
+    return Promise.all(jobs).finally(() => {
       this.reapplyBattlefieldOrientations();
+      void applyCardBackForPlayArea(this);
     });
   }
 

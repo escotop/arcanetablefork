@@ -19,6 +19,7 @@ import {
   isSyncPaused,
   processedEvents,
   setDeferGameLogReplay,
+  settings,
 } from './globals';
 import { readjustPlayAreas } from '../main3d';
 import { PlayArea } from './playArea';
@@ -149,6 +150,9 @@ function capturePlayerAwareness(): PlayerAwarenessSnapshot[] {
       : undefined,
     color: entry.color,
     playmat: entry.playmat ? JSON.parse(JSON.stringify(entry.playmat)) : entry.playmat,
+    mpcCardBack: entry.mpcCardBack
+      ? JSON.parse(JSON.stringify(entry.mpcCardBack))
+      : entry.mpcCardBack,
     counters: entry.counters ? { ...entry.counters } : undefined,
     isSpectating: entry.isSpectating,
   }));
@@ -449,6 +453,7 @@ function restorePlayerAwareness(snapshots: PlayerAwarenessSnapshot[], gameId: st
     opponentCommanderTracking: snapshot.opponentCommanderTracking ?? localState.opponentCommanderTracking,
     color: snapshot.color ?? localState.color,
     playmat: snapshot.playmat ?? localState.playmat,
+    mpcCardBack: snapshot.mpcCardBack ?? settings.mpcCardBack ?? localState.mpcCardBack,
     counters: snapshot.counters ?? localState.counters,
     isSpectating: snapshot.isSpectating ?? localState.isSpectating,
   });

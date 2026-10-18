@@ -70,6 +70,7 @@ import {
 } from '../spanishCardPreview';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import { syncAllPlaymats, syncLocalPlaymat } from '../playmat';
+import { syncAllCardBacks, syncLocalCardBack } from '../savedCardBack';
 
 export default function Overlay() {
   let userData = () => hoverSignal()?.mesh?.userData;
@@ -100,6 +101,13 @@ export default function Overlay() {
   const playArea = () => getLocalPlayArea();
 
   createEffect(() => {
+    settings.mpcCardBack;
+    playArea();
+    syncLocalCardBack();
+    syncAllCardBacks();
+  });
+
+  createEffect(() => {
     settings.playmat;
     playArea();
     syncLocalPlaymat();
@@ -109,6 +117,7 @@ export default function Overlay() {
   createEffect(() => {
     players();
     syncAllPlaymats();
+    syncAllCardBacks();
   });
 
   const focusCameraStyle = () => {

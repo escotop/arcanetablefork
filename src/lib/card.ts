@@ -782,8 +782,6 @@ function prefetchCardFaceTexturesIntoCache(card: Card): void {
  * Use when a card becomes visible (e.g. opponent plays from hand).
  */
 export function warmCardTextureCache(card: Card): void {
-  if (!card.mesh) return;
-
   restoreCardDetailIfStripped(card);
   prefetchCardFaceTexturesIntoCache(card);
 }
@@ -1495,6 +1493,15 @@ export function setCardData<Field extends keyof CardUserData>(
     field === 'location' &&
     cardMesh.userData.previousLocation === 'hand' &&
     value !== 'hand'
+  ) {
+    const card = cardsById.get(cardMesh.userData.id);
+    if (card) void applyCachedCardTexturesIfReady(card);
+  }
+
+  if (
+    field === 'location' &&
+    cardMesh.userData.previousLocation === 'deck' &&
+    value === 'hand'
   ) {
     const card = cardsById.get(cardMesh.userData.id);
     if (card) void applyCachedCardTexturesIfReady(card);

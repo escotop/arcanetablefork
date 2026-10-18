@@ -62,7 +62,9 @@ import { computeResetTurnOrderState, getActivePlayAreaClientIds, turnOrderState 
 import { copyPlayerDeckToClipboard } from '../deckExport';
 import PlayerBracketEstimate from './playerBracketEstimate';
 import PlaymatPickerModal from './playmatPickerModal';
+import CardBackPickerModal from './cardBackPickerModal';
 import { syncLocalPlaymat, type SavedPlaymat } from '../playmat';
+import { syncLocalCardBack, type SavedCardBack } from '../savedCardBack';
 
 export default function SettingsOverlay(props: {
   isOpen: boolean;
@@ -83,6 +85,7 @@ export default function SettingsOverlay(props: {
   );
   const [resetTurnConfirmOpen, setResetTurnConfirmOpen] = createSignal(false);
   const [playmatPickerOpen, setPlaymatPickerOpen] = createSignal(false);
+  const [cardBackPickerOpen, setCardBackPickerOpen] = createSignal(false);
   const localPlayer = () =>
     players().find(player => player.id === provider?.awareness?.clientID)?.entry;
   const playerColor = () =>
@@ -108,6 +111,11 @@ export default function SettingsOverlay(props: {
   function setPlaymat(playmat: SavedPlaymat | undefined) {
     setSettings('playmat', playmat);
     syncLocalPlaymat();
+  }
+
+  function setMpcCardBack(cardBack: SavedCardBack | undefined) {
+    setSettings('mpcCardBack', cardBack);
+    syncLocalCardBack();
   }
 
   function handleExportGameState() {
@@ -321,6 +329,28 @@ export default function SettingsOverlay(props: {
               <span class='text-sm text-muted-foreground font-mono'>{playerColor()}</span>
             </div>
           </div>
+          <div class='mt-4 space-y-2'>
+            <Label>Reverso de carta</Label>
+            <div class='flex flex-wrap items-center gap-2'>
+              <Button type='button' variant='outline' onClick={() => setCardBackPickerOpen(true)}>
+                Elegir reverso
+              </Button>
+              <Show when={settings.mpcCardBack}>
+                <Button type='button' variant='ghost' size='sm' onClick={() => setMpcCardBack(undefined)}>
+                  Quitar
+                </Button>
+              </Show>
+            </div>
+            <Show when={settings.mpcCardBack}>
+              <p class='text-xs text-muted-foreground line-clamp-2'>{settings.mpcCardBack!.title}</p>
+            </Show>
+          </div>
+          <CardBackPickerModal
+            open={cardBackPickerOpen()}
+            onOpenChange={setCardBackPickerOpen}
+            selected={settings.mpcCardBack}
+            onSelect={setMpcCardBack}
+          />
           <Show when={params.gameId}>
             <div class='mt-4 space-y-2'>
               <Label>Playmat</Label>

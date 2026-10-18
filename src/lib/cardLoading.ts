@@ -1,7 +1,12 @@
 import { nanoid } from 'nanoid';
 import { Card } from './constants';
 import { cardsById } from './globals';
-import { ensureCardMesh, loadCardTextures, prefetchHiddenHandCardTextureCache } from './card';
+import {
+  ensureCardMesh,
+  loadCardTextures,
+  prefetchHiddenHandCardTextureCache,
+  warmCardTextureCache,
+} from './card';
 import type { CardStack } from './cardStack';
 import type { Hand } from './hand';
 
@@ -73,6 +78,13 @@ function scheduleDeferredStackTextures(zone: CardStack) {
 
 export function onStackCardAdded(zone: CardStack) {
   void preloadStackTextures(zone);
+}
+
+/** Prefetch the next drawn card's face art while it is still on top of the deck. */
+export function prefetchDeckTopCardArt(deck: { cards: Card[] }) {
+  const top = deck.cards[0];
+  if (!top) return;
+  warmCardTextureCache(top);
 }
 
 const opponentHandPrefetchQueues = new WeakMap<Hand, number>();

@@ -117,6 +117,10 @@ export async function transferCard<AddOptions extends {}>(
     warmCardTextureCache(card);
   }
 
+  if (fromZone?.zone === 'deck') {
+    warmCardTextureCache(card);
+  }
+
   await fromZone?.removeCard?.(card.mesh);
 
   if (addOptions?.skipAnimation) {

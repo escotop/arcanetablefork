@@ -47,6 +47,7 @@ import {
   setCachedCardDetail,
   setCachedPrintings,
 } from './scryfallCache';
+import { prefetchDeckTopCardArt } from './cardLoading';
 import { cardsById, cardSystem, getProjectionVec, setHoverSignal, zonesById } from './globals';
 import { cleanupMesh, getGlobalRotation, shuffleItems } from './utils';
 import { createRoot } from 'solid-js';
@@ -105,6 +106,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
     this.mesh.userData.location = 'deck';
     this.mesh.userData.zoneId = id;
     this.mesh.userData.id = id;
+    this.mesh.userData.clientId = clientId;
     this.zone = 'deck';
 
     this.cards.forEach(card => {
@@ -116,7 +118,9 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
     this.topProxyMesh = createDeckProxyMesh();
     this.stackMesh = createDeckStackMesh();
     this.topProxyMesh.userData.zoneId = id;
+    this.topProxyMesh.userData.clientId = clientId;
     this.stackMesh.userData.zoneId = id;
+    this.stackMesh.userData.clientId = clientId;
     this.mesh.add(this.stackMesh);
     this.mesh.add(this.topProxyMesh);
 
@@ -214,6 +218,7 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
       }
     });
     this.topProxyMesh.visible = true;
+    prefetchDeckTopCardArt(this);
   }
 
   updatePositions() {

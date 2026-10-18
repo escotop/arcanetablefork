@@ -13,6 +13,7 @@ import {
   finishHistoricalLogReplay,
   playAreas,
   resetGameSceneForReplay,
+  settings,
 } from './globals';
 import { devLog } from './devLog';
 import { readjustPlayAreas } from '../main3d';
@@ -26,6 +27,7 @@ import {
 import { resetCustomCountersForSnapshot, restoreCustomCounters } from './ui/counterDialog';
 import { syncLocalPlayerColor } from './playerColor';
 import type { SavedPlaymat } from './playmat';
+import type { SavedCardBack } from './savedCardBack';
 
 export const GAME_STATE_SNAPSHOT_VERSION = 1;
 
@@ -38,6 +40,7 @@ export interface PlayerAwarenessSnapshot {
   opponentCommanderTracking?: Record<string, { name: string; life: number; clientId?: number }>;
   color?: string;
   playmat?: SavedPlaymat | null;
+  mpcCardBack?: SavedCardBack | null;
   counters?: Record<string, number>;
   isSpectating?: boolean;
 }
@@ -88,6 +91,9 @@ function capturePlayerAwareness(): PlayerAwarenessSnapshot[] {
       : undefined,
     color: entry.color,
     playmat: entry.playmat ? JSON.parse(JSON.stringify(entry.playmat)) : entry.playmat,
+    mpcCardBack: entry.mpcCardBack
+      ? JSON.parse(JSON.stringify(entry.mpcCardBack))
+      : entry.mpcCardBack,
     counters: entry.counters ? { ...entry.counters } : undefined,
     isSpectating: entry.isSpectating,
   }));
@@ -174,6 +180,7 @@ function restoreLocalAwareness(snapshots: PlayerAwarenessSnapshot[], gameId: str
     opponentCommanderTracking: snapshot.opponentCommanderTracking ?? localState.opponentCommanderTracking,
     color: snapshot.color ?? localState.color,
     playmat: snapshot.playmat ?? localState.playmat,
+    mpcCardBack: snapshot.mpcCardBack ?? settings.mpcCardBack ?? localState.mpcCardBack,
     counters: snapshot.counters ?? localState.counters,
     isSpectating: snapshot.isSpectating ?? localState.isSpectating,
   });

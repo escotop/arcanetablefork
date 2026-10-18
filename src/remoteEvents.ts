@@ -18,6 +18,7 @@ import { Card } from './lib/constants';
 import type { CardId } from './game-engine/types';
 import { removeOpponentCommanderTracking } from './lib/commanderTracking';
 import { syncAllPlaymats } from './lib/playmat';
+import { syncAllCardBacks } from './lib/savedCardBack';
 import * as Sentry from '@sentry/solidstart';
 import {
   applyPlayerTransform,
@@ -800,6 +801,7 @@ export function syncPlayAreasFromGameLog() {
   }
   logReloadOther('sync-playareas-from-gamelog-done', { joinCount: activeJoins.size });
   syncAllPlaymats();
+  syncAllCardBacks();
 }
 
 export function getActiveJoinClientIdsFromLog(): Set<number> {
@@ -1015,6 +1017,14 @@ const EVENTS = {
       resolvedFromZone?.zone === 'hand' &&
       toZone &&
       (toZone.zone === 'battlefield' || toZone.zone === 'peek' || toZone.zone === 'reveal')
+    ) {
+      warmCardTextureCache(card);
+    }
+
+    if (
+      isRemotePlayerEvent(event) &&
+      resolvedFromZone?.zone === 'deck' &&
+      toZone?.zone === 'hand'
     ) {
       warmCardTextureCache(card);
     }

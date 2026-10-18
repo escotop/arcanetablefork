@@ -8,6 +8,7 @@
     { "source": "/api/moxfield/:path*", "destination": "/api/moxfield?path=:path*" },
     { "source": "/api/scryfall/:path*", "destination": "/api/scryfall?path=:path*" },
     { "source": "/api/mtgplaymats/:path*", "destination": "/api/mtgplaymats?path=:path*" },
+    { "source": "/api/mpcfill/:path*", "destination": "/api/mpcfill?path=:path*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
