@@ -203,7 +203,11 @@ export async function transferCard<AddOptions extends {}>(
       const textureLoad = loadCardTextures(card).catch(error => {
         devLog.warn('[transferCard] texture load failed', card.detail?.name ?? card.id, error);
       });
-      if (toZone.zone === 'peek' || toZone.zone === 'tokenSearch') {
+      if (
+        globalThis.__SYNC_STRESS_FAST ||
+        toZone.zone === 'peek' ||
+        toZone.zone === 'tokenSearch'
+      ) {
         void textureLoad;
       } else {
         await textureLoad;

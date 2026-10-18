@@ -45,6 +45,7 @@ import {
   isEventCatchUpComplete,
   isGameLogReplayDeferred,
   isHistoricalLogReplayInProgress,
+  isInitialGameLogReplayComplete,
   resetGameSceneForReplay,
 } from './lib/globals';
 import { PlayArea } from './lib/playArea';
@@ -106,6 +107,8 @@ export function setOnGameLogProcessed(callback: (() => void) | undefined) {
 
 function shouldSkipLocallyAppliedEvent(event: { clientID?: number; locallyApplied?: boolean }) {
   if (isHistoricalLogReplayInProgress()) return false;
+  // If historical replay was ended before the log was fully drained, still re-apply events.
+  if (!isInitialGameLogReplayComplete()) return false;
   if (!event.locallyApplied || !isEventCatchUpComplete()) return false;
   const localClientId = getLocalPlayerClientId();
   return localClientId !== undefined && event.clientID === localClientId;
@@ -182,6 +185,7 @@ function isEphemeralEvent(event: { type?: string; payload?: Record<string, unkno
 }
 
 function shouldSkipEventTiming(event: { type?: string; payload?: Record<string, unknown> }) {
+  if (globalThis.__SYNC_STRESS_FAST) return true;
   return isEphemeralEvent(event) || !isEventCatchUpComplete();
 }
 

@@ -41,7 +41,7 @@ import type { CommanderBracketHowItPlaysSection } from './commanderBracket';
 import type { PlayArea } from './playArea';
 import { DEFAULT_CARD_BACK_URL } from './mtgCardSystem';
 import TextureLoaderWorker from './textureLoaderWorker?worker';
-import { type TextureLoaderWorkerType } from './textureLoaderWorker';
+import { textureLoaderWorkerApi, type TextureLoaderWorkerType } from './textureLoaderWorkerApi';
 import { sanitizeGameLogEvent } from './gameLogEvents';
 import { logReloadOther } from './reloadOtherPlayerDebug';
 import { cleanupFromNode, canPeekFaceDownBattlefieldCardInFocusPanel, getFocusCameraPositionRelativeTo } from './utils';
@@ -212,6 +212,11 @@ ydoc.on('update', (update, origin) => {
 });
 
 export let table: Object3D;
+
+/** Headless multiplayer tests: minimal table root for join/replay. */
+export function setGameTable(object: Object3D) {
+  table = object;
+}
 export let gameLog: YArray<any>;
 export let gameState: YMap<GameState>;
 export let [animating, setAnimating] = createSignal(false);
@@ -281,12 +286,22 @@ export function isEventCatchUpComplete() {
 /** True while rebuilding table state from the persisted log (reload/reconnect). */
 let historicalLogReplayInProgress = true;
 
+/** False until the first full game-log drain completes after a scene reset. */
+let initialGameLogReplayComplete = false;
+
 export function isHistoricalLogReplayInProgress() {
   return historicalLogReplayInProgress;
 }
 
+export function isInitialGameLogReplayComplete() {
+  return initialGameLogReplayComplete;
+}
+
 export function finishHistoricalLogReplay() {
   historicalLogReplayInProgress = false;
+  if (processedEvents() >= gameLog.length) {
+    initialGameLogReplayComplete = true;
+  }
   syncTurnOrderAfterLogReplay();
 }
 
@@ -323,6 +338,7 @@ export function resetGameSceneForReplay() {
   setEventCatchUpComplete(false);
   setEventCatchUpCompleteSignal(false);
   historicalLogReplayInProgress = true;
+  initialGameLogReplayComplete = false;
 }
 export let [isSpectating, setIsSpectating] = createSignal(false);
 export let [playerCount, setPlayerCount] = createSignal(0);
@@ -549,7 +565,10 @@ export function headlessInit(opts = {}) {
   setProcessedEvents(0);
   loadingManager = new LoadingManager();
   textureLoader = new TextureLoader(loadingManager);
-  textureLoaderWorker = Comlink.wrap(new TextureLoaderWorker());
+  textureLoaderWorker =
+    typeof Worker !== 'undefined'
+      ? Comlink.wrap(new TextureLoaderWorker())
+      : (textureLoaderWorkerApi as Comlink.Remote<TextureLoaderWorkerType>);
   gameLog = opts.gameLog ?? ydoc.getArray('gameLog');
   gameState = opts.gameState ?? ydoc.getMap('gameState');
 

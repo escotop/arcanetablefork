@@ -479,8 +479,8 @@ export async function applyWorldSnapshot(
     void localArea.loadTextures();
   }
 
-  setEventCatchUpComplete(true);
   finishHistoricalLogReplay();
+  setEventCatchUpComplete(true);
   if (gameId) persistLocalWorldSnapshot(gameId);
   logBugGameBattlefieldCheck('world snapshot applied', {
     snapshotLogLength: snapshot.logLength,

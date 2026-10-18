@@ -197,8 +197,8 @@ async function reconnectLocalPlayArea(gameId: string) {
   setIsIntitialized(true);
   readjustPlayAreas();
   void area.loadTextures();
-  setEventCatchUpComplete(true);
   finishHistoricalLogReplay();
+  setEventCatchUpComplete(true);
 }
 
 async function finalizeAfterReplay(gameId: string) {

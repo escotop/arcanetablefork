@@ -50,7 +50,6 @@ import {
   isSpectating,
   isUnderLocalHand,
   isTableInteractionAllowed,
-  flushDispatchEventQueue,
   playAreas,
   players,
   processedEvents,
@@ -139,7 +138,6 @@ import {
   setupPersistentSnapshotPublisher,
   setupSyncBarrierObserver,
 } from './lib/worldSnapshot';
-import { getDeckStore } from './lib/deckStore';
 import { loadGameMeta, saveGameMeta } from './lib/gameMeta';
 import { restorePlayAreaTokenPrintings } from './lib/deckTokens';
 import { refreshMultiplayerSyncState } from './lib/multiplayerSync';

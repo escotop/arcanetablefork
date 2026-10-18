@@ -9,6 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",
+    "test:sync": "vitest --config vitest.integration.config.ts --run src/lib/multiplayerSync.sim.test.ts",
+    "test:sync:run": "npx vite-node --config vitest.integration.config.ts scripts/run-multiplayer-sync-stress.ts",
     "build:worker": "wrangler pages functions build --outdir=./worker",
     "build:cloudflare": "bun run build && bun run build:worker",
     "deploy:cloudflare": "wrangler deploy"

@@ -1,0 +1,28 @@
+
+> untapped-table@0.1.0 test:sync:run
+> npx vite-node --config vitest.integration.config.ts scripts/run-multiplayer-sync-stress.ts
+
+Yjs was already imported. This breaks constructor checks and will lead to issues! - https://github.com/yjs/yjs/issues/438
+THREE.Material: parameter 'map' has value of undefined.
+THREE.Material: parameter 'map' has value of undefined.
+THREE.Material: parameter 'map' has value of undefined.
+THREE.Material: parameter 'map' has value of undefined.
+[loadCardTextures] missing image, using fallback for A Card 0
+THREE.Material: parameter 'map' has value of undefined.
+THREE.Material: parameter 'map' has value of undefined.
+[loadCardTextures] missing image, using fallback for B Card 0
+THREE.Material: parameter 'map' has value of undefined.
+THREE.Material: parameter 'map' has value of undefined.
+[loadCardTextures] missing image, using fallback for B Card 1
+THREE.Material: parameter 'map' has value of undefined.
+THREE.Material: parameter 'map' has value of undefined.
+[loadCardTextures] missing image, using fallback for A Card 1
+THREE.Material: parameter 'map' has value of undefined.
+THREE.Material: parameter 'map' has value of undefined.
+[loadCardTextures] missing image, using fallback for A Card 2
+THREE.Material: parameter 'map' has value of undefined.
+THREE.Material: parameter 'map' has value of undefined.
+[loadCardTextures] missing image, using fallback for B Card 2
+THREE.Material: parameter 'map' has value of undefined.
+THREE.Material: parameter 'map' has value of undefined.
+[loadCardTextures] missing image, using fallback for A Card 3
