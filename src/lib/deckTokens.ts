@@ -24,7 +24,8 @@ function rememberParentTokenParts(detail: CardEntryDetail) {
     .filter(part => part.component === 'token')
     .map(part => tokenPartId(part))
     .filter((id): id is string => !!id);
-  if (partIds.length) parentTokenPartIdsCache.set(parentId, partIds);
+  // Remember empty arrays too so we do not re-fetch parents that have no tokens.
+  parentTokenPartIdsCache.set(parentId, partIds);
 }
 
 function tokenMenuCacheKey(
@@ -137,13 +138,14 @@ async function fetchCardDetailsByIds(ids: string[]): Promise<CardEntryDetail[]> 
   const cachedById = await loadCachedCardsByIds(ids);
 
   for (const id of ids) {
-    const remembered = parentTokenPartIdsCache.get(id);
-    if (remembered?.length) continue;
+    if (parentTokenPartIdsCache.has(id)) continue;
 
     const cached = cachedById.get(id);
-    if (cached?.all_parts?.some(part => part.component === 'token')) {
+    if (cached) {
       rememberParentTokenParts(cached);
-      results.push(cached);
+      if ((cached.all_parts ?? []).some(part => part.component === 'token')) {
+        results.push(cached);
+      }
       continue;
     }
     needsNetwork.push(id);
@@ -152,11 +154,16 @@ async function fetchCardDetailsByIds(ids: string[]): Promise<CardEntryDetail[]> 
   for (let index = 0; index < needsNetwork.length; index += COLLECTION_BATCH_SIZE) {
     const batch = needsNetwork.slice(index, index + COLLECTION_BATCH_SIZE);
     const body = await postCardCollection(batch.map(id => ({ id })));
+    const foundIds = new Set<string>();
     for (const raw of body.data ?? []) {
       const mapped = mapScryfallCard(raw as Record<string, unknown>);
+      if (mapped.id) foundIds.add(mapped.id);
       rememberParentTokenParts(mapped);
       results.push(mapped);
       void setCachedCardDetail(mapped);
+    }
+    for (const id of batch) {
+      if (!foundIds.has(id)) parentTokenPartIdsCache.set(id, []);
     }
   }
 

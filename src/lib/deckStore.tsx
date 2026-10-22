@@ -229,12 +229,25 @@ async function hydrateTokenEntries(
   cache: Map<string, DetailedCardEntry>,
   target: Record<string, DetailedCardEntry>,
 ) {
-  await Promise.all(
-    Object.entries(tokenEntries).map(async ([tokenKey, card]) => {
-      if ((card.qty ?? 1) < 1) return;
-      target[tokenKey] = await hydrateCardEntry(card, cache).catch(() => card);
-    }),
+  const entries = Object.entries(tokenEntries).filter(([, card]) => (card.qty ?? 1) >= 1);
+  const needingHydration = entries.filter(([, card]) => needsCardHydration(card));
+  const ready = entries.filter(([, card]) => !needsCardHydration(card));
+
+  for (const [tokenKey, card] of ready) {
+    target[tokenKey] = await applyCustomArtToEntry(card);
+  }
+
+  if (!needingHydration.length) return;
+
+  const hydrated = await fetchCardInfoForImport(
+    needingHydration.map(([, card]) => card),
+    cache,
   );
+
+  for (const [tokenKey, card] of needingHydration) {
+    const updated = hydrated[getCardKey(card)] ?? card;
+    target[tokenKey] = await applyCustomArtToEntry(updated);
+  }
 }
 
 export async function hydrateDeck(originalDeck: Deck) {

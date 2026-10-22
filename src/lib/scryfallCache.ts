@@ -99,6 +99,8 @@ export function slimCardDetail(detail: CardEntryDetail): CardEntryDetail {
     lang: (detail as CardEntryDetail & { lang?: string }).lang,
     set_name: (detail as CardEntryDetail & { set_name?: string }).set_name,
     released_at: (detail as CardEntryDetail & { released_at?: string }).released_at,
+    oracle_id: (detail as { oracle_id?: string }).oracle_id,
+    all_parts: detail.all_parts,
   } as CardEntryDetail;
 }
 

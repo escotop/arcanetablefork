@@ -646,29 +646,6 @@ function cardNamesMatch(cardName: string | undefined, requestedName: string) {
   return leftFront === rightFront || leftFront === right || left === rightFront;
 }
 
-function matchesSetSearchResult(
-  card: { name?: string; set?: string; collector_number?: string },
-  name: string,
-  set: string,
-  collectorNumber?: string,
-): boolean {
-  if (!cardNamesMatch(card.name, name)) return false;
-
-  if (collectorNumber) {
-    if (card.collector_number) {
-      return (
-        normalizeCollectorNumber(card.collector_number) ===
-          normalizeCollectorNumber(collectorNumber) &&
-        (!card.set || normalizeSetCode(card.set) === normalizeSetCode(set))
-      );
-    }
-    // Search already included cn: — minimal search payloads may omit set/collector_number.
-    return !card.set || card.set.toLowerCase() === set.toLowerCase();
-  }
-
-  return !card.set || card.set.toLowerCase() === set.toLowerCase();
-}
-
 function fetchCardInfoCacheKey(entry: CardEntry, urlString: string) {
   return `${urlString}:${entry.qty ?? 1}:${entry.set ?? ''}:${entry.collector_number ?? ''}`;
 }
@@ -803,17 +780,11 @@ async function fetchCardDetailPayload(
 
   const { name, set, collector_number } = entry;
 
-  if (set && collector_number) {
+  if (set && collector_number && cardSystem.collectorLookup) {
     trace.push(`Lookup ${set.toUpperCase()} #${collector_number}`);
-    if (cardSystem.collectorLookup) {
-      const byCollector = await fetchCardDetailBySetCollector(set, collector_number);
-      if (byCollector) return byCollector;
-      trace.push('Set/collector lookup returned no card');
-    }
-
-    const exact = await fetchCardDetailViaSetSearch(name, set, collector_number);
-    if (exact) return exact;
-    trace.push('No exact match in set search with collector number');
+    const byCollector = await fetchCardDetailBySetCollector(set, collector_number);
+    if (byCollector) return byCollector;
+    trace.push('Set/collector lookup returned no card');
   } else if (set) {
     trace.push(`Lookup printing in ${set.toUpperCase()}`);
   }
@@ -838,11 +809,6 @@ async function fetchCardDetailPayload(
     );
   }
 
-  if (set) {
-    const fallback = await resolveSetOrDefault(entry, trace);
-    if (fallback) return fallback;
-  }
-
   trace.push(`Fuzzy search for "${name}"`);
   const fuzzy = await fetchCardDetailViaFuzzySearch(name);
   if (fuzzy) {
@@ -851,17 +817,6 @@ async function fetchCardDetailPayload(
   }
 
   trace.push(`No search results for "${name}"`);
-  return null;
-}
-
-async function resolveSetOrDefault(entry: CardEntry, trace: string[] = []): Promise<CardEntryDetail | null> {
-  const { name, set, collector_number } = entry;
-  if (!set) return null;
-
-  const fromSearch = await fetchCardDetailViaSetSearch(name, set, collector_number);
-  if (fromSearch) return fromSearch;
-
-  trace.push(`No match in set search for ${set.toUpperCase()}`);
   return null;
 }
 
@@ -875,28 +830,6 @@ async function fetchCardDetailViaFuzzySearch(name: string): Promise<CardEntryDet
     results.find(card => normalizeCardName(card.name).includes(normalizeCardName(name))) ??
     results[0];
 
-  if (!match?.id) return null;
-
-  const fromSearch = detailFromSearchResult(match as CardEntryDetail);
-  if (fromSearch) return fromSearch;
-
-  return fetchCardDetailById(match.id);
-}
-
-async function fetchCardDetailViaSetSearch(
-  name: string,
-  set: string,
-  collectorNumber?: string,
-): Promise<CardEntryDetail | null> {
-  let query = `!"${name.replace(/"/g, '\\"')}" set:${set}`;
-  if (collectorNumber) {
-    query += ` cn:${collectorNumber}`;
-  }
-
-  const body = await searchCards(query, { page: 1 });
-  const match = body.data.find(card =>
-    matchesSetSearchResult(card, name, set, collectorNumber),
-  );
   if (!match?.id) return null;
 
   const fromSearch = detailFromSearchResult(match as CardEntryDetail);

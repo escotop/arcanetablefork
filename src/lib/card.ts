@@ -64,7 +64,10 @@ import { cleanupFromNode, isValidMaterial } from './utils';
 import { serializeCardUserDataForLog, slimCardDetailForLog } from './gameLogEvents';
 import { devLog } from './devLog';
 import { removeHandManaOverlay } from './handManaOverlay';
-import { getCardById, getCardNamed } from './scryfall/client';
+import {
+  ensurePlayCardImageHydration,
+  playCardImageHydrationKey,
+} from './scryfall/playImageHydration';
 
 export interface CardUserData {
   cardBack?: Material;
@@ -847,45 +850,23 @@ export function prefetchHiddenHandCardTextureCache(card: Card): void {
   prefetchCardFaceTexturesIntoCache(card);
 }
 
-const pendingImageHydration = new Map<string, Promise<void>>();
-
-function cardImageHydrationKey(card: Card) {
-  const detail = card.detail;
-  if (detail?.id) return detail.id;
-  return `${detail?.name ?? 'unknown'}:${detail?.set ?? ''}:${detail?.collector_number ?? ''}`;
-}
-
 async function ensureCardImageDetail(card: Card): Promise<void> {
   if (getCardImage(card)) return;
   if (!card.detail?.name) return;
 
-  const key = cardImageHydrationKey(card);
-  const pending = pendingImageHydration.get(key);
-  if (pending) {
-    await pending;
-    return;
+  const key = playCardImageHydrationKey(card.detail);
+  try {
+    await ensurePlayCardImageHydration(
+      key,
+      () => card.detail!,
+      detail => {
+        card.detail = detail;
+        card.detail.search = card.detail.search ?? getSearchLine(card.detail);
+      },
+    );
+  } catch (error) {
+    devLog.warn('[ensureCardImageDetail] lookup failed', card.detail?.name, error);
   }
-
-  const job = (async () => {
-    try {
-      const payload = card.detail.id
-        ? await getCardById(card.detail.id)
-        : await getCardNamed(card.detail.name, {
-            set: card.detail.set,
-            id: card.detail.id,
-          });
-      if (!payload) return;
-      card.detail = { ...card.detail, ...payload };
-      card.detail.search = card.detail.search ?? getSearchLine(card.detail);
-    } catch (error) {
-      devLog.warn('[ensureCardImageDetail] lookup failed', card.detail?.name, error);
-    } finally {
-      pendingImageHydration.delete(key);
-    }
-  })();
-
-  pendingImageHydration.set(key, job);
-  await job;
 }
 
 const TRANSFORMS = {

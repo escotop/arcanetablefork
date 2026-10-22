@@ -15,6 +15,7 @@ import {
   getCardBySetCollector,
   getCardNamed,
 } from './scryfall/client';
+import { getCachedCardById, getCachedCardDetail } from './scryfallCache';
 
 export const DEFAULT_DECK_PREVIEW = DEFAULT_CARD_BACK_URL;
 
@@ -280,8 +281,20 @@ async function fetchCoverCardDetail(card: DetailedCardEntry) {
   const { scryfallId, set, collector_number, name } = resolvePrintingForPreview(card);
 
   if (scryfallId) {
+    const cached = await getCachedCardById(scryfallId);
+    if (cached) return cached;
     return getCardById(scryfallId);
   }
+
+  const cachedByPrinting = await getCachedCardDetail({
+    name: name ?? card.name,
+    set,
+    collector_number,
+    qty: 1,
+    categories: [],
+  });
+  if (cachedByPrinting) return cachedByPrinting;
+
   if (set && collector_number) {
     return getCardBySetCollector(set, collector_number);
   }

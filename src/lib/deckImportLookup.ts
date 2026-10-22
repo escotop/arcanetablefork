@@ -8,27 +8,15 @@ import {
 import { getCardKey } from './deckStore';
 import { devLog } from './devLog';
 import { cardSystem } from './globals';
+import {
+  postCardCollection,
+  SCRYFALL_COLLECTION_MAX_IDENTIFIERS,
+  type ScryfallCollectionIdentifier as CollectionIdentifier,
+  type ScryfallCollectionResponse,
+} from './scryfall/client';
 import { setCachedCardDetailsFromRaw } from './scryfallCache';
 
-const SCRYFALL_COLLECTION_URL = '/api/scryfall/cards/collection';
-const COLLECTION_CHUNK_SIZE = 75;
-const COLLECTION_CHUNK_DELAY_MS = 120;
-const INDIVIDUAL_LOOKUP_DELAY_MS = 120;
-
-type CollectionIdentifier =
-  | { id: string }
-  | { name: string }
-  | { set: string; collector_number: string };
-
-interface ScryfallCollectionResponse {
-  object?: string;
-  data?: Array<Record<string, unknown>>;
-  not_found?: CollectionIdentifier[];
-}
-
-function delay(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+const COLLECTION_CHUNK_SIZE = SCRYFALL_COLLECTION_MAX_IDENTIFIERS;
 
 function normalizeCardName(name?: string) {
   return name?.trim().toLowerCase() || '';
@@ -123,27 +111,16 @@ export function mapScryfallCardForDeck(card: Record<string, unknown>): CardEntry
 async function postCollection(
   identifiers: CollectionIdentifier[],
 ): Promise<ScryfallCollectionResponse | null> {
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const response = await fetch(SCRYFALL_COLLECTION_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifiers }),
-    });
-
-    if (response.status === 429 || response.status === 503) {
-      await delay(400 * (attempt + 1));
-      continue;
-    }
-
-    if (!response.ok) {
-      devLog.warn('[deck import] Collection request failed:', response.status);
-      return null;
-    }
-
-    return (await response.json()) as ScryfallCollectionResponse;
+  try {
+    // Goes through the shared Scryfall queue (rate limiting + retries live there).
+    return await postCardCollection(identifiers);
+  } catch (error) {
+    devLog.warn(
+      '[deck import] Collection request failed:',
+      error instanceof Error ? error.message : error,
+    );
+    return null;
   }
-
-  return null;
 }
 
 function getBatchIdentifier(entry: CardEntry): CollectionIdentifier | null {
@@ -157,7 +134,15 @@ function getBatchIdentifier(entry: CardEntry): CollectionIdentifier | null {
     return { set, collector_number: collector };
   }
 
-  if (entry.name && !hasRequestedPrinting(entry)) {
+  if (!entry.name) return null;
+
+  // Scryfall's collection endpoint also understands `name + set`, so decklists that
+  // only carry a set code (Moxfield/Archidekt exports) can still be batched.
+  if (set) {
+    return { name: entry.name, set };
+  }
+
+  if (!hasRequestedPrinting(entry)) {
     return { name: entry.name };
   }
 
@@ -166,7 +151,12 @@ function getBatchIdentifier(entry: CardEntry): CollectionIdentifier | null {
 
 function identifierKey(identifier: CollectionIdentifier) {
   if ('id' in identifier) return `id:${identifier.id}`;
-  if ('set' in identifier) return `set:${identifier.set}:${identifier.collector_number}`;
+  if ('collector_number' in identifier) {
+    return `set:${identifier.set}:${identifier.collector_number}`;
+  }
+  if ('set' in identifier) {
+    return `name:${normalizeCardName(identifier.name)}:set:${identifier.set}`;
+  }
   return `name:${normalizeCardName(identifier.name)}`;
 }
 
@@ -185,6 +175,15 @@ function findCardForEntry(entry: CardEntry, data: Array<Record<string, unknown>>
         normalizePrintingCollectorNumber(String(card.collector_number)) === collector,
     );
     if (byPrinting) return byPrinting;
+  }
+
+  if (set) {
+    const byNameAndSet = data.find(
+      card =>
+        normalizePrintingSetCode(String(card.set)) === set &&
+        cardNamesMatch(String(card.name), entry.name),
+    );
+    if (byNameAndSet) return byNameAndSet;
   }
 
   return data.find(card => cardNamesMatch(String(card.name), entry.name));
@@ -234,9 +233,6 @@ async function resolveEntriesViaCollection(entries: CardEntry[]) {
       }
     }
 
-    if (index + COLLECTION_CHUNK_SIZE < identifiers.length) {
-      await delay(COLLECTION_CHUNK_DELAY_MS);
-    }
   }
 
   if (resolved.size) {
@@ -372,12 +368,7 @@ export async function fetchCardInfoForImport(
   const pendingIndividual = [...nonBatchable, ...missingAfterBatch];
   const individualKeys = new Set(nonBatchable.map(entry => getCardKey(entry)));
 
-  for (let index = 0; index < pendingIndividual.length; index++) {
-    const entry = pendingIndividual[index];
-    if (index > 0) {
-      await delay(INDIVIDUAL_LOOKUP_DELAY_MS);
-    }
-
+  for (const entry of pendingIndividual) {
     let card: DetailedCardEntry;
     try {
       card = await fetchCardInfo(entry, cache);

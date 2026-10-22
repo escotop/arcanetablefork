@@ -83,7 +83,13 @@ function proxyDevPlugin() {
             body,
           });
           res.statusCode = result.status;
-          res.setHeader('Content-Type', result.contentType);
+          if (result.headers) {
+            for (const [key, value] of Object.entries(result.headers)) {
+              res.setHeader(key, value);
+            }
+          } else {
+            res.setHeader('Content-Type', result.contentType);
+          }
           res.setHeader('Access-Control-Allow-Origin', '*');
           res.end(bodyForNodeResponse(result.body));
           return;
