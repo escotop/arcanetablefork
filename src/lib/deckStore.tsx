@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import { createContext, onMount, ParentProps, useContext } from 'solid-js';
 import { CardEntry, Deck, DetailedCardEntry, CardSystem } from './constants';
 import { findDeckEntryMatch, getCardKey } from './deckEntryMatch';
+import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
 import { fetchCardInfo, getDeckCoverMetadata, parseImportedCardList } from './deck';
 import {
   buildImportedInPlay,
@@ -11,7 +12,6 @@ import {
   fetchCardInfoForImport,
 } from './deckImportLookup';
 import { applyCustomArtToEntry } from './customCardArt';
-import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
 import {
   getMemoryDeckStore,
   hydrateDeckStoreFromIndexedDB,
@@ -188,16 +188,29 @@ function syncInPlayEntries(
   deckCards: Record<string, DetailedCardEntry>,
 ) {
   return inPlayCards.map(card => {
-    const deckCard =
-      deckCards[getCardKey(card)] ??
-      Object.values(deckCards).find(
-        candidate =>
-          candidate.name === card.name &&
-          (!card.id || candidate.id === card.id) &&
-          (!card.set || !candidate.set || candidate.set === card.set),
-      );
+    const matched = findDeckEntryMatch(card, deckCards);
+    const deckCard = matched?.entry;
+    if (!deckCard) return card;
 
-    return deckCard ? { ...deckCard, qty: card.qty ?? deckCard.qty } : card;
+    const keepInPlayPrinting =
+      hasRequestedPrinting(card) &&
+      (!printingMatchesRequest(deckCard.detail, card) ||
+        getCardKey(card) !== getCardKey(deckCard));
+
+    if (keepInPlayPrinting) {
+      return {
+        ...deckCard,
+        id: card.id ?? deckCard.id,
+        set: card.set ?? deckCard.set,
+        collector_number: card.collector_number ?? deckCard.collector_number,
+        detail: card.detail ?? deckCard.detail,
+        customArtUrl: card.customArtUrl ?? deckCard.customArtUrl,
+        qty: card.qty ?? deckCard.qty,
+        categories: deckCard.categories ?? card.categories,
+      };
+    }
+
+    return { ...deckCard, qty: card.qty ?? deckCard.qty };
   });
 }
 

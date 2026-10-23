@@ -62,3 +62,32 @@ export function findDeckEntryMatch(
 
   return undefined;
 }
+
+/** True when two deck rows refer to the same card (name/oracle), possibly different printings. */
+export function deckEntriesShareCardIdentity(
+  left: DetailedCardEntry,
+  right: DetailedCardEntry,
+): boolean {
+  if (getCardKey(left) === getCardKey(right)) return true;
+  return (
+    !!findDeckEntryMatch(left, { a: right }) || !!findDeckEntryMatch(right, { a: left })
+  );
+}
+
+/** Copies of a deck row that should go into the shuffled library at game start. */
+export function remainingDeckQtyAfterInPlay(
+  deckCard: DetailedCardEntry,
+  inPlay: Record<string, DetailedCardEntry>,
+): number {
+  let remaining = deckCard.qty ?? 0;
+  if (!remaining) return 0;
+
+  for (const inPlayCard of Object.values(inPlay)) {
+    if (!inPlayCard?.qty) continue;
+    if (deckEntriesShareCardIdentity(deckCard, inPlayCard)) {
+      remaining -= inPlayCard.qty ?? 1;
+    }
+  }
+
+  return Math.max(0, remaining);
+}

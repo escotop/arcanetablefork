@@ -50,7 +50,8 @@ import {
 } from './globals';
 import { Hand } from './hand';
 import { transferCard } from './transferCard';
-import { getCardKey, hydrateDeck } from './deckStore';
+import { remainingDeckQtyAfterInPlay } from './deckEntryMatch';
+import { hydrateDeck } from './deckStore';
 import {
   cardFromDeckEntry,
   prefetchDeckTopCardArt,
@@ -1055,8 +1056,14 @@ export class PlayArea {
 
   static async FromDeck(clientId: number, deck: DeckData) {
     const hydratedDeck = await profileAsync('FromDeck.hydrateDeck', () => hydrateDeck(deck));
+    const inPlay = hydratedDeck.inPlay ?? {};
     let cardsInDeck = expandCardEntries(
-      Object.values(hydratedDeck.cards).filter(card => !hydratedDeck.inPlay[getCardKey(card)]),
+      Object.values(hydratedDeck.cards)
+        .map(card => ({
+          ...card,
+          qty: remainingDeckQtyAfterInPlay(card, inPlay),
+        }))
+        .filter(card => card.qty > 0),
     );
     let cardsInPlay = expandCardEntries(Object.values(hydratedDeck.inPlay));
 
