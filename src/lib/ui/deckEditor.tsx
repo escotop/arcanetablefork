@@ -55,7 +55,7 @@ import {
   isEntrySpanishPrinting,
   listDeckEntriesForSpanishSearch,
 } from '../deckSpanishPrintings';
-import { searchCards } from '../scryfall/client';
+import { searchDeckEditorCatalog } from '../deckEditorCatalogSearch';
 import { cn } from '../utils';
 import styles from './deckEditor.module.css';
 import DeckGridCard from './deckEditor/deckGridCard';
@@ -877,6 +877,7 @@ export const DeckEditor: Component<Props> = props => {
 
   let lastSearchString: string | undefined;
   let cancelSearch = false;
+  let catalogSearchUsesMtgApi = false;
 
   function onSearch(q?: string, page?: number, catalogType?: string, subtypes?: string[]) {
     if (cancelSearch || !isCatalogTab()) return;
@@ -907,11 +908,18 @@ export const DeckEditor: Component<Props> = props => {
     }
 
     function fetchPage(append?: true) {
-      searchCards(q ?? '', { types, subtypes: subtypeFilters, page: searchPage })
+      searchDeckEditorCatalog(q ?? '', { types, subtypes: subtypeFilters, page: searchPage })
         .then(result => {
           if ((result as { code?: string }).code === 'error') {
             toast(`failed to load search results. Try again later`);
             return;
+          }
+
+          if (result.source === 'mtgapi' && !catalogSearchUsesMtgApi) {
+            catalogSearchUsesMtgApi = true;
+            toast(
+              'Scryfall está limitado; buscando con el catálogo MTG (magicthegathering.io).',
+            );
           }
 
           const newResults = result.data.map(detail => populateCardInfo(detail));
@@ -932,7 +940,10 @@ export const DeckEditor: Component<Props> = props => {
 
           setSearchParams({ page: result.page, totalPages: result.total_pages }, { replace: true });
         })
-        .catch(() => toast('failed to load search results. Try again later'));
+        .catch(error => {
+          devLog.warn('[deck editor] catalog search failed', error);
+          toast('No se pudieron cargar los resultados. Prueba de nuevo en un momento.');
+        });
     }
 
     fetchPage(isSearchSame);

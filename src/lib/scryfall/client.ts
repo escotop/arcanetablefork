@@ -201,6 +201,18 @@ function buildSearchQuery(q: string, types: string[] = [], subtypes: string[] = 
   return parts.join(' ').trim() || '*';
 }
 
+export class ScryfallRequestError extends Error {
+  readonly status: number;
+  readonly body: string;
+
+  constructor(status: number, body: string) {
+    super(`Scryfall request failed (${status})`);
+    this.name = 'ScryfallRequestError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 export async function searchCards(
   q: string,
   options: { types?: string[]; subtypes?: string[]; page?: number } = {},
@@ -213,14 +225,18 @@ export async function searchCards(
   });
 
   const res = await scryfallFetch(`/cards/search?${params}`);
+  const text = await res.text();
   if (res.status === 404) {
     return { id: 'mtgplayer', object: 'list', page, total_cards: 0, total_pages: 0, data: [] };
   }
   if (!res.ok) {
-    throw new Error(`Scryfall search failed (${res.status})`);
+    throw new ScryfallRequestError(res.status, text);
   }
 
-  const list = await res.json();
+  const list = JSON.parse(text) as {
+    total_cards?: number;
+    data?: Array<Record<string, unknown>>;
+  };
   const totalCards = list.total_cards ?? list.data?.length ?? 0;
   return {
     id: 'mtgplayer',
