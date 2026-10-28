@@ -192,12 +192,20 @@ function syncInPlayEntries(
     const deckCard = matched?.entry;
     if (!deckCard) return card;
 
-    const keepInPlayPrinting =
-      hasRequestedPrinting(card) &&
-      (!printingMatchesRequest(deckCard.detail, card) ||
-        getCardKey(card) !== getCardKey(deckCard));
+    const deckPrintingReady =
+      hasRequestedPrinting(deckCard) && printingMatchesRequest(deckCard.detail, deckCard);
 
-    if (keepInPlayPrinting) {
+    if (deckPrintingReady) {
+      return {
+        ...deckCard,
+        qty: card.qty ?? deckCard.qty,
+      };
+    }
+
+    if (
+      hasRequestedPrinting(card) &&
+      (!printingMatchesRequest(deckCard.detail, card) || getCardKey(card) !== getCardKey(deckCard))
+    ) {
       return {
         ...deckCard,
         id: card.id ?? deckCard.id,

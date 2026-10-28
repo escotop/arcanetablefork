@@ -134,6 +134,7 @@ import {
   sortCommandersFirst,
   toggleCommanderCategories,
 } from '../deckCommander';
+import { computeDeckCoverMetadata, invalidateDeckPreviewCache } from '../deckCoverPreview';
 import { collectTokenPartIds, getDefaultTokenEntry, getTokenKey, mergeTokenPrintings, resolveTokensForSources } from '../deckTokens';
 import { reportClientError } from '../clientErrorReporting';
 import OverflowMenuIcon from 'lucide-solid/icons/ellipsis';
@@ -659,9 +660,22 @@ export const DeckEditor: Component<Props> = props => {
       categories: previous.categories ?? updated.categories ?? [],
       customArtUrl: undefined,
     };
-    updateDeck(section, storageKey, nextEntry);
+    const nextKey = getCardKey(nextEntry);
+    if (nextKey !== storageKey) {
+      updateDeck(section, storageKey, undefined);
+    }
+    updateDeck(section, nextKey, nextEntry);
     if (section === 'cards') {
       updateInPlayMirror(previous, nextEntry);
+      if (isCommanderCard(nextEntry)) {
+        const snapshot = unwrap(deck) as Deck;
+        const cards = { ...(snapshot.cards ?? {}) };
+        if (nextKey !== storageKey) delete cards[storageKey];
+        cards[nextKey] = nextEntry;
+        const deckForCover = { ...snapshot, cards };
+        invalidateDeckPreviewCache(deckForCover);
+        updateDeck(computeDeckCoverMetadata(deckForCover));
+      }
     }
   }
 

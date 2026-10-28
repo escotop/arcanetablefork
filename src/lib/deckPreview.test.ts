@@ -66,7 +66,41 @@ test('getDeckPreviewImageUrl uses default back when only printing ids are stored
     set: '',
   });
 
-  expect(getDeckPreviewImageUrl(deck)).toContain('card%20back.png');
+  expect(getDeckPreviewImageUrl(deck)).toMatch(/card back\.png/i);
+});
+
+test('getDeckPreviewImageUrl ignores stale stored cover for commanders', () => {
+  const chosenId = '00000000-0000-0000-0000-000000000002';
+  const deck: Deck = {
+    id: 'd1',
+    version: 1,
+    system: 'mtg',
+    name: 'Test',
+    startingLife: 40,
+    cards: {
+      [chosenId]: {
+        id: chosenId,
+        name: 'Korvold, Fae-Cursed King',
+        qty: 1,
+        categories: ['commander'],
+        set: 'sld',
+        collector_number: '1234',
+        detail: {
+          id: chosenId,
+          name: 'Korvold, Fae-Cursed King',
+          image_uris: {
+            art_crop: 'https://cards.scryfall.io/art_crop/front/chosen/korvold.jpg',
+          },
+        },
+      },
+    },
+    inPlay: {},
+    coverImage: 'https://cards.scryfall.io/art_crop/front/default/korvold.jpg',
+  };
+
+  expect(getDeckPreviewImageUrl(deck)).toBe(
+    'https://cards.scryfall.io/art_crop/front/chosen/korvold.jpg',
+  );
 });
 test('getDeckPreviewImageUrl prefers stored coverImage', () => {
   const deck = deckWithCommander({

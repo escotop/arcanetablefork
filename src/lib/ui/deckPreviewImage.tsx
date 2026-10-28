@@ -2,6 +2,7 @@ import { Component, createEffect, createMemo, createSignal } from 'solid-js';
 import { Deck } from '../constants';
 import {
   DEFAULT_DECK_PREVIEW,
+  deckCoverCacheKey,
   fetchDeckPreviewDirectUrl,
   getDeckPreviewImageUrlCandidates,
 } from '../deckCoverPreview';
@@ -30,6 +31,7 @@ export const DeckPreviewImage: Component<{
   createEffect(() => {
     props.deck.id;
     props.deck.coverImage;
+    deckCoverCacheKey(props.deck);
     setAttempt(0);
     setFetchedUrl(undefined);
     void fetchDeckPreviewDirectUrl(props.deck).then(url => {

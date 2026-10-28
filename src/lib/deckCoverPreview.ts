@@ -184,12 +184,21 @@ function collectDeckEntries(deck: StoredDeck) {
 }
 
 export function getDeckCoverCard(deck: StoredDeck): DetailedCardEntry | undefined {
-  const pool = collectDeckEntries(deck);
-
-  const commanders = pool.filter(isCommanderCard);
-  if (commanders.length) {
-    return [...commanders].sort((left, right) => cardPopularity(left) - cardPopularity(right))[0];
+  const deckCommanders = Object.values(deck.cards ?? {}).filter(
+    card => (card?.qty ?? 0) > 0 && isCommanderCard(card),
+  );
+  if (deckCommanders.length) {
+    return [...deckCommanders].sort((left, right) => cardPopularity(left) - cardPopularity(right))[0];
   }
+
+  const inPlayCommanders = Object.values(deck.inPlay ?? {}).filter(
+    card => (card?.qty ?? 0) > 0 && isCommanderCard(card),
+  );
+  if (inPlayCommanders.length) {
+    return [...inPlayCommanders].sort((left, right) => cardPopularity(left) - cardPopularity(right))[0];
+  }
+
+  const pool = collectDeckEntries(deck);
 
   let best: DetailedCardEntry | undefined;
   for (const card of pool) {
@@ -306,7 +315,7 @@ async function fetchCoverCardDetail(card: DetailedCardEntry) {
 
 /** Resolves a hotlinkable `cards.scryfall.io` (or custom) URL; never uses api.scryfall.com image redirects. */
 export async function fetchDeckPreviewDirectUrl(deck: StoredDeck): Promise<string | undefined> {
-  const cacheKey = deck.id;
+  const cacheKey = deckCoverCacheKey(deck);
   const cached = previewDirectUrlCache.get(cacheKey);
   if (cached) return cached;
 
@@ -365,9 +374,37 @@ function recomputeCoverFromDeck(deck: StoredDeck) {
   };
 }
 
+export function computeDeckCoverMetadata(
+  deck: StoredDeck,
+): Pick<StoredDeck, 'coverImage' | 'coverImageFullArt'> {
+  return recomputeCoverFromDeck(deck);
+}
+
+export function deckCoverCacheKey(deck: StoredDeck) {
+  const card = getDeckCoverCard(deck);
+  const printing = card ? resolvePrintingForPreview(card) : {};
+  return [
+    deck.id ?? '',
+    printing.scryfallId ?? '',
+    printing.set ?? '',
+    printing.collector_number ?? '',
+    card?.customArtUrl ?? '',
+  ].join('|');
+}
+
+export function invalidateDeckPreviewCache(deck: StoredDeck) {
+  previewDirectUrlCache.delete(deckCoverCacheKey(deck));
+  if (deck.id) previewDirectUrlCache.delete(deck.id);
+}
+
 export function getDeckCoverMetadata(
   deck: StoredDeck,
 ): Pick<StoredDeck, 'coverImage' | 'coverImageFullArt'> {
+  const coverCard = getDeckCoverCard(deck);
+  if (coverCard && isCommanderCard(coverCard)) {
+    return recomputeCoverFromDeck(deck);
+  }
+
   const stored = deck.coverImage;
   if (stored && !isBrokenStoredCover(stored)) {
     return {
@@ -382,20 +419,34 @@ export function getDeckCoverMetadata(
 /** Ordered fallbacks for preview `<img>` (stored cover first, like pre-refactor UI). */
 export function getDeckPreviewImageUrlCandidates(deck: StoredDeck): string[] {
   const candidates: string[] = [];
+  const coverCard = getDeckCoverCard(deck);
+
+  if (coverCard && isCommanderCard(coverCard)) {
+    const fresh = recomputeCoverFromDeck(deck);
+    pushPreviewCandidate(candidates, fresh.coverImage);
+    if (coverCard.customArtUrl) {
+      pushPreviewCandidate(
+        candidates,
+        normalizeTextureUrl(coverCard.customArtUrl) ?? coverCard.customArtUrl,
+      );
+    }
+    pushPreviewCandidate(candidates, directUrlFromScryfallDetail(coverCard.detail));
+    pushPreviewCandidate(candidates, DEFAULT_DECK_PREVIEW);
+    return candidates;
+  }
 
   if (deck.coverImage && !isBrokenStoredCover(deck.coverImage)) {
     pushPreviewCandidate(candidates, deck.coverImage);
   }
 
-  const card = getDeckCoverCard(deck);
-  if (card) {
-    if (card.customArtUrl) {
+  if (coverCard) {
+    if (coverCard.customArtUrl) {
       pushPreviewCandidate(
         candidates,
-        normalizeTextureUrl(card.customArtUrl) ?? card.customArtUrl,
+        normalizeTextureUrl(coverCard.customArtUrl) ?? coverCard.customArtUrl,
       );
     }
-    pushPreviewCandidate(candidates, directUrlFromScryfallDetail(card.detail));
+    pushPreviewCandidate(candidates, directUrlFromScryfallDetail(coverCard.detail));
   }
 
   pushPreviewCandidate(candidates, DEFAULT_DECK_PREVIEW);
