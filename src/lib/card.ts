@@ -32,7 +32,7 @@ import {
   DetailedCardEntry,
 } from './constants';
 import {
-  getDisplayTextureUrl,
+  getCustomArtDisplayUrl,
   getTextureLoadUrl,
   getTextureLoadUrlCandidates,
   isImageProxyUrl,
@@ -1059,7 +1059,7 @@ export function resolveImageUrl(
 
 export function getCardImage(card: DetailedCardEntry | Card, face = 0) {
   if (face === 0 && card.customArtUrl) {
-    return getDisplayTextureUrl(card.customArtUrl) ?? normalizeTextureUrl(card.customArtUrl);
+    return getCustomArtDisplayUrl(card.customArtUrl);
   }
   return normalizeTextureUrl(resolveImageUrl(getImageUris(card, face)));
 }

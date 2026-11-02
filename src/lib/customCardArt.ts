@@ -224,6 +224,12 @@ export function getTextureLoadUrl(url: string | undefined): string | undefined {
   return proxyPath;
 }
 
+/** Normalized URL for `<img>` tags in deck editor and previews (direct load; no weserv). */
+export function getCustomArtDisplayUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  return normalizeTextureUrl(url) ?? url;
+}
+
 /** URL for `<img>` and UI previews (avoids CORS-blocked origins when possible). */
 export function getDisplayTextureUrl(url: string | undefined): string | undefined {
   const normalized = normalizeTextureUrl(url);
@@ -338,7 +344,7 @@ export function applyCustomArtToEntry(entry: DetailedCardEntry): DetailedCardEnt
 }
 
 export function getCustomArtPreviewUrl(imageUrl: string) {
-  return imageUrl;
+  return getCustomArtDisplayUrl(imageUrl) ?? imageUrl;
 }
 
 export function savedUrlsToCustomArtOptions(
@@ -356,5 +362,7 @@ export function savedUrlsToCustomArtOptions(
 
 export function isCustomArtImageSelected(currentUrl: string | undefined, imageUrl: string) {
   if (!currentUrl) return false;
-  return currentUrl === imageUrl || currentUrl === getCustomArtPreviewUrl(imageUrl);
+  const current = getCustomArtPreviewUrl(currentUrl);
+  const candidate = getCustomArtPreviewUrl(imageUrl);
+  return current === candidate || currentUrl === imageUrl;
 }
