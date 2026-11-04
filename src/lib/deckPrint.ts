@@ -5,11 +5,9 @@ import {
 import { DetailedCardEntry } from './constants';
 import {
   collectUniquePrintImageUrls,
-  detectNeedsBlackCornerFill,
   estimatePrintDeckLayout,
+  fillTransparentPixelsBlack,
   mirroredPrintCardPositionMm,
-  mtgPrintCornerRadiusPx,
-  paintBlackCornerCaps,
   printCardPositionMm,
   printImagePixelSize,
   type PrintPageSize,
@@ -25,9 +23,7 @@ export {
   printImagePixelSize,
   PRINT_PDF_IMAGE_DPI,
   collectUniquePrintImageUrls,
-  detectNeedsBlackCornerFill,
-  mtgPrintCornerRadiusPx,
-  paintBlackCornerCaps,
+  fillTransparentPixelsBlack,
 } from './deckPrintLayout';
 export type { PrintDeckLayout, PrintPageSize } from './deckPrintLayout';
 
@@ -163,20 +159,22 @@ async function rasterizeImageSourceForPdf(
   const canvas = document.createElement('canvas');
   canvas.width = targetWidth;
   canvas.height = targetHeight;
-  const ctx = canvas.getContext('2d', { alpha: false });
+  const ctx = canvas.getContext('2d', { alpha: blackCorners });
   if (!ctx) throw new Error('Failed to prepare image for PDF');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, targetWidth, targetHeight);
-  ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
 
   if (blackCorners) {
-    const radius = mtgPrintCornerRadiusPx(targetWidth);
-    const { data } = ctx.getImageData(0, 0, targetWidth, targetHeight);
-    if (detectNeedsBlackCornerFill(data, targetWidth, targetHeight, radius)) {
-      paintBlackCornerCaps(ctx, targetWidth, targetHeight, radius);
-    }
+    // Preserve source alpha, then fill empty pixels inside the slot with black.
+    ctx.clearRect(0, 0, targetWidth, targetHeight);
+    ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
+    const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+    fillTransparentPixelsBlack(imageData.data);
+    ctx.putImageData(imageData, 0, 0);
+  } else {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, targetWidth, targetHeight);
+    ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
   }
 
   return { dataUrl: canvas.toDataURL('image/png'), format: PDF_RASTER_FORMAT };
