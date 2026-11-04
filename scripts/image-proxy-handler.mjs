@@ -7,6 +7,7 @@ const ALLOWED_HOST_SUFFIXES = [
   'googleusercontent.com',
   'google.com',
   'gstatic.com',
+  'scryfall.io',
 ];
 
 export function isAllowedImageHost(hostname) {

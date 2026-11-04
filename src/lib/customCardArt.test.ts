@@ -1,7 +1,8 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import {
   galleryEntryMatchesCardName,
   getGallerySearchName,
+  getTextureLoadUrl,
 } from './customCardArt';
 
 test('getGallerySearchName uses the front face of DFCs', () => {
@@ -34,4 +35,15 @@ test('galleryEntryMatchesCardName ignores creative edition titles', () => {
   expect(
     galleryEntryMatchesCardName('Sol Ring', null),
   ).toBe(false);
+});
+
+test('getTextureLoadUrl routes Scryfall CDN through same-origin image proxy', () => {
+  vi.stubGlobal('location', { origin: 'https://untapped-table.narcolepticdracu.com' });
+  const scryfallPng =
+    'https://cards.scryfall.io/png/front/6/5/654a1564-0356-44ad-b1ab-8c1a556fc244.png?1783907183';
+  const proxied = getTextureLoadUrl(scryfallPng);
+  expect(proxied).toBe(
+    `https://untapped-table.narcolepticdracu.com/image-proxy?uri=${encodeURIComponent(scryfallPng)}`,
+  );
+  vi.unstubAllGlobals();
 });

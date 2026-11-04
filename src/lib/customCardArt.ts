@@ -185,9 +185,8 @@ export function needsTextureProxy(url: string): boolean {
     if (typeof globalThis.location !== 'undefined' && parsed.origin === globalThis.location.origin) {
       return false;
     }
-    if (parsed.hostname.endsWith('scryfall.io')) return false;
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
-    return isTextureProxyHost(parsed.hostname);
+    return isTextureProxyHost(parsed.hostname) || parsed.hostname.endsWith('scryfall.io');
   } catch {
     return false;
   }
