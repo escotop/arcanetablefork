@@ -15,6 +15,7 @@ import {
 } from 'solid-js';
 import { scrollTarget, setScrollTarget } from '../globals';
 import { toast } from 'solid-sonner';
+import { cn } from '~/lib/cnUtil';
 import { Button } from '~/components/ui/button';
 import { TextField, TextFieldInput } from '~/components/ui/text-field';
 import {
@@ -38,6 +39,8 @@ export interface CardBackPickerModalProps {
   onOpenChange: (open: boolean) => void;
   selected?: SavedCardBack;
   onSelect: (cardBack: SavedCardBack) => void;
+  /** Use above deck editor modals (z-70), e.g. `z-[80]`. */
+  stackClass?: string;
 }
 
 const PAGINATION_WINDOW = 5;
@@ -193,7 +196,12 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
   return (
     <Dialog open={props.open} onOpenChange={handleOpenChange}>
       <DialogContent
-        class='flex h-[90vh] w-[96vw] max-w-[min(96vw,1400px)] flex-col gap-4 overflow-hidden'
+        portalClass={props.stackClass}
+        overlayClass={props.stackClass}
+        class={cn(
+          'flex h-[90vh] w-[96vw] max-w-[min(96vw,1400px)] flex-col gap-4 overflow-hidden',
+          props.stackClass,
+        )}
         onWheel={stopWheelPropagation}>
         <DialogHeader>
           <DialogTitle>Elegir reverso de carta</DialogTitle>

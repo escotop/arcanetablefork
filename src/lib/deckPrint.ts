@@ -4,11 +4,28 @@ import {
   normalizeTextureUrl,
 } from './customCardArt';
 import { DetailedCardEntry } from './constants';
+import {
+  estimatePrintDeckLayout,
+  mirroredPrintCardPositionMm,
+  printCardPositionMm,
+  type PrintPageSize,
+} from './deckPrintLayout';
 
-export const MTG_CARD_WIDTH_MM = 63;
-export const MTG_CARD_HEIGHT_MM = 88;
+export {
+  estimatePrintDeckLayout,
+  mirroredPrintCardCol,
+  mirroredPrintCardPositionMm,
+  MTG_CARD_HEIGHT_MM,
+  MTG_CARD_WIDTH_MM,
+  printCardPositionMm,
+} from './deckPrintLayout';
+export type { PrintDeckLayout, PrintPageSize } from './deckPrintLayout';
 
-export type PrintPageSize = 'a4' | 'letter';
+export type PrintDeckCardBack = {
+  id: string;
+  title: string;
+  imageUrl: string;
+};
 
 export interface PrintDeckOptions {
   spacingMm: number;
@@ -17,16 +34,8 @@ export interface PrintDeckOptions {
   pageSize: PrintPageSize;
   includeSideboard: boolean;
   includeTokens: boolean;
-}
-
-export interface PrintDeckLayout {
-  cols: number;
-  rows: number;
-  cardsPerPage: number;
-  cardWidthMm: number;
-  cardHeightMm: number;
-  pageWidthMm: number;
-  pageHeightMm: number;
+  addCardBacks: boolean;
+  cardBack?: PrintDeckCardBack;
 }
 
 export interface PrintDeckProgress {
@@ -35,11 +44,6 @@ export interface PrintDeckProgress {
   total: number;
   message?: string;
 }
-
-const PAGE_SIZES: Record<PrintPageSize, [number, number]> = {
-  a4: [210, 297],
-  letter: [215.9, 279.4],
-};
 
 type PdfImageFormat = 'PNG' | 'JPEG';
 
@@ -51,7 +55,12 @@ export function getDefaultPrintDeckOptions(): PrintDeckOptions {
     pageSize: 'a4',
     includeSideboard: false,
     includeTokens: false,
+    addCardBacks: false,
   };
+}
+
+function printLoadUrlForCardBack(back: PrintDeckCardBack) {
+  return `/image-proxy?uri=${encodeURIComponent(back.imageUrl)}`;
 }
 
 export function buildPrintDeckCardList(
@@ -64,28 +73,6 @@ export function buildPrintDeckCardList(
   if (options.includeSideboard) cards = cards.concat(sideboard);
   if (options.includeTokens) cards = cards.concat(tokens);
   return cards;
-}
-
-export function estimatePrintDeckLayout(options: PrintDeckOptions): PrintDeckLayout {
-  const [pageWidthMm, pageHeightMm] = PAGE_SIZES[options.pageSize];
-  const cardWidthMm = MTG_CARD_WIDTH_MM * options.scale;
-  const cardHeightMm = MTG_CARD_HEIGHT_MM * options.scale;
-  const gap = options.spacingMm;
-  const margin = options.pageMarginMm;
-  const usableWidth = pageWidthMm - margin * 2;
-  const usableHeight = pageHeightMm - margin * 2;
-  const cols = Math.max(1, Math.floor((usableWidth + gap) / (cardWidthMm + gap)));
-  const rows = Math.max(1, Math.floor((usableHeight + gap) / (cardHeightMm + gap)));
-
-  return {
-    cols,
-    rows,
-    cardsPerPage: cols * rows,
-    cardWidthMm,
-    cardHeightMm,
-    pageWidthMm,
-    pageHeightMm,
-  };
 }
 
 function isDoubleFacedForPrint(card: DetailedCardEntry): boolean {
@@ -242,12 +229,27 @@ export async function generateDeckPdf(
     format: options.pageSize,
   });
 
+  if (options.addCardBacks && !options.cardBack?.imageUrl) {
+    throw new Error('Select a card back to include in the PDF');
+  }
+
   const imageCache = new Map<string, { dataUrl: string; format: PdfImageFormat }>();
+
+  type PagePlacement = {
+    slot: (typeof slots)[number];
+    col: number;
+    row: number;
+    x: number;
+    y: number;
+    image: { dataUrl: string; format: PdfImageFormat };
+  };
+
+  const pages: PagePlacement[][] = [];
 
   for (let index = 0; index < slots.length; index++) {
     const slot = slots[index];
     onProgress?.({
-      phase: index === slots.length - 1 ? 'rendering' : 'loading',
+      phase: 'loading',
       current: index + 1,
       total: slots.length,
       message: slot.name,
@@ -259,17 +261,67 @@ export async function generateDeckPdf(
       imageCache.set(slot.imageUrl, image);
     }
 
-    if (index > 0 && index % layout.cardsPerPage === 0) {
-      doc.addPage(options.pageSize, 'portrait');
+    const pageIndex = Math.floor(index / layout.cardsPerPage);
+    while (pages.length <= pageIndex) {
+      pages.push([]);
     }
 
     const positionOnPage = index % layout.cardsPerPage;
     const col = positionOnPage % layout.cols;
     const row = Math.floor(positionOnPage / layout.cols);
-    const x = options.pageMarginMm + col * (layout.cardWidthMm + options.spacingMm);
-    const y = options.pageMarginMm + row * (layout.cardHeightMm + options.spacingMm);
+    const { x, y } = printCardPositionMm(col, row, options, layout);
 
-    doc.addImage(image.dataUrl, image.format, x, y, layout.cardWidthMm, layout.cardHeightMm);
+    pages[pageIndex].push({ slot, col, row, x, y, image });
+  }
+
+  let backImage: { dataUrl: string; format: PdfImageFormat } | undefined;
+  if (options.addCardBacks && options.cardBack) {
+    const backLoadUrl = printLoadUrlForCardBack(options.cardBack);
+    backImage = await loadImageForPdf(backLoadUrl);
+  }
+
+  onProgress?.({
+    phase: 'rendering',
+    current: pages.length,
+    total: pages.length,
+    message: options.addCardBacks ? 'Building pages and backs' : 'Building pages',
+  });
+
+  for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+    if (pageIndex > 0) {
+      doc.addPage(options.pageSize, 'portrait');
+    }
+
+    for (const placement of pages[pageIndex]) {
+      doc.addImage(
+        placement.image.dataUrl,
+        placement.image.format,
+        placement.x,
+        placement.y,
+        layout.cardWidthMm,
+        layout.cardHeightMm,
+      );
+    }
+
+    if (backImage) {
+      doc.addPage(options.pageSize, 'portrait');
+      for (const placement of pages[pageIndex]) {
+        const { x, y } = mirroredPrintCardPositionMm(
+          placement.col,
+          placement.row,
+          options,
+          layout,
+        );
+        doc.addImage(
+          backImage.dataUrl,
+          backImage.format,
+          x,
+          y,
+          layout.cardWidthMm,
+          layout.cardHeightMm,
+        );
+      }
+    }
   }
 
   const safeName = deckName.trim() || 'deck';

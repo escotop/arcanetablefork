@@ -38,6 +38,8 @@ import {
 } from '~/lib/deckPrint';
 import { toast } from 'solid-sonner';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
+import type { SavedCardBack } from '~/lib/savedCardBack';
+import CardBackPickerModal from '~/lib/ui/cardBackPickerModal';
 
 interface Props {
   open: boolean;
@@ -58,6 +60,8 @@ const PrintDeckModal: Component<Props> = props => {
   const [spacingInput, setSpacingInput] = createSignal(String(getDefaultPrintDeckOptions().spacingMm));
   const [printing, setPrinting] = createSignal(false);
   const [progress, setProgress] = createSignal('');
+  const [selectedCardBack, setSelectedCardBack] = createSignal<SavedCardBack | undefined>();
+  const [cardBackPickerOpen, setCardBackPickerOpen] = createSignal(false);
 
   const sideboardCards = () => props.sideboardCards ?? [];
   const tokenCards = () => props.tokenCards ?? [];
@@ -71,9 +75,15 @@ const PrintDeckModal: Component<Props> = props => {
   );
   const printableCount = createMemo(() => countPrintableDeckCards(printableCards()));
   const layout = createMemo(() => estimatePrintDeckLayout(options()));
-  const pageCount = createMemo(() =>
+  const frontPageCount = createMemo(() =>
     printableCount() ? Math.ceil(printableCount() / layout().cardsPerPage) : 0,
   );
+  const pageCount = createMemo(() => {
+    const fronts = frontPageCount();
+    if (!fronts) return 0;
+    if (options().addCardBacks && selectedCardBack()) return fronts * 2;
+    return fronts;
+  });
 
   function updateOption<Key extends keyof PrintDeckOptions>(key: Key, value: PrintDeckOptions[Key]) {
     setOptions(current => ({ ...current, [key]: value }));
@@ -101,17 +111,30 @@ const PrintDeckModal: Component<Props> = props => {
 
     commitSpacingInput();
 
+    if (options().addCardBacks && !selectedCardBack()) {
+      toast.error('Select a card back first');
+      return;
+    }
+
     setPrinting(true);
     setProgress('Preparing PDF...');
 
     try {
-      await generateDeckPdf(printableCards(), props.deckName, options(), progressState => {
-        const label =
-          progressState.phase === 'rendering'
-            ? 'Rendering PDF...'
-            : `Loading card ${progressState.current}/${progressState.total}`;
-        setProgress(progressState.message ? `${label}: ${progressState.message}` : label);
-      });
+      await generateDeckPdf(
+        printableCards(),
+        props.deckName,
+        {
+          ...options(),
+          cardBack: selectedCardBack(),
+        },
+        progressState => {
+          const label =
+            progressState.phase === 'rendering'
+              ? 'Rendering PDF...'
+              : `Loading card ${progressState.current}/${progressState.total}`;
+          setProgress(progressState.message ? `${label}: ${progressState.message}` : label);
+        },
+      );
       toast.success('Deck PDF downloaded');
       props.onClose();
     } catch (error) {
@@ -157,7 +180,11 @@ const PrintDeckModal: Component<Props> = props => {
                   {layout().cols} × {layout().rows} per page ({layout().cardsPerPage} cards/page)
                 </div>
                 <div>
-                  {pageCount()} page{pageCount() === 1 ? '' : 's'}
+                  {frontPageCount()} front page{frontPageCount() === 1 ? '' : 's'}
+                  <Show when={options().addCardBacks && selectedCardBack()}>
+                    {' '}
+                    ({pageCount()} total with backs)
+                  </Show>
                 </div>
                 <div class='text-muted-foreground'>
                   Card size: {layout().cardWidthMm.toFixed(1)} × {layout().cardHeightMm.toFixed(1)} mm
@@ -193,6 +220,28 @@ const PrintDeckModal: Component<Props> = props => {
                     </Show>
                   </span>
                 </Label>
+                <Label class='flex items-center gap-2 font-normal'>
+                  <Checkbox
+                    checked={options().addCardBacks}
+                    onChange={checked => updateOption('addCardBacks', checked)}
+                  />
+                  <span>Add card backs</span>
+                </Label>
+                <Show when={options().addCardBacks}>
+                  <div class='flex flex-wrap items-center gap-2 pl-6'>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      disabled={printing()}
+                      onClick={() => setCardBackPickerOpen(true)}>
+                      {selectedCardBack() ? 'Change card back' : 'Choose card back'}
+                    </Button>
+                    <Show when={selectedCardBack()}>
+                      <span class='text-sm text-muted-foreground'>{selectedCardBack()!.title}</span>
+                    </Show>
+                  </div>
+                </Show>
               </div>
 
               <div class='grid gap-4 sm:grid-cols-2'>
@@ -295,6 +344,15 @@ const PrintDeckModal: Component<Props> = props => {
             </DialogFooter>
           </DialogContentExtended>
         </div>
+      </Portal>
+      <Portal>
+        <CardBackPickerModal
+          open={cardBackPickerOpen()}
+          onOpenChange={setCardBackPickerOpen}
+          selected={selectedCardBack()}
+          onSelect={setSelectedCardBack}
+          stackClass='z-[80]'
+        />
       </Portal>
     </Dialog>
   );

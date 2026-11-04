@@ -9,11 +9,15 @@ import { cn } from '~/lib/cnUtil';
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
 
-const DialogPortal: Component<DialogPrimitive.DialogPortalProps> = props => {
-  const [, rest] = splitProps(props, ['children']);
+const DialogPortal: Component<DialogPrimitive.DialogPortalProps & { class?: string }> = props => {
+  const [, rest] = splitProps(props, ['children', 'class']);
   return (
     <DialogPrimitive.Portal {...rest}>
-      <div class='fixed inset-0 z-50 flex items-start justify-center sm:items-center'>
+      <div
+        class={cn(
+          'fixed inset-0 z-50 flex items-start justify-center sm:items-center',
+          props.class,
+        )}>
         {props.children}
       </div>
     </DialogPrimitive.Portal>
@@ -42,6 +46,8 @@ type DialogContentProps<T extends ValidComponent = 'div'> =
   DialogPrimitive.DialogContentProps<T> & {
     class?: string | undefined;
     children?: JSX.Element;
+    portalClass?: string | undefined;
+    overlayClass?: string | undefined;
   };
 
 const DialogContentExtended = props => {
@@ -78,10 +84,18 @@ const DialogContentExtended = props => {
 const DialogContent = <T extends ValidComponent = 'div'>(
   props: PolymorphicProps<T, DialogContentProps<T>>,
 ) => {
+  const [, rest] = splitProps(props as DialogContentProps, [
+    'class',
+    'children',
+    'portalClass',
+    'overlayClass',
+  ]);
   return (
-    <DialogPortal>
-      <DialogOverlay />
-      <DialogContentExtended {...props} />
+    <DialogPortal class={props.portalClass}>
+      <DialogOverlay class={props.overlayClass} />
+      <DialogContentExtended class={props.class} {...rest}>
+        {props.children}
+      </DialogContentExtended>
     </DialogPortal>
   );
 };
