@@ -932,7 +932,7 @@ export const DeckEditor: Component<Props> = props => {
           if (result.source === 'mtgapi' && !catalogSearchUsesMtgApi) {
             catalogSearchUsesMtgApi = true;
             toast(
-              'Scryfall está limitado; buscando con el catálogo MTG (magicthegathering.io).',
+              'Scryfall no respondió; buscando con el catálogo MTG (magicthegathering.io).',
             );
           }
 
