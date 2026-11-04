@@ -131,7 +131,7 @@ const PrintDeckModal: Component<Props> = props => {
           const label =
             progressState.phase === 'rendering'
               ? 'Rendering PDF...'
-              : `Loading card ${progressState.current}/${progressState.total}`;
+              : `Loading images ${progressState.current}/${progressState.total}`;
           setProgress(progressState.message ? `${label}: ${progressState.message}` : label);
         },
       );

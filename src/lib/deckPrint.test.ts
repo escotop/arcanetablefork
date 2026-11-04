@@ -1,9 +1,11 @@
 import { expect, test } from 'vitest';
 import {
+  collectUniquePrintImageUrls,
   estimatePrintDeckLayout,
   mirroredPrintCardCol,
   mirroredPrintCardPositionMm,
   printCardPositionMm,
+  printImagePixelSize,
 } from './deckPrintLayout';
 
 const defaultLayoutOptions = {
@@ -28,4 +30,23 @@ test('mirroredPrintCardPositionMm mirrors horizontal slot on back page', () => {
 
   expect(backRight.x).toBe(frontRight.x);
   expect(backRight.y).toBe(frontLeft.y);
+});
+
+test('printImagePixelSize matches 300 DPI for standard card slots', () => {
+  const layout = estimatePrintDeckLayout(defaultLayoutOptions);
+  const pixels = printImagePixelSize(layout.cardWidthMm, layout.cardHeightMm);
+  expect(pixels.width).toBe(745);
+  expect(pixels.height).toBe(1040);
+});
+
+test('collectUniquePrintImageUrls deduplicates repeated print slots', () => {
+  const urls = collectUniquePrintImageUrls(
+    [
+      { imageUrl: 'a' },
+      { imageUrl: 'a' },
+      { imageUrl: 'b' },
+    ],
+    'back',
+  );
+  expect(urls.sort()).toEqual(['a', 'b', 'back']);
 });

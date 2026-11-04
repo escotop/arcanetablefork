@@ -1,13 +1,14 @@
 import { getCardImage } from './card';
 import {
   getTextureLoadUrlCandidates,
-  normalizeTextureUrl,
 } from './customCardArt';
 import { DetailedCardEntry } from './constants';
 import {
   estimatePrintDeckLayout,
   mirroredPrintCardPositionMm,
   printCardPositionMm,
+  printImagePixelSize,
+  collectUniquePrintImageUrls,
   type PrintPageSize,
 } from './deckPrintLayout';
 
@@ -18,6 +19,9 @@ export {
   MTG_CARD_HEIGHT_MM,
   MTG_CARD_WIDTH_MM,
   printCardPositionMm,
+  printImagePixelSize,
+  PRINT_PDF_IMAGE_DPI,
+  collectUniquePrintImageUrls,
 } from './deckPrintLayout';
 export type { PrintDeckLayout, PrintPageSize } from './deckPrintLayout';
 
@@ -47,6 +51,16 @@ export interface PrintDeckProgress {
 
 type PdfImageFormat = 'PNG' | 'JPEG';
 
+type PdfRasterImage = {
+  dataUrl: string;
+  format: PdfImageFormat;
+  alias: string;
+};
+
+const PDF_RASTER_FORMAT: PdfImageFormat = 'PNG';
+/** Parallel image fetches; browsers limit ~6 connections per origin but proxy may differ. */
+const PRINT_PDF_FETCH_CONCURRENCY = 8;
+
 export function getDefaultPrintDeckOptions(): PrintDeckOptions {
   return {
     spacingMm: 0.2,
@@ -57,10 +71,6 @@ export function getDefaultPrintDeckOptions(): PrintDeckOptions {
     includeTokens: false,
     addCardBacks: false,
   };
-}
-
-function printLoadUrlForCardBack(back: PrintDeckCardBack) {
-  return `/image-proxy?uri=${encodeURIComponent(back.imageUrl)}`;
 }
 
 export function buildPrintDeckCardList(
@@ -136,45 +146,74 @@ function loadImageElement(src: string) {
   });
 }
 
-function blobToPdfImage(blob: Blob, sourceUrl: string): Promise<{ dataUrl: string; format: PdfImageFormat }> {
-  const mime = blob.type.toLowerCase();
-  const urlHint = normalizeTextureUrl(sourceUrl)?.toLowerCase() ?? sourceUrl.toLowerCase();
+async function rasterizeImageSourceForPdf(
+  source: CanvasImageSource,
+  targetWidth: number,
+  targetHeight: number,
+): Promise<{ dataUrl: string; format: PdfImageFormat }> {
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext('2d', { alpha: false });
+  if (!ctx) throw new Error('Failed to prepare image for PDF');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, targetWidth, targetHeight);
+  ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
+  return { dataUrl: canvas.toDataURL('image/png'), format: PDF_RASTER_FORMAT };
+}
 
-  if (mime.includes('png') || urlHint.includes('.png')) {
-    return blobToDataUrl(blob).then(dataUrl => ({ dataUrl, format: 'PNG' }));
-  }
+async function rasterizeImageElementForPdf(
+  image: HTMLImageElement,
+  targetWidth: number,
+  targetHeight: number,
+): Promise<{ dataUrl: string; format: PdfImageFormat }> {
+  return rasterizeImageSourceForPdf(image, targetWidth, targetHeight);
+}
 
-  if (mime.includes('jpeg') || mime.includes('jpg') || /\.jpe?g(\?|$)/.test(urlHint)) {
-    return blobToDataUrl(blob).then(dataUrl => ({ dataUrl, format: 'JPEG' }));
+async function rasterizeBlobForPdf(
+  blob: Blob,
+  targetWidth: number,
+  targetHeight: number,
+): Promise<{ dataUrl: string; format: PdfImageFormat }> {
+  if (typeof createImageBitmap !== 'undefined') {
+    const bitmap = await createImageBitmap(blob);
+    try {
+      return await rasterizeImageSourceForPdf(bitmap, targetWidth, targetHeight);
+    } finally {
+      bitmap.close();
+    }
   }
 
   const objectUrl = URL.createObjectURL(blob);
-  return loadImageElement(objectUrl)
-    .then(image => {
-      const canvas = document.createElement('canvas');
-      canvas.width = image.naturalWidth || image.width;
-      canvas.height = image.naturalHeight || image.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Failed to prepare image for PDF');
-      ctx.drawImage(image, 0, 0);
-      return { dataUrl: canvas.toDataURL('image/png'), format: 'PNG' as PdfImageFormat };
-    })
-    .finally(() => {
-      URL.revokeObjectURL(objectUrl);
-    });
+  try {
+    const image = await loadImageElement(objectUrl);
+    return rasterizeImageElementForPdf(image, targetWidth, targetHeight);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
-async function fetchImageForPdf(loadUrl: string): Promise<{ dataUrl: string; format: PdfImageFormat }> {
+async function fetchImageForPdf(
+  loadUrl: string,
+  targetWidth: number,
+  targetHeight: number,
+): Promise<{ dataUrl: string; format: PdfImageFormat }> {
   const response = await fetch(loadUrl, { credentials: 'omit' });
   if (!response.ok) {
     throw new Error(`Failed to fetch image (${response.status})`);
   }
 
   const blob = await response.blob();
-  return blobToPdfImage(blob, loadUrl);
+  return rasterizeBlobForPdf(blob, targetWidth, targetHeight);
 }
 
-async function loadImageForPdf(url: string): Promise<{ dataUrl: string; format: PdfImageFormat }> {
+async function loadImageForPdf(
+  url: string,
+  targetWidth: number,
+  targetHeight: number,
+): Promise<{ dataUrl: string; format: PdfImageFormat }> {
   const candidates = getTextureLoadUrlCandidates(url);
   if (!candidates.length) {
     throw new Error('Missing image URL');
@@ -183,7 +222,7 @@ async function loadImageForPdf(url: string): Promise<{ dataUrl: string; format: 
   let lastError: Error | undefined;
   for (const loadUrl of candidates) {
     try {
-      return await fetchImageForPdf(loadUrl);
+      return await fetchImageForPdf(loadUrl, targetWidth, targetHeight);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
     }
@@ -192,13 +231,23 @@ async function loadImageForPdf(url: string): Promise<{ dataUrl: string; format: 
   throw lastError ?? new Error(`Failed to load image: ${url}`);
 }
 
-function blobToDataUrl(blob: Blob) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('Failed to read image data'));
-    reader.readAsDataURL(blob);
-  });
+async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<void>,
+) {
+  if (!items.length) return;
+  let nextIndex = 0;
+  async function runWorker() {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      await worker(items[index], index);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => runWorker()),
+  );
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -206,8 +255,12 @@ function downloadBlob(blob: Blob, filename: string) {
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = filename;
+  anchor.rel = 'noopener';
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export async function generateDeckPdf(
@@ -222,18 +275,73 @@ export async function generateDeckPdf(
   }
 
   const layout = estimatePrintDeckLayout(options);
-  const { jsPDF } = await import('jspdf');
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: options.pageSize,
-  });
+  const printPixels = printImagePixelSize(layout.cardWidthMm, layout.cardHeightMm);
 
   if (options.addCardBacks && !options.cardBack?.imageUrl) {
     throw new Error('Select a card back to include in the PDF');
   }
 
-  const imageCache = new Map<string, { dataUrl: string; format: PdfImageFormat }>();
+  const imageCache = new Map<string, PdfRasterImage>();
+  const imagesInFlight = new Map<string, Promise<PdfRasterImage>>();
+  let nextImageAlias = 0;
+  let loadedImageCount = 0;
+
+  async function getPdfImage(imageUrl: string): Promise<PdfRasterImage> {
+    const cached = imageCache.get(imageUrl);
+    if (cached) return cached;
+
+    const inFlight = imagesInFlight.get(imageUrl);
+    if (inFlight) return inFlight;
+
+    const promise = loadImageForPdf(imageUrl, printPixels.width, printPixels.height)
+      .then(raster => {
+        const entry: PdfRasterImage = { ...raster, alias: `p${nextImageAlias++}` };
+        imageCache.set(imageUrl, entry);
+        loadedImageCount++;
+        onProgress?.({
+          phase: 'loading',
+          current: loadedImageCount,
+          total: uniqueImageUrls.length,
+          message: `${loadedImageCount}/${uniqueImageUrls.length} images`,
+        });
+        return entry;
+      })
+      .finally(() => {
+        imagesInFlight.delete(imageUrl);
+      });
+
+    imagesInFlight.set(imageUrl, promise);
+    return promise;
+  }
+
+  const uniqueImageUrls = collectUniquePrintImageUrls(
+    slots,
+    options.addCardBacks ? options.cardBack?.imageUrl : undefined,
+  );
+
+  onProgress?.({
+    phase: 'loading',
+    current: 0,
+    total: uniqueImageUrls.length,
+    message: `0/${uniqueImageUrls.length} images`,
+  });
+
+  await runWithConcurrency(uniqueImageUrls, PRINT_PDF_FETCH_CONCURRENCY, url =>
+    getPdfImage(url),
+  );
+
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: options.pageSize,
+    compress: true,
+  });
+
+  let backImage: PdfRasterImage | undefined;
+  if (options.addCardBacks && options.cardBack?.imageUrl) {
+    backImage = imageCache.get(options.cardBack.imageUrl);
+  }
 
   type PagePlacement = {
     slot: (typeof slots)[number];
@@ -241,24 +349,16 @@ export async function generateDeckPdf(
     row: number;
     x: number;
     y: number;
-    image: { dataUrl: string; format: PdfImageFormat };
+    image: PdfRasterImage;
   };
 
   const pages: PagePlacement[][] = [];
 
   for (let index = 0; index < slots.length; index++) {
     const slot = slots[index];
-    onProgress?.({
-      phase: 'loading',
-      current: index + 1,
-      total: slots.length,
-      message: slot.name,
-    });
-
-    let image = imageCache.get(slot.imageUrl);
+    const image = imageCache.get(slot.imageUrl);
     if (!image) {
-      image = await loadImageForPdf(slot.imageUrl);
-      imageCache.set(slot.imageUrl, image);
+      throw new Error(`Missing print image for ${slot.name}`);
     }
 
     const pageIndex = Math.floor(index / layout.cardsPerPage);
@@ -272,12 +372,6 @@ export async function generateDeckPdf(
     const { x, y } = printCardPositionMm(col, row, options, layout);
 
     pages[pageIndex].push({ slot, col, row, x, y, image });
-  }
-
-  let backImage: { dataUrl: string; format: PdfImageFormat } | undefined;
-  if (options.addCardBacks && options.cardBack) {
-    const backLoadUrl = printLoadUrlForCardBack(options.cardBack);
-    backImage = await loadImageForPdf(backLoadUrl);
   }
 
   onProgress?.({
@@ -300,6 +394,8 @@ export async function generateDeckPdf(
         placement.y,
         layout.cardWidthMm,
         layout.cardHeightMm,
+        placement.image.alias,
+        'SLOW',
       );
     }
 
@@ -319,12 +415,24 @@ export async function generateDeckPdf(
           y,
           layout.cardWidthMm,
           layout.cardHeightMm,
+          backImage.alias,
+          'SLOW',
         );
       }
     }
   }
 
   const safeName = deckName.trim() || 'deck';
-  const blob = doc.output('blob');
+  let blob: Blob;
+  try {
+    blob = doc.output('blob');
+  } catch (error) {
+    if (error instanceof RangeError) {
+      throw new Error(
+        'PDF is too large to generate. Try printing fewer cards (disable sideboard/tokens or card backs).',
+      );
+    }
+    throw error;
+  }
   downloadBlob(blob, `${safeName}.pdf`);
 }

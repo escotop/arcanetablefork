@@ -72,3 +72,26 @@ export function mirroredPrintCardPositionMm(
   const mirrorCol = mirroredPrintCardCol(col, layout.cols);
   return printCardPositionMm(mirrorCol, row, options, layout);
 }
+
+/** 300 DPI — resolución típica de impresión para el tamaño de slot (63×88 mm). */
+export const PRINT_PDF_IMAGE_DPI = 300;
+
+export function printImagePixelSize(
+  cardWidthMm: number,
+  cardHeightMm: number,
+  dpi = PRINT_PDF_IMAGE_DPI,
+) {
+  return {
+    width: Math.max(1, Math.ceil((cardWidthMm / 25.4) * dpi)),
+    height: Math.max(1, Math.ceil((cardHeightMm / 25.4) * dpi)),
+  };
+}
+
+export function collectUniquePrintImageUrls(
+  slots: { imageUrl: string }[],
+  cardBackUrl?: string,
+) {
+  const urls = new Set(slots.map(slot => slot.imageUrl));
+  if (cardBackUrl) urls.add(cardBackUrl);
+  return [...urls];
+}
