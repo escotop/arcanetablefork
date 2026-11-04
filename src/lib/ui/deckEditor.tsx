@@ -137,6 +137,7 @@ import {
 import { computeDeckCoverMetadata, invalidateDeckPreviewCache } from '../deckCoverPreview';
 import { collectTokenPartIds, getDefaultTokenEntry, getTokenKey, mergeTokenPrintings, resolveTokensForSources } from '../deckTokens';
 import { reportClientError } from '../clientErrorReporting';
+import { consumeScryfallFallbackNotice } from '../scryfallFallback';
 import OverflowMenuIcon from 'lucide-solid/icons/ellipsis';
 import DeleteIcon from 'lucide-solid/icons/trash-2';
 
@@ -244,6 +245,11 @@ export const DeckEditor: Component<Props> = props => {
       toast.error('Could not fully load this deck. Some card data may be missing.');
     } finally {
       setDeckHydrationReady(true);
+      if (consumeScryfallFallbackNotice()) {
+        toast(
+          'Scryfall no responde; cargando cartas con el catálogo alternativo (5 min).',
+        );
+      }
     }
   });
 
@@ -263,6 +269,11 @@ export const DeckEditor: Component<Props> = props => {
           })
           .finally(() => {
             setDeckHydrationReady(true);
+            if (consumeScryfallFallbackNotice()) {
+              toast(
+                'Scryfall no responde; cargando cartas con el catálogo alternativo (5 min).',
+              );
+            }
           });
         setTypeFilter('deck');
         setSearchParams(

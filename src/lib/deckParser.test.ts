@@ -498,3 +498,16 @@ SIDEBOARD:
   expect(result.sideboard[0].name).toBe('Rest in Peace');
   expect(result.sideboard[1].name).toBe('Soul-Guide Lantern');
 });
+
+test('parseImportedCardList preserves custom art suffix', () => {
+  const art = 'https://cards.example.com/art.png';
+  const result = parseImportedCardList(
+    `1 Sol Ring [c21] #263 {art:${encodeURIComponent(art)}}`,
+  );
+
+  expect(result.cards).toHaveLength(1);
+  expect(result.cards[0].name).toBe('Sol Ring');
+  expect(result.cards[0].set).toBe('c21');
+  expect(result.cards[0].collector_number).toBe('263');
+  expect(result.cards[0].customArtUrl).toBe(art);
+});

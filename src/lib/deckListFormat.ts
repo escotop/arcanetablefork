@@ -1,4 +1,5 @@
 import { CardEntry, DetailedCardEntry } from './constants';
+import { formatDeckListCustomArtSuffix } from './deckListCustomArt';
 
 export function getCardCollectorNumber(card: CardEntry | DetailedCardEntry) {
   return (
@@ -13,6 +14,9 @@ export function formatDeckListLine(card: CardEntry | DetailedCardEntry) {
   if (card.set) parts.push(`[${card.set}]`);
   const collectorNumber = getCardCollectorNumber(card);
   if (collectorNumber) parts.push(`#${collectorNumber}`);
+  if (card.customArtUrl?.trim()) {
+    parts.push(formatDeckListCustomArtSuffix(card.customArtUrl).trimStart());
+  }
   return parts.join(' ');
 }
 

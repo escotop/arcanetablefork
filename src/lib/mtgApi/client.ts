@@ -177,3 +177,53 @@ export async function searchMtgApiCards(
     data: mapped,
   };
 }
+
+function pickMtgApiPrinting(cards: MtgApiCard[], entry: { set?: string; collector_number?: string }) {
+  if (!cards.length) return undefined;
+
+  const set = entry.set?.trim().toLowerCase();
+  const collector = entry.collector_number?.trim();
+
+  if (set && collector) {
+    const exact = cards.find(
+      card =>
+        card.set?.toLowerCase() === set &&
+        String(card.number ?? '').toLowerCase() === collector.toLowerCase(),
+    );
+    if (exact) return exact;
+  }
+
+  if (set) {
+    const bySet = cards.find(card => card.set?.toLowerCase() === set);
+    if (bySet) return bySet;
+  }
+
+  return cards.find(card => cardHasDisplayImage(card)) ?? cards[0];
+}
+
+/** Resolve one deck entry while Scryfall is in fallback mode. */
+export async function lookupMtgApiCardEntry(entry: {
+  name: string;
+  set?: string;
+  collector_number?: string;
+}): Promise<CardEntryDetail | null> {
+  const params = new URLSearchParams();
+  params.set('page', '1');
+  params.set('pageSize', '100');
+  params.set('name', entry.name.trim());
+  if (entry.set?.trim()) {
+    params.set('set', entry.set.trim());
+  }
+
+  let response = await fetchMtgApiSearch(params);
+  if (response.status === 500) {
+    params.delete('contains');
+    response = await fetchMtgApiSearch(params);
+  }
+  if (!response.ok) return null;
+
+  const body = (await response.json()) as MtgApiCardsResponse;
+  const match = pickMtgApiPrinting(body.cards ?? [], entry);
+  if (!match) return null;
+  return mapMtgApiCardToDetail(match);
+}

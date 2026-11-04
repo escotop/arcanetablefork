@@ -25,3 +25,18 @@ test('formatDeckListLine omits collector when missing', () => {
     }),
   ).toBe('4 Lightning Bolt [lea]');
 });
+
+test('formatDeckListLine includes custom art suffix', () => {
+  const url = 'https://example.com/my-art.png';
+  expect(
+    formatDeckListLine({
+      id: 'abc',
+      name: 'Sol Ring',
+      qty: 1,
+      set: 'c21',
+      collector_number: '263',
+      categories: [],
+      customArtUrl: url,
+    }),
+  ).toBe(`1 Sol Ring [c21] #263 {art:${encodeURIComponent(url)}}`);
+});

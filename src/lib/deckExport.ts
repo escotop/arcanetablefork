@@ -18,7 +18,15 @@ function cardToDeckEntry(card: Card): DetailedCardEntry {
   const set = detail.set ?? '';
   const collector_number = detail.collector_number;
   const entry: DetailedCardEntry = {
-    id: getCardKey({ id: '', name, qty: 1, categories: [], set, collector_number }),
+    id: getCardKey({
+      id: '',
+      name,
+      qty: 1,
+      categories: [],
+      set,
+      collector_number,
+      customArtUrl: card.customArtUrl,
+    }),
     name,
     qty: 1,
     categories: [],

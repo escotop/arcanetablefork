@@ -13,13 +13,20 @@ export function getCardKey(entry: CardEntry) {
   const set = normalizePrintingSetCode(entry.set);
   const collector = normalizePrintingCollectorNumber(entry.collector_number);
 
+  let base: string;
   if (set && collector) {
-    return [name, set, collector].join(':');
+    base = [name, set, collector].join(':');
+  } else if (set) {
+    base = [name, set].join(':');
+  } else {
+    base = name;
   }
-  if (set) {
-    return [name, set].join(':');
+
+  const art = entry.customArtUrl?.trim();
+  if (art) {
+    return `${base}::art:${encodeURIComponent(art)}`;
   }
-  return name;
+  return base;
 }
 
 function getEntryOracleId(entry: CardEntry | DetailedCardEntry) {

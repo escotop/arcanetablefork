@@ -1,4 +1,5 @@
 import { CardEntry, CardEntryDetail, DetailedCardEntry, isMagicCardSystem } from './constants';
+import { applyCustomArtToEntry } from './customCardArt';
 import { fetchCardInfo, populateCardInfo } from './deck';
 import {
   hasRequestedPrinting,
@@ -7,6 +8,7 @@ import {
 } from './deckPrinting';
 import { getCardKey } from './deckStore';
 import { devLog } from './devLog';
+import { isScryfallFallbackActive } from './scryfallFallback';
 import { cardSystem } from './globals';
 import {
   tryPostCardCollection,
@@ -188,6 +190,11 @@ async function resolveEntriesViaCollection(entries: CardEntry[]) {
   const resolved = new Map<string, CardEntryDetail>();
   if (!entries.length) return resolved;
 
+  if (isScryfallFallbackActive()) {
+    devLog.log('[deck import] Scryfall fallback active — skipping collection batches');
+    return resolved;
+  }
+
   const identifiersByKey = new Map<string, CollectionIdentifier>();
   for (const entry of entries) {
     const identifier = getBatchIdentifier(entry);
@@ -213,7 +220,7 @@ async function resolveEntriesViaCollection(entries: CardEntry[]) {
 
     if (!body) {
       devLog.warn('[deck import] Collection chunk failed for', chunk.length, 'cards');
-      continue;
+      break;
     }
 
     for (const key of chunkKeys) {
@@ -241,21 +248,30 @@ async function resolveEntriesViaCollection(entries: CardEntry[]) {
 
 function buildDetailedEntry(entry: CardEntry, payload: CardEntryDetail): DetailedCardEntry {
   const populated = populateCardInfo(payload, entry);
-  return {
+  let result: DetailedCardEntry = {
     ...entry,
     ...populated,
     set: entry.set,
     collector_number: entry.collector_number,
+    customArtUrl: entry.customArtUrl,
   };
+  if (result.customArtUrl) {
+    result = applyCustomArtToEntry(result);
+  }
+  return result;
 }
 
 function notFoundEntry(entry: CardEntry, reason: string): DetailedCardEntry {
-  return {
+  let result: DetailedCardEntry = {
     ...entry,
     found: false,
     importLookupReason: reason,
     detail: { name: entry.name } as CardEntryDetail,
   };
+  if (result.customArtUrl) {
+    result = applyCustomArtToEntry(result);
+  }
+  return result;
 }
 
 export function canUseBatchImport(entries: CardEntry[]) {

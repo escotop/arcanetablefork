@@ -51,6 +51,8 @@ import { prefetchDeckTopCardArt } from './cardLoading';
 import { cardsById, cardSystem, getProjectionVec, setHoverSignal, zonesById } from './globals';
 import { cleanupMesh, getGlobalRotation, shuffleItems } from './utils';
 import { createRoot } from 'solid-js';
+import { lookupMtgApiCardEntry } from './mtgApi/client';
+import { isScryfallFallbackActive } from './scryfallFallback';
 import {
   getCardById,
   getCardBySetCollector,
@@ -771,6 +773,17 @@ async function fetchCardDetailPayload(
   entry: CardEntry,
   trace: string[] = [],
 ): Promise<CardEntryDetail | null> {
+  if (isScryfallFallbackActive()) {
+    trace.push('Scryfall fallback active — MTG API lookup');
+    const mtg = await lookupMtgApiCardEntry(entry);
+    if (mtg) {
+      trace.push(`MTG API matched "${mtg.name}"`);
+      return mtg;
+    }
+    trace.push('MTG API lookup returned no card');
+    return null;
+  }
+
   if (entry.id?.trim()) {
     trace.push(`Lookup by Scryfall id ${entry.id}`);
     const byId = await fetchCardDetailById(entry.id);

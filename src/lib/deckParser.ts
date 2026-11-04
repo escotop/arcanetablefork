@@ -1,5 +1,6 @@
 import * as a from 'arcsecond';
 import type { CardEntry } from './constants';
+import { stripDeckListCustomArt } from './deckListCustomArt';
 
 const SECTION_COMMANDER = /^commander$/i;
 const SECTION_DECK = /^deck$/i;
@@ -159,12 +160,15 @@ export function parseImportedCardList(cardList: string): ParsedImportedCardList 
       }
     }
 
-    const parsed = card.run(rawLine).result;
+    const { line, customArtUrl } = stripDeckListCustomArt(rawLine);
+    const parsed = card.run(line).result;
     if (!parsed?.name?.length) continue;
     if (isImportPlaceholderEntry(parsed as CardEntry)) continue;
 
+    const entry = { ...(parsed as CardEntry), customArtUrl } as CardEntry;
+
     if (section === 'sideboard') {
-      sideboard.push(parsed as CardEntry);
+      sideboard.push(entry);
       continue;
     }
 
@@ -173,7 +177,7 @@ export function parseImportedCardList(cardList: string): ParsedImportedCardList 
       markNextInPlay = false;
     }
 
-    cards.push(parsed as CardEntry);
+    cards.push(entry);
   }
 
   return { cards, sideboard, inPlayIndices };

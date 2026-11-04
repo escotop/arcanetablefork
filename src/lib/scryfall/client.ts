@@ -1,4 +1,8 @@
 import type { CardEntryDetail } from '../constants';
+import {
+  activateScryfallFallback,
+  isScryfallFallbackActive,
+} from '../scryfallFallback';
 
 const SCRYFALL_API = '/api/scryfall';
 
@@ -307,10 +311,12 @@ export async function postCardCollection(
       return JSON.parse(lastText) as ScryfallCollectionResponse;
     }
 
-    if (
-      (lastStatus === 429 || lastStatus === 503) &&
-      attempt < COLLECTION_MAX_ATTEMPTS - 1
-    ) {
+    if (lastStatus === 429 || lastStatus === 503) {
+      activateScryfallFallback('cards/collection', `HTTP ${lastStatus}`);
+      break;
+    }
+
+    if (attempt < COLLECTION_MAX_ATTEMPTS - 1) {
       await delay(retryDelayMs(res, attempt));
       continue;
     }
@@ -318,6 +324,7 @@ export async function postCardCollection(
     break;
   }
 
+  activateScryfallFallback('cards/collection', `HTTP ${lastStatus}`);
   throw new ScryfallRequestError(lastStatus, lastText);
 }
 
@@ -325,9 +332,16 @@ export async function postCardCollection(
 export async function tryPostCardCollection(
   identifiers: ScryfallCollectionIdentifier[],
 ): Promise<ScryfallCollectionResponse | null> {
+  if (isScryfallFallbackActive()) return null;
   try {
     return await postCardCollection(identifiers);
-  } catch {
+  } catch (error) {
+    if (!isScryfallFallbackActive()) {
+      activateScryfallFallback(
+        'cards/collection',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
     return null;
   }
 }
