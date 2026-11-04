@@ -242,6 +242,13 @@ const PrintDeckModal: Component<Props> = props => {
                     </Show>
                   </div>
                 </Show>
+                <Label class='flex items-center gap-2 font-normal'>
+                  <Checkbox
+                    checked={options().blackCorners}
+                    onChange={checked => updateOption('blackCorners', checked)}
+                  />
+                  <span>Black corners</span>
+                </Label>
               </div>
 
               <div class='grid gap-4 sm:grid-cols-2'>

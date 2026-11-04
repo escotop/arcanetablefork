@@ -1,9 +1,11 @@
 import { expect, test } from 'vitest';
 import {
   collectUniquePrintImageUrls,
+  detectNeedsBlackCornerFill,
   estimatePrintDeckLayout,
   mirroredPrintCardCol,
   mirroredPrintCardPositionMm,
+  mtgPrintCornerRadiusPx,
   printCardPositionMm,
   printImagePixelSize,
 } from './deckPrintLayout';
@@ -49,4 +51,29 @@ test('collectUniquePrintImageUrls deduplicates repeated print slots', () => {
     'back',
   );
   expect(urls.sort()).toEqual(['a', 'b', 'back']);
+});
+
+test('mtgPrintCornerRadiusPx scales with card width', () => {
+  expect(mtgPrintCornerRadiusPx(745)).toBe(37);
+});
+
+test('detectNeedsBlackCornerFill detects light corner caps', () => {
+  const width = 100;
+  const height = 140;
+  const radius = 10;
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = 255;
+    data[i + 1] = 255;
+    data[i + 2] = 255;
+    data[i + 3] = 255;
+  }
+  expect(detectNeedsBlackCornerFill(data, width, height, radius)).toBe(true);
+
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = 0;
+    data[i + 1] = 0;
+    data[i + 2] = 0;
+  }
+  expect(detectNeedsBlackCornerFill(data, width, height, radius)).toBe(false);
 });

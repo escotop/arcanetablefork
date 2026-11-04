@@ -4,11 +4,14 @@ import {
 } from './customCardArt';
 import { DetailedCardEntry } from './constants';
 import {
+  collectUniquePrintImageUrls,
+  detectNeedsBlackCornerFill,
   estimatePrintDeckLayout,
   mirroredPrintCardPositionMm,
+  mtgPrintCornerRadiusPx,
+  paintBlackCornerCaps,
   printCardPositionMm,
   printImagePixelSize,
-  collectUniquePrintImageUrls,
   type PrintPageSize,
 } from './deckPrintLayout';
 
@@ -22,6 +25,9 @@ export {
   printImagePixelSize,
   PRINT_PDF_IMAGE_DPI,
   collectUniquePrintImageUrls,
+  detectNeedsBlackCornerFill,
+  mtgPrintCornerRadiusPx,
+  paintBlackCornerCaps,
 } from './deckPrintLayout';
 export type { PrintDeckLayout, PrintPageSize } from './deckPrintLayout';
 
@@ -39,6 +45,7 @@ export interface PrintDeckOptions {
   includeSideboard: boolean;
   includeTokens: boolean;
   addCardBacks: boolean;
+  blackCorners: boolean;
   cardBack?: PrintDeckCardBack;
 }
 
@@ -70,6 +77,7 @@ export function getDefaultPrintDeckOptions(): PrintDeckOptions {
     includeSideboard: false,
     includeTokens: false,
     addCardBacks: false,
+    blackCorners: false,
   };
 }
 
@@ -150,6 +158,7 @@ async function rasterizeImageSourceForPdf(
   source: CanvasImageSource,
   targetWidth: number,
   targetHeight: number,
+  blackCorners: boolean,
 ): Promise<{ dataUrl: string; format: PdfImageFormat }> {
   const canvas = document.createElement('canvas');
   canvas.width = targetWidth;
@@ -161,6 +170,15 @@ async function rasterizeImageSourceForPdf(
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, targetWidth, targetHeight);
   ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
+
+  if (blackCorners) {
+    const radius = mtgPrintCornerRadiusPx(targetWidth);
+    const { data } = ctx.getImageData(0, 0, targetWidth, targetHeight);
+    if (detectNeedsBlackCornerFill(data, targetWidth, targetHeight, radius)) {
+      paintBlackCornerCaps(ctx, targetWidth, targetHeight, radius);
+    }
+  }
+
   return { dataUrl: canvas.toDataURL('image/png'), format: PDF_RASTER_FORMAT };
 }
 
@@ -168,19 +186,21 @@ async function rasterizeImageElementForPdf(
   image: HTMLImageElement,
   targetWidth: number,
   targetHeight: number,
+  blackCorners: boolean,
 ): Promise<{ dataUrl: string; format: PdfImageFormat }> {
-  return rasterizeImageSourceForPdf(image, targetWidth, targetHeight);
+  return rasterizeImageSourceForPdf(image, targetWidth, targetHeight, blackCorners);
 }
 
 async function rasterizeBlobForPdf(
   blob: Blob,
   targetWidth: number,
   targetHeight: number,
+  blackCorners: boolean,
 ): Promise<{ dataUrl: string; format: PdfImageFormat }> {
   if (typeof createImageBitmap !== 'undefined') {
     const bitmap = await createImageBitmap(blob);
     try {
-      return await rasterizeImageSourceForPdf(bitmap, targetWidth, targetHeight);
+      return await rasterizeImageSourceForPdf(bitmap, targetWidth, targetHeight, blackCorners);
     } finally {
       bitmap.close();
     }
@@ -189,7 +209,7 @@ async function rasterizeBlobForPdf(
   const objectUrl = URL.createObjectURL(blob);
   try {
     const image = await loadImageElement(objectUrl);
-    return rasterizeImageElementForPdf(image, targetWidth, targetHeight);
+    return rasterizeImageElementForPdf(image, targetWidth, targetHeight, blackCorners);
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
@@ -199,6 +219,7 @@ async function fetchImageForPdf(
   loadUrl: string,
   targetWidth: number,
   targetHeight: number,
+  blackCorners: boolean,
 ): Promise<{ dataUrl: string; format: PdfImageFormat }> {
   const response = await fetch(loadUrl, { credentials: 'omit' });
   if (!response.ok) {
@@ -206,13 +227,14 @@ async function fetchImageForPdf(
   }
 
   const blob = await response.blob();
-  return rasterizeBlobForPdf(blob, targetWidth, targetHeight);
+  return rasterizeBlobForPdf(blob, targetWidth, targetHeight, blackCorners);
 }
 
 async function loadImageForPdf(
   url: string,
   targetWidth: number,
   targetHeight: number,
+  blackCorners: boolean,
 ): Promise<{ dataUrl: string; format: PdfImageFormat }> {
   const candidates = getTextureLoadUrlCandidates(url);
   if (!candidates.length) {
@@ -222,13 +244,17 @@ async function loadImageForPdf(
   let lastError: Error | undefined;
   for (const loadUrl of candidates) {
     try {
-      return await fetchImageForPdf(loadUrl, targetWidth, targetHeight);
+      return await fetchImageForPdf(loadUrl, targetWidth, targetHeight, blackCorners);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
     }
   }
 
   throw lastError ?? new Error(`Failed to load image: ${url}`);
+}
+
+function pdfImageCacheKey(imageUrl: string, blackCorners: boolean) {
+  return `${imageUrl}\0bc:${blackCorners ? 1 : 0}`;
 }
 
 async function runWithConcurrency<T>(
@@ -287,16 +313,22 @@ export async function generateDeckPdf(
   let loadedImageCount = 0;
 
   async function getPdfImage(imageUrl: string): Promise<PdfRasterImage> {
-    const cached = imageCache.get(imageUrl);
+    const cacheKey = pdfImageCacheKey(imageUrl, options.blackCorners);
+    const cached = imageCache.get(cacheKey);
     if (cached) return cached;
 
-    const inFlight = imagesInFlight.get(imageUrl);
+    const inFlight = imagesInFlight.get(cacheKey);
     if (inFlight) return inFlight;
 
-    const promise = loadImageForPdf(imageUrl, printPixels.width, printPixels.height)
+    const promise = loadImageForPdf(
+      imageUrl,
+      printPixels.width,
+      printPixels.height,
+      options.blackCorners,
+    )
       .then(raster => {
         const entry: PdfRasterImage = { ...raster, alias: `p${nextImageAlias++}` };
-        imageCache.set(imageUrl, entry);
+        imageCache.set(cacheKey, entry);
         loadedImageCount++;
         onProgress?.({
           phase: 'loading',
@@ -307,10 +339,10 @@ export async function generateDeckPdf(
         return entry;
       })
       .finally(() => {
-        imagesInFlight.delete(imageUrl);
+        imagesInFlight.delete(cacheKey);
       });
 
-    imagesInFlight.set(imageUrl, promise);
+    imagesInFlight.set(cacheKey, promise);
     return promise;
   }
 
@@ -340,7 +372,7 @@ export async function generateDeckPdf(
 
   let backImage: PdfRasterImage | undefined;
   if (options.addCardBacks && options.cardBack?.imageUrl) {
-    backImage = imageCache.get(options.cardBack.imageUrl);
+    backImage = imageCache.get(pdfImageCacheKey(options.cardBack.imageUrl, options.blackCorners));
   }
 
   type PagePlacement = {
@@ -356,7 +388,7 @@ export async function generateDeckPdf(
 
   for (let index = 0; index < slots.length; index++) {
     const slot = slots[index];
-    const image = imageCache.get(slot.imageUrl);
+    const image = imageCache.get(pdfImageCacheKey(slot.imageUrl, options.blackCorners));
     if (!image) {
       throw new Error(`Missing print image for ${slot.name}`);
     }
