@@ -5,7 +5,7 @@ import { getDeckStore } from './deckStore';
 import { loadGameMeta } from './gameMeta';
 import type { PlayArea } from './playArea';
 import { getCachedCardById, setCachedCardDetail } from './scryfallCache';
-import { mapScryfallCard, postCardCollection } from './scryfall/client';
+import { mapScryfallCard, tryPostCardCollection } from './scryfall/client';
 
 type TokenSource = { id?: string; detail?: { all_parts?: CardEntryDetail['all_parts']; id?: string } };
 
@@ -153,7 +153,8 @@ async function fetchCardDetailsByIds(ids: string[]): Promise<CardEntryDetail[]> 
 
   for (let index = 0; index < needsNetwork.length; index += COLLECTION_BATCH_SIZE) {
     const batch = needsNetwork.slice(index, index + COLLECTION_BATCH_SIZE);
-    const body = await postCardCollection(batch.map(id => ({ id })));
+    const body = await tryPostCardCollection(batch.map(id => ({ id })));
+    if (!body) continue;
     const foundIds = new Set<string>();
     for (const raw of body.data ?? []) {
       const mapped = mapScryfallCard(raw as Record<string, unknown>);
@@ -216,7 +217,8 @@ async function fetchTokenDetailsByIds(ids: string[]): Promise<CardEntryDetail[]>
 
   for (let index = 0; index < missing.length; index += COLLECTION_BATCH_SIZE) {
     const batch = missing.slice(index, index + COLLECTION_BATCH_SIZE);
-    const body = await postCardCollection(batch.map(id => ({ id })));
+    const body = await tryPostCardCollection(batch.map(id => ({ id })));
+    if (!body) continue;
     for (const raw of body.data ?? []) {
       const mapped = mapScryfallCard(raw as Record<string, unknown>);
       resolved.push(mapped);

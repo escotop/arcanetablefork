@@ -9,7 +9,7 @@ import { getCardKey } from './deckStore';
 import { devLog } from './devLog';
 import { cardSystem } from './globals';
 import {
-  postCardCollection,
+  tryPostCardCollection,
   SCRYFALL_COLLECTION_MAX_IDENTIFIERS,
   type ScryfallCollectionIdentifier as CollectionIdentifier,
   type ScryfallCollectionResponse,
@@ -111,16 +111,11 @@ export function mapScryfallCardForDeck(card: Record<string, unknown>): CardEntry
 async function postCollection(
   identifiers: CollectionIdentifier[],
 ): Promise<ScryfallCollectionResponse | null> {
-  try {
-    // Goes through the shared Scryfall queue (rate limiting + retries live there).
-    return await postCardCollection(identifiers);
-  } catch (error) {
-    devLog.warn(
-      '[deck import] Collection request failed:',
-      error instanceof Error ? error.message : error,
-    );
-    return null;
+  const body = await tryPostCardCollection(identifiers);
+  if (!body) {
+    devLog.warn('[deck import] Collection request failed for', identifiers.length, 'identifiers');
   }
+  return body;
 }
 
 function getBatchIdentifier(entry: CardEntry): CollectionIdentifier | null {

@@ -9,9 +9,16 @@ const SCRYFALL_API = '/api/scryfall';
  */
 const STRICT_ENDPOINT_INTERVAL_MS = 500;
 const DEFAULT_ENDPOINT_INTERVAL_MS = 110;
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 5;
+const COLLECTION_MAX_ATTEMPTS = 8;
 const MAX_RETRY_DELAY_MS = 8_000;
 const REQUEST_TIMEOUT_MS = 20_000;
+
+export interface ScryfallFetchOptions {
+  /** Default {@link MAX_ATTEMPTS}; deck catalog search uses `1` for immediate MTG API fallback. */
+  maxAttempts?: number;
+  requestTimeoutMs?: number;
+}
 
 function isStrictEndpoint(path: string, init?: RequestInit) {
   const method = init?.method?.toUpperCase() ?? 'GET';
@@ -53,22 +60,28 @@ function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function scryfallFetchInner(path: string, init?: RequestInit): Promise<Response> {
+async function scryfallFetchInner(
+  path: string,
+  init?: RequestInit,
+  options?: ScryfallFetchOptions,
+): Promise<Response> {
   const url = path.startsWith('http') ? path : `${SCRYFALL_API}${path}`;
   const relativePath = path.startsWith('http') ? new URL(path).pathname : path;
   const interval = isStrictEndpoint(relativePath, init)
     ? STRICT_ENDPOINT_INTERVAL_MS
     : DEFAULT_ENDPOINT_INTERVAL_MS;
+  const maxAttempts = options?.maxAttempts ?? MAX_ATTEMPTS;
+  const requestTimeoutMs = options?.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
   let response: Response | undefined;
 
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const now = Date.now();
     const wait = Math.max(0, interval - (now - lastRequestAt));
     if (wait) await delay(wait);
     lastRequestAt = Date.now();
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
     try {
       response = await fetch(url, {
         ...init,
@@ -83,7 +96,7 @@ async function scryfallFetchInner(path: string, init?: RequestInit): Promise<Res
     }
 
     if (response.status !== 429 && response.status !== 503) return response;
-    if (attempt === MAX_ATTEMPTS - 1) break;
+    if (attempt === maxAttempts - 1) break;
 
     const backoff = retryDelayMs(response, attempt);
     await delay(backoff);
@@ -95,8 +108,12 @@ async function scryfallFetchInner(path: string, init?: RequestInit): Promise<Res
 }
 
 /** Shared serial queue for every Scryfall request issued by the app. */
-export async function scryfallFetch(path: string, init?: RequestInit): Promise<Response> {
-  const next = scryfallFetchChain.then(() => scryfallFetchInner(path, init));
+export async function scryfallFetch(
+  path: string,
+  init?: RequestInit,
+  options?: ScryfallFetchOptions,
+): Promise<Response> {
+  const next = scryfallFetchChain.then(() => scryfallFetchInner(path, init, options));
   scryfallFetchChain = next.then(
     () => undefined,
     () => undefined,
@@ -216,6 +233,7 @@ export class ScryfallRequestError extends Error {
 export async function searchCards(
   q: string,
   options: { types?: string[]; subtypes?: string[]; page?: number } = {},
+  fetchOptions?: ScryfallFetchOptions,
 ): Promise<ScryfallSearchResult> {
   const page = options.page ?? 1;
   const params = new URLSearchParams({
@@ -224,7 +242,7 @@ export async function searchCards(
     page: String(page),
   });
 
-  const res = await scryfallFetch(`/cards/search?${params}`);
+  const res = await scryfallFetch(`/cards/search?${params}`, undefined, fetchOptions);
   const text = await res.text();
   if (res.status === 404) {
     return { id: 'mtgplayer', object: 'list', page, total_cards: 0, total_pages: 0, data: [] };
@@ -270,13 +288,48 @@ export async function postCardCollection(
       `Scryfall collection accepts at most ${SCRYFALL_COLLECTION_MAX_IDENTIFIERS} identifiers`,
     );
   }
-  const res = await scryfallFetch('/cards/collection', {
+
+  const init: RequestInit = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ identifiers }),
-  });
-  if (!res.ok) throw new Error(`Scryfall collection failed (${res.status})`);
-  return res.json();
+  };
+
+  let lastStatus = 0;
+  let lastText = '';
+
+  for (let attempt = 0; attempt < COLLECTION_MAX_ATTEMPTS; attempt++) {
+    const res = await scryfallFetch('/cards/collection', init);
+    lastText = await res.text();
+    lastStatus = res.status;
+
+    if (res.ok) {
+      return JSON.parse(lastText) as ScryfallCollectionResponse;
+    }
+
+    if (
+      (lastStatus === 429 || lastStatus === 503) &&
+      attempt < COLLECTION_MAX_ATTEMPTS - 1
+    ) {
+      await delay(retryDelayMs(res, attempt));
+      continue;
+    }
+
+    break;
+  }
+
+  throw new ScryfallRequestError(lastStatus, lastText);
+}
+
+/** Like {@link postCardCollection} but returns null instead of throwing (deck tokens, import batches). */
+export async function tryPostCardCollection(
+  identifiers: ScryfallCollectionIdentifier[],
+): Promise<ScryfallCollectionResponse | null> {
+  try {
+    return await postCardCollection(identifiers);
+  } catch {
+    return null;
+  }
 }
 
 /**

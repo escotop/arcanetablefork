@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
   resetDeckEditorCatalogSearchStateForTests,
-  SCRYFALL_CATALOG_FALLBACK_TIMEOUT_MS,
   searchDeckEditorCatalog,
 } from './deckEditorCatalogSearch';
 
@@ -44,7 +43,6 @@ const mtgList = {
 };
 
 beforeEach(() => {
-  vi.useFakeTimers();
   resetDeckEditorCatalogSearchStateForTests();
   searchCards.mockReset();
   searchMtgApiCards.mockReset();
@@ -55,49 +53,33 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test('returns Scryfall results when search finishes quickly', async () => {
+test('returns Scryfall results when search succeeds', async () => {
   searchCards.mockResolvedValue(scryfallList);
 
-  const promise = searchDeckEditorCatalog('bolt');
-  await vi.runAllTimersAsync();
-  const result = await promise;
+  const result = await searchDeckEditorCatalog('bolt');
 
   expect(result.source).toBe('scryfall');
   expect(result.data[0].name).toBe('Lightning Bolt');
   expect(searchMtgApiCards).not.toHaveBeenCalled();
+  expect(searchCards).toHaveBeenCalledWith(
+    'bolt',
+    {},
+    expect.objectContaining({ maxAttempts: 1, requestTimeoutMs: 5000 }),
+  );
 });
 
-test('falls back to MTG API on Scryfall error', async () => {
-  searchCards.mockRejectedValue(new Error('network down'));
+test('falls back to MTG API immediately on Scryfall error', async () => {
+  searchCards.mockRejectedValue(new Error('Scryfall request failed (429)'));
 
-  const promise = searchDeckEditorCatalog('bolt');
-  await vi.runAllTimersAsync();
-  const result = await promise;
+  const result = await searchDeckEditorCatalog('bolt');
 
   expect(result.source).toBe('mtgapi');
   expect(searchMtgApiCards).toHaveBeenCalledWith('bolt', {});
 });
 
-test('falls back to MTG API when Scryfall exceeds 5 seconds', async () => {
-  searchCards.mockImplementation(
-    () =>
-      new Promise(resolve => {
-        setTimeout(() => resolve(scryfallList), SCRYFALL_CATALOG_FALLBACK_TIMEOUT_MS + 500);
-      }),
-  );
-
-  const promise = searchDeckEditorCatalog('bolt');
-  await vi.advanceTimersByTimeAsync(SCRYFALL_CATALOG_FALLBACK_TIMEOUT_MS);
-  const result = await promise;
-
-  expect(result.source).toBe('mtgapi');
-  expect(searchMtgApiCards).toHaveBeenCalled();
-});
-
 test('uses MTG API directly while Scryfall cooldown is active', async () => {
-  searchCards.mockRejectedValue(new Error('timeout'));
+  searchCards.mockRejectedValue(new Error('429'));
   await searchDeckEditorCatalog('first');
-  await vi.runAllTimersAsync();
 
   searchCards.mockClear();
   searchMtgApiCards.mockClear();

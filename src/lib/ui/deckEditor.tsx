@@ -226,16 +226,24 @@ export const DeckEditor: Component<Props> = props => {
     getSideboardList().reduce((sum, card) => sum + (card.qty ?? 0), 0),
   );
 
+  const needsInitialHydration = () =>
+    Boolean(props.deck?.id || Object.keys(deck.cards ?? {}).length > 0);
+
+  /** Avoid token `/cards/collection` traffic until main deck hydration finishes (same Scryfall queue). */
+  const [deckHydrationReady, setDeckHydrationReady] = createSignal(!needsInitialHydration());
+
   onMount(async () => {
     try {
       await setCardSystem(deck.system ?? MTG_CARD_SYSTEM.id);
-      if (props.deck?.id || Object.keys(deck.cards ?? {}).length > 0) {
+      if (needsInitialHydration()) {
         await rehydrateDeck(deck);
       }
     } catch (error) {
       devLog.error('Deck editor failed to open', error);
       reportClientError(error);
       toast.error('Could not fully load this deck. Some card data may be missing.');
+    } finally {
+      setDeckHydrationReady(true);
     }
   });
 
@@ -247,10 +255,15 @@ export const DeckEditor: Component<Props> = props => {
     on(
       () => deck.system,
       () => {
-        void rehydrateDeck(unwrap(deck)).catch(error => {
-          devLog.error('Deck rehydrate failed', error);
-          reportClientError(error);
-        });
+        setDeckHydrationReady(false);
+        void rehydrateDeck(unwrap(deck))
+          .catch(error => {
+            devLog.error('Deck rehydrate failed', error);
+            reportClientError(error);
+          })
+          .finally(() => {
+            setDeckHydrationReady(true);
+          });
         setTypeFilter('deck');
         setSearchParams(
           { q: undefined, page: undefined, totalPages: undefined, catalogType: undefined },
@@ -263,6 +276,7 @@ export const DeckEditor: Component<Props> = props => {
   let hydrationCount = 0;
   async function rehydrateDeck(deck: Deck) {
     let currentHydration = ++hydrationCount;
+    setDeckHydrationReady(false);
     return hydrateDeck(structuredClone(unwrap(deck))).then(deck => {
       // ignore old hydrations (if the card system toggle changing fast)
       if (hydrationCount !== currentHydration) return;
@@ -1049,6 +1063,7 @@ export const DeckEditor: Component<Props> = props => {
   });
 
   const deckTokenSources = createMemo(() => {
+    if (!deckHydrationReady()) return [];
     trackDeep(deck.cards);
     return getDeckList().filter(entry => entry?.qty);
   });

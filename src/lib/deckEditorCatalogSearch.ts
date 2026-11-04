@@ -1,6 +1,10 @@
 import { devLog } from './devLog';
 import { searchMtgApiCards } from './mtgApi/client';
-import { searchCards, type ScryfallSearchResult } from './scryfall/client';
+import {
+  searchCards,
+  type ScryfallFetchOptions,
+  type ScryfallSearchResult,
+} from './scryfall/client';
 
 export type DeckCatalogSearchSource = 'scryfall' | 'mtgapi';
 
@@ -10,14 +14,15 @@ export type DeckCatalogSearchResult = ScryfallSearchResult & {
 
 /** After Scryfall fails or is too slow, prefer MTG API for catalog search for a short window. */
 export const SCRYFALL_CATALOG_COOLDOWN_MS = 2 * 60 * 1000;
-/** If Scryfall has not finished by then, use MTG API for this search (and start cooldown). */
+/** Max wait for a single Scryfall catalog attempt before falling back to MTG API. */
 export const SCRYFALL_CATALOG_FALLBACK_TIMEOUT_MS = 5_000;
 
-let scryfallCooldownUntil = 0;
+const CATALOG_SCRYFALL_FETCH: ScryfallFetchOptions = {
+  maxAttempts: 1,
+  requestTimeoutMs: SCRYFALL_CATALOG_FALLBACK_TIMEOUT_MS,
+};
 
-function delay(ms: number) {
-  return new Promise<void>(resolve => setTimeout(resolve, ms));
-}
+let scryfallCooldownUntil = 0;
 
 function activateScryfallFallback(reason: string) {
   scryfallCooldownUntil = Date.now() + SCRYFALL_CATALOG_COOLDOWN_MS;
@@ -29,31 +34,6 @@ export function resetDeckEditorCatalogSearchStateForTests() {
   scryfallCooldownUntil = 0;
 }
 
-type ScryfallRaceResult =
-  | { kind: 'ok'; result: ScryfallSearchResult }
-  | { kind: 'error'; error: unknown };
-
-async function raceScryfallCatalogSearch(
-  q: string,
-  options: { types?: string[]; subtypes?: string[]; page?: number },
-): Promise<ScryfallRaceResult> {
-  const scryfallAttempt = searchCards(q, options)
-    .then(result => ({ kind: 'ok' as const, result }))
-    .catch(error => ({ kind: 'error' as const, error }));
-
-  const slowThreshold = delay(SCRYFALL_CATALOG_FALLBACK_TIMEOUT_MS).then(() => ({
-    kind: 'slow' as const,
-  }));
-
-  const first = await Promise.race([scryfallAttempt, slowThreshold]);
-
-  if (first.kind === 'slow') {
-    return { kind: 'error', error: new Error('Scryfall catalog search timed out') };
-  }
-
-  return first;
-}
-
 async function searchViaMtgApi(
   q: string,
   options: { types?: string[]; subtypes?: string[]; page?: number },
@@ -62,9 +42,17 @@ async function searchViaMtgApi(
   return { ...result, source: 'mtgapi' };
 }
 
+function scryfallFallbackReason(error: unknown) {
+  if (error instanceof Error && error.name === 'AbortError') {
+    return 'Scryfall catalog search timed out';
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return `Scryfall catalog search failed (${message})`;
+}
+
 /**
- * Catalog search for the deck editor: Scryfall first, [MTG API](https://docs.magicthegathering.io/)
- * on any Scryfall failure or if Scryfall has not responded within 5 seconds.
+ * Catalog search for the deck editor: one fast Scryfall attempt (no 429 retries), then
+ * [MTG API](https://docs.magicthegathering.io/) on any failure or after 5s without a response.
  */
 export async function searchDeckEditorCatalog(
   q: string,
@@ -76,19 +64,11 @@ export async function searchDeckEditorCatalog(
     return searchViaMtgApi(q, options);
   }
 
-  const raced = await raceScryfallCatalogSearch(q, options);
-
-  if (raced.kind === 'ok') {
-    return { ...raced.result, source: 'scryfall' };
+  try {
+    const result = await searchCards(q, options, CATALOG_SCRYFALL_FETCH);
+    return { ...result, source: 'scryfall' };
+  } catch (error) {
+    activateScryfallFallback(scryfallFallbackReason(error));
+    return searchViaMtgApi(q, options);
   }
-
-  const error = raced.error;
-  const message = error instanceof Error ? error.message : String(error);
-  if (message.includes('timed out')) {
-    activateScryfallFallback('Scryfall catalog search exceeded 5s');
-  } else {
-    activateScryfallFallback(`Scryfall catalog search failed (${message})`);
-  }
-
-  return searchViaMtgApi(q, options);
 }
