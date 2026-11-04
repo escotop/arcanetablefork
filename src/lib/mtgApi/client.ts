@@ -2,7 +2,8 @@ import type { CardEntryDetail } from '../constants';
 import type { ScryfallSearchResult } from '../scryfall/client';
 
 const MTG_API_BASE = 'https://api.magicthegathering.io/v1';
-const PAGE_SIZE = 100;
+/** MTG API max is 100; large `name` queries are more reliable at 50. */
+const PAGE_SIZE = 50;
 
 const CATALOG_TYPE_TO_MTG: Record<string, string> = {
   creature: 'Creature',
@@ -81,7 +82,7 @@ function dedupeByCardName(cards: CardEntryDetail[]) {
     seen.add(key);
     unique.push(card);
   }
-  return unique;
+  return unique.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
 }
 
 function buildMtgApiSearchParams(
@@ -93,7 +94,7 @@ function buildMtgApiSearchParams(
   params.set('page', String(page));
   params.set('pageSize', String(PAGE_SIZE));
   params.set('contains', 'imageUrl');
-  params.set('orderBy', 'name');
+  // Do not set orderBy=name — the upstream API returns HTTP 500 for many name searches.
 
   const trimmed = q.trim();
   if (trimmed) {
@@ -117,6 +118,24 @@ function buildMtgApiSearchParams(
   return params;
 }
 
+function buildMtgApiFallbackParams(
+  q: string,
+  options: { types?: string[]; subtypes?: string[]; page?: number },
+) {
+  const params = buildMtgApiSearchParams(q, options);
+  params.delete('contains');
+  return params;
+}
+
+async function fetchMtgApiSearch(params: URLSearchParams) {
+  const url = `${MTG_API_BASE}/cards?${params}`;
+  return fetch(url, { headers: { Accept: 'application/json' } });
+}
+
+function cardHasDisplayImage(card: MtgApiCard) {
+  return Boolean(normalizeGathererImageUrl(card.imageUrl));
+}
+
 /**
  * Deck-editor catalog search via [MTG API](https://docs.magicthegathering.io/).
  * Does not use the Scryfall queue (separate 5000 req/h limit).
@@ -127,9 +146,12 @@ export async function searchMtgApiCards(
 ): Promise<ScryfallSearchResult> {
   const page = options.page ?? 1;
   const params = buildMtgApiSearchParams(q, options);
-  const url = `${MTG_API_BASE}/cards?${params}`;
+  let response = await fetchMtgApiSearch(params);
 
-  const response = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (response.status === 500) {
+    response = await fetchMtgApiSearch(buildMtgApiFallbackParams(q, options));
+  }
+
   if (response.status === 403) {
     throw new Error('MTG API rate limit exceeded');
   }
@@ -138,7 +160,8 @@ export async function searchMtgApiCards(
   }
 
   const body = (await response.json()) as MtgApiCardsResponse;
-  const mapped = dedupeByCardName((body.cards ?? []).map(mapMtgApiCardToDetail));
+  const withImages = (body.cards ?? []).filter(cardHasDisplayImage);
+  const mapped = dedupeByCardName(withImages.map(mapMtgApiCardToDetail));
 
   const totalCount = parseInt(response.headers.get('Total-Count') ?? '0', 10);
   const pageSize = parseInt(response.headers.get('Page-Size') ?? String(PAGE_SIZE), 10) || PAGE_SIZE;
