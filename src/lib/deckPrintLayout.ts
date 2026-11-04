@@ -18,6 +18,10 @@ export interface PrintDeckLayout {
   cardHeightMm: number;
   pageWidthMm: number;
   pageHeightMm: number;
+  /** Left inset so the card grid is horizontally centered. */
+  originXMm: number;
+  /** Top inset so the card grid is vertically centered. */
+  originYMm: number;
 }
 
 const PAGE_SIZES: Record<PrintPageSize, [number, number]> = {
@@ -35,6 +39,8 @@ export function estimatePrintDeckLayout(options: PrintDeckLayoutOptions): PrintD
   const usableHeight = pageHeightMm - margin * 2;
   const cols = Math.max(1, Math.floor((usableWidth + gap) / (cardWidthMm + gap)));
   const rows = Math.max(1, Math.floor((usableHeight + gap) / (cardHeightMm + gap)));
+  const gridWidthMm = cols * cardWidthMm + Math.max(0, cols - 1) * gap;
+  const gridHeightMm = rows * cardHeightMm + Math.max(0, rows - 1) * gap;
 
   return {
     cols,
@@ -44,17 +50,19 @@ export function estimatePrintDeckLayout(options: PrintDeckLayoutOptions): PrintD
     cardHeightMm,
     pageWidthMm,
     pageHeightMm,
+    originXMm: (pageWidthMm - gridWidthMm) / 2,
+    originYMm: (pageHeightMm - gridHeightMm) / 2,
   };
 }
 
 export function printCardPositionMm(
   col: number,
   row: number,
-  options: Pick<PrintDeckLayoutOptions, 'pageMarginMm' | 'spacingMm'>,
-  layout: Pick<PrintDeckLayout, 'cardWidthMm' | 'cardHeightMm'>,
+  options: Pick<PrintDeckLayoutOptions, 'spacingMm'>,
+  layout: Pick<PrintDeckLayout, 'cardWidthMm' | 'cardHeightMm' | 'originXMm' | 'originYMm'>,
 ) {
-  const x = options.pageMarginMm + col * (layout.cardWidthMm + options.spacingMm);
-  const y = options.pageMarginMm + row * (layout.cardHeightMm + options.spacingMm);
+  const x = layout.originXMm + col * (layout.cardWidthMm + options.spacingMm);
+  const y = layout.originYMm + row * (layout.cardHeightMm + options.spacingMm);
   return { x, y };
 }
 
@@ -66,8 +74,8 @@ export function mirroredPrintCardCol(col: number, cols: number) {
 export function mirroredPrintCardPositionMm(
   col: number,
   row: number,
-  options: Pick<PrintDeckLayoutOptions, 'pageMarginMm' | 'spacingMm'>,
-  layout: Pick<PrintDeckLayout, 'cols' | 'cardWidthMm' | 'cardHeightMm'>,
+  options: Pick<PrintDeckLayoutOptions, 'spacingMm'>,
+  layout: Pick<PrintDeckLayout, 'cols' | 'cardWidthMm' | 'cardHeightMm' | 'originXMm' | 'originYMm'>,
 ) {
   const mirrorCol = mirroredPrintCardCol(col, layout.cols);
   return printCardPositionMm(mirrorCol, row, options, layout);

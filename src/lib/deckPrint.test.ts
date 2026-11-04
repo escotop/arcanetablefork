@@ -33,6 +33,22 @@ test('mirroredPrintCardPositionMm mirrors horizontal slot on back page', () => {
   expect(backRight.y).toBe(frontLeft.y);
 });
 
+test('print card grid is centered with symmetric page margins', () => {
+  const layout = estimatePrintDeckLayout(defaultLayoutOptions);
+  const first = printCardPositionMm(0, 0, defaultLayoutOptions, layout);
+  const last = printCardPositionMm(layout.cols - 1, layout.rows - 1, defaultLayoutOptions, layout);
+
+  const leftMargin = first.x;
+  const rightMargin = layout.pageWidthMm - (last.x + layout.cardWidthMm);
+  const topMargin = first.y;
+  const bottomMargin = layout.pageHeightMm - (last.y + layout.cardHeightMm);
+
+  expect(leftMargin).toBeCloseTo(rightMargin, 5);
+  expect(topMargin).toBeCloseTo(bottomMargin, 5);
+  expect(leftMargin).toBeGreaterThanOrEqual(defaultLayoutOptions.pageMarginMm - 1e-9);
+  expect(topMargin).toBeGreaterThanOrEqual(defaultLayoutOptions.pageMarginMm - 1e-9);
+});
+
 test('printImagePixelSize matches 300 DPI for standard card slots', () => {
   const layout = estimatePrintDeckLayout(defaultLayoutOptions);
   const pixels = printImagePixelSize(layout.cardWidthMm, layout.cardHeightMm);
