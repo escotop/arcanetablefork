@@ -81,3 +81,25 @@ test('fillTransparentPixelsBlack only replaces low-alpha pixels', () => {
   expect(Array.from(data.slice(4, 8))).toEqual([0, 0, 0, 255]);
   expect(Array.from(data.slice(8, 12))).toEqual([0, 0, 0, 255]);
 });
+
+test('every card back lands exactly behind its front when duplexing on the long edge', () => {
+  for (const pageSize of ['a4', 'letter'] as const) {
+    for (const pageMarginMm of [0, 5, 12.5]) {
+      for (const spacingMm of [0, 0.2, 3]) {
+        for (const scale of [0.9, 1, 1.05]) {
+          const options = { pageSize, pageMarginMm, spacingMm, scale };
+          const layout = estimatePrintDeckLayout(options);
+          for (let row = 0; row < layout.rows; row++) {
+            for (let col = 0; col < layout.cols; col++) {
+              const front = printCardPositionMm(col, row, options, layout);
+              const back = mirroredPrintCardPositionMm(col, row, options, layout);
+              // Flipping the sheet on its long edge maps x -> pageWidth - x - cardWidth.
+              expect(back.x).toBeCloseTo(layout.pageWidthMm - front.x - layout.cardWidthMm, 9);
+              expect(back.y).toBeCloseTo(front.y, 9);
+            }
+          }
+        }
+      }
+    }
+  }
+});
