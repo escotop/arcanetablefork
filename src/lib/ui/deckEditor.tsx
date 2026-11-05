@@ -102,6 +102,7 @@ import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import DeckImportDialog from './deckEditor/deckImportDialog';
 import ExportDeckModal from './deckEditor/exportDeckModal';
 import PrintDeckModal from './deckEditor/printDeckModal';
+import AddTokenModal from './deckEditor/addTokenModal';
 import useCardGrouping, { getCardTypeCategory } from './deckEditor/cardGroupings';
 import {
   countSpecialDeckTabs,
@@ -135,7 +136,7 @@ import {
   toggleCommanderCategories,
 } from '../deckCommander';
 import { computeDeckCoverMetadata, invalidateDeckPreviewCache } from '../deckCoverPreview';
-import { collectTokenPartIds, getDefaultTokenEntry, getTokenKey, mergeTokenPrintings, resolveTokensForSources } from '../deckTokens';
+import { collectTokenPartIds, getDefaultTokenEntry, getTokenKey, mergeTokenPrintings, resolveTokensForSources, tokenDetailToEntry } from '../deckTokens';
 import { reportClientError } from '../clientErrorReporting';
 import { consumeScryfallFallbackNotice } from '../scryfallFallback';
 import OverflowMenuIcon from 'lucide-solid/icons/ellipsis';
@@ -167,6 +168,7 @@ export const DeckEditor: Component<Props> = props => {
     'cards',
   );
   const [tokenPrintingPickerKey, setTokenPrintingPickerKey] = createSignal<string>();
+  const [addTokenOpen, setAddTokenOpen] = createSignal(false);
   const [importDialogOpen, setImportDialogOpen] = createSignal(false);
   const [printDialogOpen, setPrintDialogOpen] = createSignal(false);
   const [exportDialogOpen, setExportDialogOpen] = createSignal(false);
@@ -1107,8 +1109,34 @@ export const DeckEditor: Component<Props> = props => {
     trackDeep(deck.tokens);
     const resolved = deckTokens.error ? [] : (deckTokens() ?? []);
     if (!resolved.length && !deck.tokens) return [];
-    return mergeTokenPrintings(resolved, deck.tokens).filter(entry => getTokenKey(entry.detail));
+    const fromCards = mergeTokenPrintings(resolved, deck.tokens).filter(entry =>
+      getTokenKey(entry.detail),
+    );
+    // Tokens added by hand go after the ones created by cards in the deck.
+    const known = new Set(fromCards.map(entry => getTokenKey(entry.detail)));
+    const manual = Object.values(deck.tokens ?? {})
+      .filter(entry => entry?.manualToken && (entry.qty ?? 1) > 0 && getTokenKey(entry.detail))
+      .filter(entry => !known.has(getTokenKey(entry.detail)))
+      .map(entry => applyCustomArtToEntry({ ...entry, qty: entry.qty ?? 1 }));
+    return [...fromCards, ...manual];
   });
+
+  const deckTokenKeys = createMemo(() => new Set(deckTokenEntryList().map(entry => getTokenKey(entry.detail))));
+
+  function addManualToken(token: CardEntryDetail) {
+    const key = getTokenKey(token);
+    if (!key || deckTokenKeys().has(key)) return;
+    updateDeck('tokens', current => ({
+      ...(current ?? {}),
+      [key]: { ...tokenDetailToEntry(token), manualToken: true },
+    }));
+    toast.success(`${token.name} added to tokens`);
+  }
+
+  function removeManualToken(tokenKey: string) {
+    // Store setters merge objects: undefined is what removes the key.
+    updateDeck('tokens', tokenKey, undefined as never);
+  }
 
   function getTokenDeckEntry(tokenKey: string): DetailedCardEntry | undefined {
     const base = deckTokenEntryList().find(item => getTokenKey(item.detail) === tokenKey);
@@ -1275,7 +1303,7 @@ export const DeckEditor: Component<Props> = props => {
                   <span>{sideboardQtyCount()}</span>
                 </button>
               </Show>
-              <Show when={deckTokenPartIds().length > 0}>
+              <Show when={deckHydrationReady()}>
                 <button
                   type='button'
                   class={tabButtonClass(typeFilter() === 'tokens')}
@@ -1625,7 +1653,7 @@ export const DeckEditor: Component<Props> = props => {
                                 />
                               ) : (
                                 <div class='p-8 text-center text-muted-foreground'>
-                                  <p>No tokens created by cards in this deck.</p>
+                                  <p>No tokens created by cards in this deck. Add one by hand below.</p>
                                   <Button
                                     class='mt-3'
                                     type='button'
@@ -1649,10 +1677,22 @@ export const DeckEditor: Component<Props> = props => {
                                   onChangePrinting={changeTokenPrinting}
                                   onPreview={src => setSearchParams({ dialog: 'card-preview', src })}
                                   onOpenPrintings={() => openTokenPrintingPicker(tokenKey())}
+                                  onRemove={entry.manualToken ? removeManualToken : undefined}
                                 />
                               );
                             }}
                           </For>
+                          <Show when={!isSearching()}>
+                            <button
+                              type='button'
+                              title='Add a token by hand'
+                              class='flex w-full flex-col items-center justify-center gap-2 rounded-[4.75%] border-2 border-dashed border-muted-foreground/40 text-muted-foreground transition-colors hover:border-primary hover:text-foreground'
+                              style='aspect-ratio: 63 / 88;'
+                              onClick={() => setAddTokenOpen(true)}>
+                              <AddIcon class='size-8' />
+                              <span class='text-sm font-medium'>Add token</span>
+                            </button>
+                          </Show>
                         </Show>
                       </Show>
                     }>
@@ -1891,6 +1931,12 @@ export const DeckEditor: Component<Props> = props => {
             }}
           />
         </Show>
+        <AddTokenModal
+          open={addTokenOpen()}
+          existingKeys={deckTokenKeys()}
+          onAdd={addManualToken}
+          onClose={() => setAddTokenOpen(false)}
+        />
         <Show when={tokenPrintingPickerKey() && getTokenDeckEntry(tokenPrintingPickerKey()!)}>
           <PrintingPickerModal
             entry={getTokenDeckEntry(tokenPrintingPickerKey()!)!}

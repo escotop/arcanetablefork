@@ -40,6 +40,8 @@ import { toast } from 'solid-sonner';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import type { SavedCardBack } from '~/lib/savedCardBack';
 import CardBackPickerModal from '~/lib/ui/cardBackPickerModal';
+import TokenCopiesModal from './tokenCopiesModal';
+import { getTokenKey } from '~/lib/deckTokens';
 
 interface Props {
   open: boolean;
@@ -62,13 +64,22 @@ const PrintDeckModal: Component<Props> = props => {
   const [progress, setProgress] = createSignal('');
   const [selectedCardBack, setSelectedCardBack] = createSignal<SavedCardBack | undefined>();
   const [cardBackPickerOpen, setCardBackPickerOpen] = createSignal(false);
+  const [tokenCopiesOpen, setTokenCopiesOpen] = createSignal(false);
+  /** Copies to print per token key (default 1 each). */
+  const [tokenCopies, setTokenCopies] = createSignal<Record<string, number>>({});
 
   const sideboardCards = () => props.sideboardCards ?? [];
-  const tokenCards = () => props.tokenCards ?? [];
+  const deckTokenCards = () => props.tokenCards ?? [];
+  const tokenCards = createMemo(() =>
+    deckTokenCards()
+      .map(token => ({ ...token, qty: tokenCopies()[getTokenKey(token.detail)] ?? 1 }))
+      .filter(token => token.qty > 0),
+  );
 
   const mainPrintableCount = createMemo(() => countPrintableDeckCards(props.cards));
   const sideboardPrintableCount = createMemo(() => countPrintableDeckCards(sideboardCards()));
   const tokenPrintableCount = createMemo(() => countPrintableDeckCards(tokenCards()));
+  const deckTokenPrintableCount = createMemo(() => countPrintableDeckCards(deckTokenCards()));
 
   const printableCards = createMemo(() =>
     buildPrintDeckCardList(props.cards, sideboardCards(), tokenCards(), options()),
@@ -78,6 +89,13 @@ const PrintDeckModal: Component<Props> = props => {
   const frontPageCount = createMemo(() =>
     printableCount() ? Math.ceil(printableCount() / layout().cardsPerPage) : 0,
   );
+  /** Empty slots on the last front page (0 = the last page is full, which is ideal). */
+  const lastPageFreeSlots = createMemo(() => {
+    const count = printableCount();
+    if (!count) return 0;
+    const remainder = count % layout().cardsPerPage;
+    return remainder ? layout().cardsPerPage - remainder : 0;
+  });
   const pageCount = createMemo(() => {
     const fronts = frontPageCount();
     if (!fronts) return 0;
@@ -191,6 +209,27 @@ const PrintDeckModal: Component<Props> = props => {
                 </div>
               </div>
 
+              <Show when={printableCount() > 0}>
+                <div
+                  role='status'
+                  class={
+                    lastPageFreeSlots() === 0
+                      ? 'rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm'
+                      : 'rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm'
+                  }>
+                  <Show
+                    when={lastPageFreeSlots() > 0}
+                    fallback='The last page is full — no paper wasted.'>
+                    The last page has {lastPageFreeSlots()} empty slot
+                    {lastPageFreeSlots() === 1 ? '' : 's'} (of {layout().cardsPerPage}).
+                    <Show when={options().includeTokens && deckTokenCards().length > 0}>
+                      {' '}
+                      You can fill them with extra token copies.
+                    </Show>
+                  </Show>
+                </div>
+              </Show>
+
               <div class='grid gap-3'>
                 <Label class='flex items-center gap-2 font-normal'>
                   <Checkbox
@@ -209,7 +248,7 @@ const PrintDeckModal: Component<Props> = props => {
                 <Label class='flex items-center gap-2 font-normal'>
                   <Checkbox
                     checked={options().includeTokens}
-                    disabled={tokenPrintableCount() < 1}
+                    disabled={deckTokenPrintableCount() < 1}
                     onChange={checked => updateOption('includeTokens', checked)}
                   />
                   <span>
@@ -220,6 +259,18 @@ const PrintDeckModal: Component<Props> = props => {
                     </Show>
                   </span>
                 </Label>
+                <Show when={options().includeTokens && deckTokenCards().length > 0}>
+                  <div class='pl-6'>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      disabled={printing()}
+                      onClick={() => setTokenCopiesOpen(true)}>
+                      Extra token copies
+                    </Button>
+                  </div>
+                </Show>
                 <Label class='flex items-center gap-2 font-normal'>
                   <Checkbox
                     checked={options().addCardBacks}
@@ -352,6 +403,16 @@ const PrintDeckModal: Component<Props> = props => {
           </DialogContentExtended>
         </div>
       </Portal>
+      <TokenCopiesModal
+        open={tokenCopiesOpen()}
+        tokens={deckTokenCards()}
+        copies={tokenCopies()}
+        freeSlots={lastPageFreeSlots()}
+        cardsPerPage={layout().cardsPerPage}
+        onChange={(key, copies) => setTokenCopies(current => ({ ...current, [key]: copies }))}
+        onReset={() => setTokenCopies({})}
+        onClose={() => setTokenCopiesOpen(false)}
+      />
       <Portal>
         <CardBackPickerModal
           open={cardBackPickerOpen()}

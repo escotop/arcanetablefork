@@ -19,7 +19,7 @@ import GameLoadingOverlay from '~/lib/ui/gameLoadingOverlay';
 import MultiplayerSyncOverlay from '~/lib/ui/multiplayerSyncOverlay';
 import Overlay from '~/lib/ui/overlay';
 import { beginLoadProfile, endLoadProfile, markLoadProfile, profileAsync } from '~/lib/loadProfile';
-import { loadDeckAndJoin, localInit, tryReconnectToGame } from '~/main3d';
+import { loadDeckAndJoin, localInit, teardownMain3d, tryReconnectToGame } from '~/main3d';
 
 const GamePage: Component = props => {
   const [reconnecting, setReconnecting] = createSignal(true);
@@ -54,6 +54,7 @@ const GamePage: Component = props => {
   onCleanup(() => {
     teardownBugGameLog();
     cleanup();
+    teardownMain3d();
   });
 
   return (

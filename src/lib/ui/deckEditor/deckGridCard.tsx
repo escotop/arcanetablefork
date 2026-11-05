@@ -9,6 +9,7 @@ import StarIcon from 'lucide-solid/icons/star';
 import ArrowRightIcon from 'lucide-solid/icons/arrow-right';
 import ArrowLeftIcon from 'lucide-solid/icons/arrow-left';
 import RotateCwIcon from 'lucide-solid/icons/rotate-cw';
+import TrashIcon from 'lucide-solid/icons/trash-2';
 import random from 'lodash-es/random';
 import { getCardImage } from '~/lib/card';
 import { DetailedCardEntry, Deck } from '~/lib/constants';
@@ -28,6 +29,8 @@ interface Props {
   onToggleCommander?(storageKey: string): void;
   onSendToSideboard?(storageKey: string): void;
   onSendToDeck?(storageKey: string): void;
+  /** Removes the card from the deck (manually added tokens). */
+  onRemove?(storageKey: string): void;
   section?: 'cards' | 'sideboard';
   variant?: 'default' | 'token';
   pinnedPrintings?: CardPrintingOption[];
@@ -172,6 +175,20 @@ const DeckGridCard: Component<Props> = props => {
               </div>
             </Show>
             <div class='flex items-center justify-center gap-2'>
+              <Show when={props.onRemove}>
+                <Button
+                  size='icon'
+                  variant='ghost'
+                  type='button'
+                  title='Remove token'
+                  onClick={e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    props.onRemove?.(props.storageKey);
+                  }}>
+                  <TrashIcon class='text-white' style='filter: drop-shadow(2px 4px 6px black);' />
+                </Button>
+              </Show>
               <Show when={props.card()?.qty > 0 && supportsCardPrintings()}>
                 <Button
                   type='button'

@@ -107,6 +107,8 @@ export interface DetailedCardEntry extends CardEntry {
   printingMismatch?: boolean;
   importLookupReason?: string;
   importLookupTrace?: string[];
+  /** Token added by hand in the deck editor (not created by any card in the deck). */
+  manualToken?: boolean;
 }
 
 export interface Card {

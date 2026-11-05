@@ -154,7 +154,7 @@ import { initTurnOrderSync, syncBattlefieldTurnOutlineHighlight } from './lib/tu
 import { setupSeatSync } from './lib/seatSync';
 import { createRestackEvent, createTransferCardEvent } from './lib/createEvents';
 
-var container;
+var container: HTMLDivElement | undefined;
 
 let raycaster: THREE.Raycaster;
 let mouse: THREE.Vector2;
@@ -504,6 +504,11 @@ export async function localInit(gameOptions: GameOptions) {
   await profileAsync('globals.init (3d + indexeddb)', () => init(gameOptions), {
     gameId: gameOptions.gameId,
   });
+  // The player left (back button) while the game was still loading.
+  if (tearingDown) {
+    teardownMain3d();
+    return;
+  }
   initBugGameLog(gameOptions.gameId);
 
   const playerSessionId = getOrCreatePlayerSessionId(gameOptions.gameId);
@@ -624,7 +629,7 @@ export async function localInit(gameOptions: GameOptions) {
   setupCss3dRenderer(container);
   markLoadProfile('canvas + css3d renderer');
 
-  // TODO: these document listeners are never cleaned up!
+  // Removed again in teardownMain3d() when the game page unmounts.
   renderer.domElement.addEventListener('mousemove', onRendererMouseMove, false);
   renderer.domElement.addEventListener('contextmenu', onContextMenu, false);
   renderer.domElement.addEventListener('auxclick', onAuxClick, false);
@@ -637,11 +642,7 @@ export async function localInit(gameOptions: GameOptions) {
   document.addEventListener('mouseup', onDocumentDrop, false);
   document.addEventListener('wheel', onDocumentScroll, { passive: false });
   window.addEventListener('resize', onWindowResize, false);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-      void flushDispatchEventQueue();
-    }
-  });
+  document.addEventListener('visibilitychange', onVisibilityChange);
 
   void profileAsync('initial processEvents', () => processEvents(), {
     gameLogLength: gameLog.length,
@@ -657,6 +658,34 @@ export async function localInit(gameOptions: GameOptions) {
   });
   void refreshCachedCardFaceMaterials();
   startAnimating();
+}
+
+function onVisibilityChange() {
+  if (document.visibilityState === 'hidden') {
+    void flushDispatchEventQueue();
+  }
+}
+
+/**
+ * Undo what localInit attached to the page. Without this, leaving a game (e.g. browser back)
+ * left the full-screen game container on top of the home page, swallowing every click, plus
+ * document listeners that kept preventing default actions.
+ */
+export function teardownMain3d() {
+  postDragClickGuard?.();
+  dragTargets = [];
+  document.removeEventListener('mousemove', onDocumentMouseMove, false);
+  document.documentElement.removeEventListener('mouseleave', onDocumentMouseLeave, false);
+  document.removeEventListener('click', onDocumentClick, false);
+  document.removeEventListener('pointerup', onDocumentPointerUp, true);
+  document.removeEventListener('dragstart', onDocumentDragStart as unknown as EventListener, false);
+  document.removeEventListener('dragend', onDocumentDragEnd, false);
+  document.removeEventListener('mouseup', onDocumentDrop, false);
+  document.removeEventListener('wheel', onDocumentScroll);
+  window.removeEventListener('resize', onWindowResize, false);
+  document.removeEventListener('visibilitychange', onVisibilityChange);
+  container?.remove();
+  container = undefined;
 }
 
 export function readjustPlayAreas() {
