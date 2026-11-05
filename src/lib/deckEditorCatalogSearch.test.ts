@@ -7,9 +7,8 @@ import {
 const searchCards = vi.fn();
 const searchMtgApiCards = vi.fn();
 
-vi.mock('./scryfall/client', () => ({
-  searchCards: (...args: unknown[]) => searchCards(...args),
-  ScryfallRequestError: class ScryfallRequestError extends Error {
+vi.mock('./scryfall/client', () => {
+  class ScryfallRequestError extends Error {
     status: number;
     body: string;
     constructor(status: number, body: string) {
@@ -17,11 +16,25 @@ vi.mock('./scryfall/client', () => ({
       this.status = status;
       this.body = body;
     }
-  },
-}));
+  }
+  class ScryfallUnavailableError extends ScryfallRequestError {}
+  return {
+    searchCards: (...args: unknown[]) => searchCards(...args),
+    ScryfallRequestError,
+    ScryfallUnavailableError,
+    isScryfallUnavailableError: (error: unknown) => error instanceof ScryfallUnavailableError,
+  };
+});
 
 vi.mock('./mtgApi/client', () => ({
   searchMtgApiCards: (...args: unknown[]) => searchMtgApiCards(...args),
+  isMtgApiAvailable: () => true,
+}));
+
+const searchBulkCards = vi.fn();
+vi.mock('./scryfallBulkIndex', () => ({
+  searchBulkCards: (...args: unknown[]) => searchBulkCards(...args),
+  scheduleBulkIndexRefresh: async () => {},
 }));
 
 const scryfallList = {
@@ -47,6 +60,8 @@ beforeEach(() => {
   searchCards.mockReset();
   searchMtgApiCards.mockReset();
   searchMtgApiCards.mockResolvedValue(mtgList);
+  searchBulkCards.mockReset();
+  searchBulkCards.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -64,8 +79,32 @@ test('returns Scryfall results when search succeeds', async () => {
   expect(searchCards).toHaveBeenCalledWith(
     'bolt',
     {},
-    expect.objectContaining({ maxAttempts: 1, requestTimeoutMs: 5000 }),
+    expect.objectContaining({ priority: 'interactive', requestTimeoutMs: 5000 }),
   );
+});
+
+test('repeated searches are served from the cache', async () => {
+  searchCards.mockResolvedValue(scryfallList);
+  await searchDeckEditorCatalog('bolt');
+  await searchDeckEditorCatalog('Bolt ');
+  expect(searchCards).toHaveBeenCalledTimes(1);
+});
+
+test('prefers the offline Scryfall index over MTG API when Scryfall is down', async () => {
+  searchCards.mockRejectedValue(new Error('Scryfall unavailable'));
+  searchBulkCards.mockResolvedValue({ ...scryfallList, id: 'scryfall-bulk' });
+  const result = await searchDeckEditorCatalog('bolt');
+  expect(result.source).toBe('scryfall-offline');
+  expect(searchMtgApiCards).not.toHaveBeenCalled();
+});
+
+test('invalid query syntax returns no results instead of switching provider', async () => {
+  const { ScryfallRequestError } = await import('./scryfall/client');
+  searchCards.mockRejectedValue(new ScryfallRequestError(400, 'bad query'));
+  const result = await searchDeckEditorCatalog('o:"');
+  expect(result.source).toBe('scryfall');
+  expect(result.data).toEqual([]);
+  expect(searchMtgApiCards).not.toHaveBeenCalled();
 });
 
 test('falls back to MTG API immediately on Scryfall error', async () => {

@@ -51,12 +51,15 @@ import { prefetchDeckTopCardArt } from './cardLoading';
 import { cardsById, cardSystem, getProjectionVec, setHoverSignal, zonesById } from './globals';
 import { cleanupMesh, getGlobalRotation, shuffleItems } from './utils';
 import { createRoot } from 'solid-js';
-import { lookupMtgApiCardEntry } from './mtgApi/client';
+import { isFallbackCardDetail, lookupMtgApiCardEntry } from './mtgApi/client';
 import { isScryfallFallbackActive } from './scryfallFallback';
+import { lookupBulkCard } from './scryfallBulkIndex';
 import {
   getCardById,
-  getCardBySetCollector,
-  getCardNamed,
+  isScryfallUnavailableError,
+  lookupCardById,
+  lookupCardBySetCollector,
+  lookupCardNamed,
   searchCards,
 } from './scryfall/client';
 
@@ -76,7 +79,7 @@ function detailFromSearchResult(match: CardEntryDetail): CardEntryDetail | null 
 }
 
 async function fetchCardDetailById(id: string): Promise<CardEntryDetail | null> {
-  return getCardById(id);
+  return lookupCardById(id);
 }
 
 function buildExactNameSearchQuery(name: string) {
@@ -748,7 +751,9 @@ export async function fetchCardInfo(
     cache.set(cacheKey, result);
   }
 
-  if (result?.detail && isValidCardDetail(result.detail)) {
+  // Fallback-provider data is only a stopgap: keep it out of the 30-day cache so the card is
+  // fetched from Scryfall again once it is reachable.
+  if (result?.detail && isValidCardDetail(result.detail) && !isFallbackCardDetail(result.detail)) {
     void setCachedCardDetail(result.detail, entry);
   }
 
@@ -766,7 +771,26 @@ async function fetchCardDetailBySetCollector(
   set: string,
   collectorNumber: string,
 ): Promise<CardEntryDetail | null> {
-  return getCardBySetCollector(set, collectorNumber);
+  return lookupCardBySetCollector(set, collectorNumber);
+}
+
+/** Scryfall unreachable: local Scryfall bulk index first (same data), then MTG API. */
+async function fetchCardDetailViaFallback(
+  entry: CardEntry,
+  trace: string[],
+): Promise<CardEntryDetail | null> {
+  const local = await lookupBulkCard(entry.name).catch(() => null);
+  if (local) {
+    trace.push(`Offline Scryfall index matched "${local.name}"`);
+    return local;
+  }
+  const mtg = await lookupMtgApiCardEntry(entry).catch(() => null);
+  if (mtg) {
+    trace.push(`MTG API matched "${mtg.name}"`);
+    return mtg;
+  }
+  trace.push('Scryfall unavailable and no fallback match');
+  return null;
 }
 
 async function fetchCardDetailPayload(
@@ -774,16 +798,24 @@ async function fetchCardDetailPayload(
   trace: string[] = [],
 ): Promise<CardEntryDetail | null> {
   if (isScryfallFallbackActive()) {
-    trace.push('Scryfall fallback active — MTG API lookup');
-    const mtg = await lookupMtgApiCardEntry(entry);
-    if (mtg) {
-      trace.push(`MTG API matched "${mtg.name}"`);
-      return mtg;
-    }
-    trace.push('MTG API lookup returned no card');
-    return null;
+    trace.push('Scryfall unavailable — using fallback');
+    return fetchCardDetailViaFallback(entry, trace);
   }
 
+  try {
+    return await fetchCardDetailFromScryfall(entry, trace);
+  } catch (error) {
+    // Rate limited / unreachable says nothing about the card: never report it as "not found".
+    if (!isScryfallUnavailableError(error)) throw error;
+    trace.push('Scryfall unavailable — using fallback');
+    return fetchCardDetailViaFallback(entry, trace);
+  }
+}
+
+async function fetchCardDetailFromScryfall(
+  entry: CardEntry,
+  trace: string[],
+): Promise<CardEntryDetail | null> {
   if (entry.id?.trim()) {
     trace.push(`Lookup by Scryfall id ${entry.id}`);
     const byId = await fetchCardDetailById(entry.id);
@@ -802,7 +834,7 @@ async function fetchCardDetailPayload(
     trace.push(`Lookup printing in ${set.toUpperCase()}`);
   }
 
-  const payload = await getCardNamed(name, { set, id: entry.id });
+  const payload = await lookupCardNamed(name, { set, id: entry.id });
   if (!payload) {
     trace.push(`Named lookup failed for "${name}"`);
   } else {

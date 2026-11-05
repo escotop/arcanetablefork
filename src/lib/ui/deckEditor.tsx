@@ -916,7 +916,8 @@ export const DeckEditor: Component<Props> = props => {
 
   let lastSearchString: string | undefined;
   let cancelSearch = false;
-  let catalogSearchUsesMtgApi = false;
+  let notifiedFallbackSource: string | undefined;
+  let latestSearchRequest = 0;
 
   function onSearch(q?: string, page?: number, catalogType?: string, subtypes?: string[]) {
     if (cancelSearch || !isCatalogTab()) return;
@@ -947,17 +948,24 @@ export const DeckEditor: Component<Props> = props => {
     }
 
     function fetchPage(append?: true) {
+      const requestId = ++latestSearchRequest;
       searchDeckEditorCatalog(q ?? '', { types, subtypes: subtypeFilters, page: searchPage })
         .then(result => {
+          // A newer search started meanwhile: never let a slow old answer replace its results.
+          if (requestId !== latestSearchRequest) return;
           if ((result as { code?: string }).code === 'error') {
             toast(`failed to load search results. Try again later`);
             return;
           }
 
-          if (result.source === 'mtgapi' && !catalogSearchUsesMtgApi) {
-            catalogSearchUsesMtgApi = true;
+          if (result.source === 'scryfall') {
+            notifiedFallbackSource = undefined;
+          } else if (notifiedFallbackSource !== result.source) {
+            notifiedFallbackSource = result.source;
             toast(
-              'Scryfall no respondió; buscando con el catálogo MTG (magicthegathering.io).',
+              result.source === 'scryfall-offline'
+                ? 'Scryfall no responde; buscando en la copia local de Scryfall (búsqueda por nombre y tipo).'
+                : 'Scryfall no respondió; buscando con el catálogo MTG (magicthegathering.io).',
             );
           }
 
@@ -980,6 +988,7 @@ export const DeckEditor: Component<Props> = props => {
           setSearchParams({ page: result.page, totalPages: result.total_pages }, { replace: true });
         })
         .catch(error => {
+          if (requestId !== latestSearchRequest) return;
           devLog.warn('[deck editor] catalog search failed', error);
           toast('No se pudieron cargar los resultados. Prueba de nuevo en un momento.');
         });

@@ -19,6 +19,27 @@ import {
 import { setCachedCardDetailsFromRaw } from './scryfallCache';
 
 const COLLECTION_CHUNK_SIZE = SCRYFALL_COLLECTION_MAX_IDENTIFIERS;
+/**
+ * Card-by-card lookups run a few at a time. The Scryfall client paces request starts per
+ * endpoint, so this only overlaps network latency (and fallback lookups) without exceeding
+ * rate limits.
+ */
+const INDIVIDUAL_LOOKUP_CONCURRENCY = 4;
+
+async function forEachWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  run: (item: T) => Promise<void>,
+) {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      await run(item);
+    }
+  });
+  await Promise.all(workers);
+}
 
 function normalizeCardName(name?: string) {
   return name?.trim().toLowerCase() || '';
@@ -379,7 +400,7 @@ export async function fetchCardInfoForImport(
   const pendingIndividual = [...nonBatchable, ...missingAfterBatch];
   const individualKeys = new Set(nonBatchable.map(entry => getCardKey(entry)));
 
-  for (const entry of pendingIndividual) {
+  await forEachWithConcurrency(pendingIndividual, INDIVIDUAL_LOOKUP_CONCURRENCY, async entry => {
     let card: DetailedCardEntry;
     try {
       card = await fetchCardInfo(entry, cache);
@@ -393,7 +414,7 @@ export async function fetchCardInfoForImport(
     if (individualKeys.has(getCardKey(entry))) {
       report(entry.name);
     }
-  }
+  });
 
   const orderedCards: Record<string, DetailedCardEntry> = {};
   for (const entry of entries) {

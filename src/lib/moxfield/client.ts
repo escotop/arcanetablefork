@@ -1,5 +1,5 @@
 import type { CardEntryDetail } from '../constants';
-import { getCardNamed } from '../scryfall/client';
+import { getCardNamed, scryfallImageUrlFromId } from '../scryfall/client';
 import { getMoxfieldDeckBracket } from './bracket';
 import type {
   MoxfieldDeck,
@@ -68,7 +68,10 @@ export function getMoxfieldCardImageUrl(card?: Record<string, unknown>): string 
     (typeof card.scryfallId === 'string' && card.scryfallId);
 
   if (scryfallId) {
-    return `https://api.scryfall.com/cards/${encodeURIComponent(scryfallId)}?format=image&version=art_crop`;
+    return (
+      scryfallImageUrlFromId(scryfallId, 'art_crop') ??
+      `https://api.scryfall.com/cards/${encodeURIComponent(scryfallId)}?format=image&version=art_crop`
+    );
   }
 
   const set = typeof card.set === 'string' ? card.set : undefined;
@@ -87,8 +90,12 @@ function scryfallArtCropUrl(card: CardEntryDetail): string | undefined {
   if (card.image_uris?.art_crop) return card.image_uris.art_crop;
   const faceUris = card.card_faces?.[0]?.image_uris;
   if (faceUris?.art_crop) return faceUris.art_crop;
-  if (card.id) {
-    return `https://api.scryfall.com/cards/${encodeURIComponent(card.id)}?format=image&version=art_crop`;
+  const id = (card as { id?: string }).id;
+  if (id) {
+    return (
+      scryfallImageUrlFromId(id, 'art_crop') ??
+      `https://api.scryfall.com/cards/${encodeURIComponent(id)}?format=image&version=art_crop`
+    );
   }
   return undefined;
 }

@@ -7,6 +7,8 @@ import {
   SCRYFALL_COLLECTION_MAX_IDENTIFIERS,
   type ScryfallCollectionIdentifier,
 } from './client';
+import { isScryfallFallbackActive } from '../scryfallFallback';
+import { lookupBulkCard } from '../scryfallBulkIndex';
 import { getCachedCardById, getCachedCardDetail, setCachedCardDetail } from '../scryfallCache';
 
 const FLUSH_DELAY_MS = 50;
@@ -127,12 +129,16 @@ async function flushPendingHydration() {
 
   const byId = new Map<string, CardEntryDetail>();
 
-  if (idsToFetch.size) {
-    const rawCards = await fetchCardsByIds([...idsToFetch]);
-    for (const raw of rawCards) {
-      const mapped = mapScryfallCard(raw);
-      if (mapped.id) byId.set(mapped.id, mapped);
-      void setCachedCardDetail(mapped);
+  if (idsToFetch.size && !isScryfallFallbackActive()) {
+    try {
+      const rawCards = await fetchCardsByIds([...idsToFetch]);
+      for (const raw of rawCards) {
+        const mapped = mapScryfallCard(raw);
+        if (mapped.id) byId.set(mapped.id, mapped);
+        void setCachedCardDetail(mapped);
+      }
+    } catch {
+      // Handled per card below; throwing here used to leave these cards pending forever.
     }
   }
 
@@ -145,7 +151,7 @@ async function flushPendingHydration() {
     target.resolve();
   }
 
-  if (collectionRows.length) {
+  if (collectionRows.length && !isScryfallFallbackActive()) {
     try {
       for (let index = 0; index < collectionRows.length; index += SCRYFALL_COLLECTION_MAX_IDENTIFIERS) {
         const chunk = collectionRows.slice(index, index + SCRYFALL_COLLECTION_MAX_IDENTIFIERS);
@@ -162,10 +168,8 @@ async function flushPendingHydration() {
           }
         }
       }
-    } catch (error) {
-      for (const row of collectionRows) {
-        row.target.reject(error);
-      }
+    } catch {
+      // Fall through to the per-card lookups below.
     }
   }
 
@@ -173,9 +177,14 @@ async function flushPendingHydration() {
     const detail = target.readDetail();
     if (detailHasPlayableImage(detail)) continue;
     try {
-      const payload =
+      const fromScryfall =
         (detail.id ? byId.get(detail.id) : undefined) ??
-        (await getCardNamed(detail.name, { set: detail.set, id: detail.id }));
+        (isScryfallFallbackActive()
+          ? null
+          : await getCardNamed(detail.name, { set: detail.set, id: detail.id }));
+      // Scryfall unavailable: same art from the offline Scryfall index, if this player has it.
+      const payload =
+        fromScryfall ?? (detail.name ? await lookupBulkCard(detail.name).catch(() => null) : null);
       if (!payload) {
         target.resolve();
         continue;

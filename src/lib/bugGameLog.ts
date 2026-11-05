@@ -14,7 +14,9 @@ import { getOrCreatePlayerSessionId } from './playerSession';
 
 const MAX_LINES = 8_000;
 const MAX_LINE_CHARS = 2_000;
-const SYNC_DEBOUNCE_MS = 4_000;
+/** How long an export waits for the other players to publish their logs. */
+const EXPORT_COLLECT_MS = 2_500;
+const REQUEST_KEY = 'bugGameLogRequest';
 
 export interface SharedBugGameLogEntry {
   playerSessionId: string;
@@ -30,7 +32,8 @@ let activeGameId: string | undefined;
 let activeSessionId: string | undefined;
 const lines: string[] = [];
 let unsubscribeErrors: (() => void) | undefined;
-let syncTimer: ReturnType<typeof setTimeout> | undefined;
+let unobserveRequests: (() => void) | undefined;
+let lastHandledRequestId: string | undefined;
 
 function formatTimestamp() {
   return new Date().toISOString();
@@ -61,7 +64,6 @@ export function appendBugGameLog(category: string, message: string, details?: Re
       : '';
   lines.push(`${formatTimestamp()} [${category}] ${sanitizeLine(message)}${detailText}`);
   trimLines();
-  scheduleBugLogSync();
 }
 
 export function getGameSyncSnapshot() {
@@ -315,16 +317,56 @@ function publishLocalBugLogNow() {
   });
 }
 
-function scheduleBugLogSync() {
-  if (syncTimer) clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => {
-    syncTimer = undefined;
+/**
+ * Logs are published into the shared doc only when someone exports them. Rewriting the full
+ * text every few seconds pushed large updates through the same socket as game actions.
+ */
+function watchBugLogRequests() {
+  unobserveRequests?.();
+  if (!gameState?.observe) return;
+  lastHandledRequestId = (gameState.get(REQUEST_KEY) as { id?: string } | undefined)?.id;
+  const onChange = (event: { keysChanged?: Set<string> }) => {
+    if (!event?.keysChanged?.has(REQUEST_KEY)) return;
+    const request = gameState.get(REQUEST_KEY) as { id?: string } | undefined;
+    if (!request?.id || request.id === lastHandledRequestId) return;
+    lastHandledRequestId = request.id;
     publishLocalBugLogNow();
-  }, SYNC_DEBOUNCE_MS);
+  };
+  gameState.observe(onChange as any);
+  unobserveRequests = () => gameState.unobserve(onChange as any);
 }
 
-export function exportBugGameLogsZip(gameId: string) {
+function requestBugLogsFromPeers() {
+  if (!gameState?.doc) return;
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  lastHandledRequestId = id;
+  gameState.doc.transact(() => {
+    gameState.set(REQUEST_KEY, { id, at: Date.now(), by: activeSessionId });
+  });
+}
+
+function connectedPeerCount() {
+  const states = provider?.awareness?.getStates();
+  if (!states) return 0;
+  return Math.max(0, states.size - 1);
+}
+
+async function collectPeerBugLogs(requestedAt: number) {
+  const deadline = Date.now() + EXPORT_COLLECT_MS;
+  while (Date.now() < deadline) {
+    const fresh = Object.entries(readSharedBugLogs()).filter(
+      ([sessionId, entry]) => sessionId !== activeSessionId && entry.updatedAt >= requestedAt,
+    ).length;
+    if (fresh >= connectedPeerCount()) return;
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
+}
+
+export async function exportBugGameLogsZip(gameId: string) {
+  const requestedAt = Date.now();
   publishLocalBugLogNow();
+  requestBugLogsFromPeers();
+  await collectPeerBugLogs(requestedAt);
 
   const files: Record<string, Uint8Array> = {};
   const usedNames = new Set<string>();
@@ -373,6 +415,7 @@ export function initBugGameLog(gameId: string) {
     gameId,
     playerSessionId: activeSessionId,
   });
+  watchBugLogRequests();
 
   unsubscribeErrors = subscribeClientErrors(error => {
     appendBugGameLog('error', error.message, {
@@ -388,10 +431,8 @@ export function teardownBugGameLog() {
   if (activeGameId && activeSessionId) {
     publishLocalBugLogNow();
   }
-  if (syncTimer) {
-    clearTimeout(syncTimer);
-    syncTimer = undefined;
-  }
+  unobserveRequests?.();
+  unobserveRequests = undefined;
   unsubscribeErrors?.();
   unsubscribeErrors = undefined;
   activeGameId = undefined;

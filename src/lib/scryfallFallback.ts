@@ -1,10 +1,24 @@
 import { devLog } from './devLog';
 
-/** After any Scryfall failure, avoid Scryfall batch/API calls and use alternate providers. */
-export const SCRYFALL_FALLBACK_DURATION_MS = 5 * 60 * 1000;
+/**
+ * While active, skip Scryfall and use alternate providers. The window follows Scryfall's own
+ * Retry-After (time until a route recovers), clamped to these bounds. It used to be a fixed
+ * 5 minutes, which kept the whole app on the much weaker fallback long after Scryfall was fine.
+ */
+export const SCRYFALL_FALLBACK_MIN_MS = 10_000;
+export const SCRYFALL_FALLBACK_MAX_MS = 2 * 60_000;
+/** Used when the caller does not know how long Scryfall will be unavailable. */
+export const SCRYFALL_FALLBACK_DURATION_MS = 60_000;
 
 let fallbackUntil = 0;
 let fallbackNotified = false;
+const activationListeners = new Set<() => void>();
+
+/** Notified each time the fallback window opens (e.g. to prepare the offline card index). */
+export function onScryfallFallbackActivated(listener: () => void) {
+  activationListeners.add(listener);
+  return () => activationListeners.delete(listener);
+}
 
 export function isScryfallFallbackActive(now = Date.now()): boolean {
   return now < fallbackUntil;
@@ -14,15 +28,25 @@ export function getScryfallFallbackRemainingMs(now = Date.now()): number {
   return Math.max(0, fallbackUntil - now);
 }
 
-/**
- * Call on the first (or any) Scryfall failure. Refreshes the 5-minute window on repeat calls.
- */
-export function activateScryfallFallback(source: string, reason?: string) {
+/** Call when Scryfall cannot be reached. Repeat calls only ever extend the window. */
+export function activateScryfallFallback(
+  source: string,
+  reason?: string,
+  durationMs = SCRYFALL_FALLBACK_DURATION_MS,
+) {
   const wasActive = isScryfallFallbackActive();
-  fallbackUntil = Date.now() + SCRYFALL_FALLBACK_DURATION_MS;
+  const clamped = Math.min(SCRYFALL_FALLBACK_MAX_MS, Math.max(SCRYFALL_FALLBACK_MIN_MS, durationMs));
+  fallbackUntil = Math.max(fallbackUntil, Date.now() + clamped);
   if (!wasActive) {
+    activationListeners.forEach(listener => {
+      try {
+        listener();
+      } catch {
+        // listeners must not break the caller
+      }
+    });
     devLog.warn(
-      `[Scryfall fallback] ${source}${reason ? `: ${reason}` : ''} — alternate providers for 5 minutes`,
+      `[Scryfall fallback] ${source}${reason ? `: ${reason}` : ''} — alternate providers for ${Math.round(clamped / 1000)}s`,
     );
   }
 }

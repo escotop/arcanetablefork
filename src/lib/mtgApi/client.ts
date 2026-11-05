@@ -4,6 +4,29 @@ import type { ScryfallSearchResult } from '../scryfall/client';
 const MTG_API_BASE = 'https://api.magicthegathering.io/v1';
 /** MTG API max is 100; large `name` queries are more reliable at 50. */
 const PAGE_SIZE = 50;
+/** Name lookups answer in ~0.3-0.6 s; type-only searches can take 15 s+, so cap them. */
+const NAME_TIMEOUT_MS = 8_000;
+const BROWSE_TIMEOUT_MS = 10_000;
+/** The API allows 1000 requests per hour per IP (Ratelimit-Limit header). */
+const RATE_LIMITED_PAUSE_MS = 10 * 60_000;
+
+/** Marks card details that came from this stopgap provider (not cached long-term). */
+export const MTG_API_DATA_SOURCE = 'mtgapi';
+
+export function isFallbackCardDetail(detail: unknown): boolean {
+  return (detail as { dataSource?: string } | undefined)?.dataSource === MTG_API_DATA_SOURCE;
+}
+
+let pausedUntil = 0;
+
+export function isMtgApiAvailable(now = Date.now()) {
+  return now >= pausedUntil;
+}
+
+/** @internal Test hook. */
+export function resetMtgApiStateForTests() {
+  pausedUntil = 0;
+}
 
 const CATALOG_TYPE_TO_MTG: Record<string, string> = {
   creature: 'Creature',
@@ -70,6 +93,7 @@ export function mapMtgApiCardToDetail(card: MtgApiCard): CardEntryDetail {
     set_name: card.setName,
     search: '',
     popularity: 99999,
+    dataSource: MTG_API_DATA_SOURCE,
   } as CardEntryDetail;
 }
 
@@ -128,8 +152,18 @@ function buildMtgApiFallbackParams(
 }
 
 async function fetchMtgApiSearch(params: URLSearchParams) {
+  if (!isMtgApiAvailable()) throw new Error('MTG API rate limit exceeded');
   const url = `${MTG_API_BASE}/cards?${params}`;
-  return fetch(url, { headers: { Accept: 'application/json' } });
+  const timeoutMs = params.get('name') ? NAME_TIMEOUT_MS : BROWSE_TIMEOUT_MS;
+  const response = await fetch(url, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const remaining = Number(response.headers.get('Ratelimit-Remaining'));
+  if (response.status === 403 || response.status === 429 || (Number.isFinite(remaining) && remaining <= 0 && response.headers.has('Ratelimit-Remaining'))) {
+    pausedUntil = Date.now() + RATE_LIMITED_PAUSE_MS;
+  }
+  return response;
 }
 
 function cardHasDisplayImage(card: MtgApiCard) {
@@ -138,7 +172,7 @@ function cardHasDisplayImage(card: MtgApiCard) {
 
 /**
  * Deck-editor catalog search via [MTG API](https://docs.magicthegathering.io/).
- * Does not use the Scryfall queue (separate 5000 req/h limit).
+ * Last-resort fallback: 1000 req/h per IP, no Scryfall ids, Gatherer images.
  */
 export async function searchMtgApiCards(
   q: string,
@@ -152,7 +186,7 @@ export async function searchMtgApiCards(
     response = await fetchMtgApiSearch(buildMtgApiFallbackParams(q, options));
   }
 
-  if (response.status === 403) {
+  if (response.status === 403 || response.status === 429) {
     throw new Error('MTG API rate limit exceeded');
   }
   if (!response.ok) {
@@ -222,7 +256,13 @@ export async function lookupMtgApiCardEntry(entry: {
   }
   if (!response.ok) return null;
 
-  const body = (await response.json()) as MtgApiCardsResponse;
+  let body = (await response.json()) as MtgApiCardsResponse;
+  if (!body.cards?.length && params.has('set')) {
+    // Set codes do not always match Scryfall's; any printing beats "not found".
+    params.delete('set');
+    const retry = await fetchMtgApiSearch(params);
+    if (retry.ok) body = (await retry.json()) as MtgApiCardsResponse;
+  }
   const match = pickMtgApiPrinting(body.cards ?? [], entry);
   if (!match) return null;
   return mapMtgApiCardToDetail(match);

@@ -199,11 +199,12 @@ export default function SettingsOverlay(props: {
     }
   }
 
-  function handleExportBugGameLog() {
+  async function handleExportBugGameLog() {
     const gameId = params.gameId;
     if (!gameId) return;
     try {
-      exportBugGameLogsZip(gameId);
+      toast.info('Collecting bug logs from players…');
+      await exportBugGameLogsZip(gameId);
       toast.success('Bug game log exported');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not export bug game log');

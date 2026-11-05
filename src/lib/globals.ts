@@ -230,7 +230,77 @@ export const [scrollTarget, setScrollTarget] = createSignal();
 export let provider: WebsocketProvider | WebrtcProvider;
 let indexeddbPersistence: IndexeddbPersistence | null = null;
 export let [logs, setLogs] = createStore([]);
-export let [processedEvents, setProcessedEvents] = createSignal(0);
+const [processedEventsSignal, setProcessedEventsSignal] = createSignal(0);
+/** Index of the next gameLog entry to replay (entries before it are applied or queued as late). */
+export const processedEvents = processedEventsSignal;
+
+/**
+ * gameLog entries that Yjs placed *before* entries this client had already replayed.
+ * Happens when two players push at nearly the same time: Yjs orders concurrent appends
+ * by client id, so one client sees the other's events land in the middle of the log.
+ * Replaying strictly by index would skip them forever.
+ */
+const lateGameLogEntries: unknown[] = [];
+let gameLogEntryInFlight = false;
+const trackedGameLogs = new WeakSet<object>();
+
+/** Setting an absolute value moves the replay cursor (reset/snapshot), so pending late entries no longer apply. */
+export function setProcessedEvents(value: number | ((prev: number) => number)) {
+  if (typeof value === 'number') lateGameLogEntries.length = 0;
+  return setProcessedEventsSignal(value);
+}
+
+export function setGameLogEntryInFlight(value: boolean) {
+  gameLogEntryInFlight = value;
+}
+
+/** True when every gameLog entry received so far has been applied to the scene. */
+export function isGameLogFullyApplied() {
+  return (
+    !gameLogEntryInFlight &&
+    lateGameLogEntries.length === 0 &&
+    !!gameLog &&
+    processedEvents() >= gameLog.length
+  );
+}
+
+export function takeLateGameLogEntry(): unknown | undefined {
+  return lateGameLogEntries.shift();
+}
+
+export function hasLateGameLogEntries() {
+  return lateGameLogEntries.length > 0;
+}
+
+function trackGameLogInsertions(log: YArray<any> | undefined) {
+  if (!log || typeof log.observe !== 'function' || trackedGameLogs.has(log)) return;
+  trackedGameLogs.add(log);
+  log.observe((event: unknown) => {
+    const delta = (event as { changes?: { delta?: any[] } } | undefined)?.changes?.delta;
+    if (!Array.isArray(delta)) return;
+    // Deletes only come from log resets/imports, which move the cursor themselves.
+    if (delta.some(op => op.delete)) return;
+
+    const consumed = processedEvents() + (gameLogEntryInFlight ? 1 : 0);
+    let oldIndex = 0;
+    let shift = 0;
+    for (const op of delta) {
+      if (op.retain) {
+        oldIndex += op.retain;
+      } else if (op.insert) {
+        const items = Array.isArray(op.insert) ? op.insert : [op.insert];
+        if (oldIndex < consumed) {
+          lateGameLogEntries.push(...items);
+          shift += items.length;
+        }
+      }
+    }
+    if (shift > 0) {
+      logReloadOther('gamelog-late-insert', { count: shift, consumed });
+      setProcessedEventsSignal(value => value + shift);
+    }
+  });
+}
 let gameStateImportInProgress = false;
 let eventCatchUpComplete = false;
 export const [eventCatchUpCompleteSignal, setEventCatchUpCompleteSignal] = createSignal(false);
@@ -307,6 +377,21 @@ export function finishHistoricalLogReplay() {
   syncTurnOrderAfterLogReplay();
 }
 
+/**
+ * finishHistoricalLogReplay() often runs while other players are still pushing events, so the
+ * flag above stayed false for the whole session and every local action was applied a second
+ * time when it came back from the log (double sounds, cards jumping back for a moment).
+ * Called after each drain: once the log is fully drained, own logged events are already applied.
+ */
+export function markInitialGameLogReplayCompleteIfCaughtUp() {
+  if (initialGameLogReplayComplete || historicalLogReplayInProgress) return;
+  if (processedEvents() < gameLog.length || lateGameLogEntries.length > 0) return;
+  // Older entries can still arrive from the server until the first sync completes.
+  if ((provider as { synced?: boolean } | undefined)?.synced === false) return;
+  initialGameLogReplayComplete = true;
+  logReloadOther('initial-gamelog-replay-complete-after-drain', { processed: processedEvents() });
+}
+
 export function hasPersistedGameState() {
   return !!indexeddbPersistence?.synced && gameLog.length > 0;
 }
@@ -324,11 +409,14 @@ export function resetGameSceneForReplay() {
   batch.length = 0;
   flushScheduled = false;
   clearSpanishPreview();
+  const staleSeatIds = Object.keys(playAreas);
   Object.values(playAreas).forEach(playArea => {
     if (playArea && table) table.remove(playArea.mesh);
     playArea?.destroy();
   });
-  setPlayAreas({});
+  // Store setters merge objects, so setPlayAreas({}) kept the destroyed seats around and the
+  // replay then reused them (empty zones). Remove each seat explicitly.
+  staleSeatIds.forEach(id => setPlayAreas(Number(id), undefined as unknown as PlayArea));
   cardsById.clear();
   zonesById.clear();
   setLogs([]);
@@ -574,6 +662,7 @@ export function headlessInit(opts = {}) {
       ? Comlink.wrap(new TextureLoaderWorker())
       : (textureLoaderWorkerApi as Comlink.Remote<TextureLoaderWorkerType>);
   gameLog = opts.gameLog ?? ydoc.getArray('gameLog');
+  trackGameLogInsertions(gameLog);
   gameState = opts.gameState ?? ydoc.getMap('gameState');
 
   provider = opts?.provider;

@@ -34,6 +34,13 @@ interface ExtendedOptions<AddOptions extends DefaultAddOptions = {}> {
   localSounds?: boolean;
 }
 
+/** Cap on how long a transfer waits for card art before moving on (art still loads afterwards). */
+const TEXTURE_WAIT_MS = 300;
+
+function waitAtMost(promise: Promise<unknown>, ms: number) {
+  return Promise.race([promise, new Promise<void>(resolve => setTimeout(resolve, ms))]);
+}
+
 // toZone and fromZone being undefined are actually valid in cases like tokens
 export async function transferCard<AddOptions extends {}>(
   card: Card,
@@ -63,6 +70,37 @@ export async function transferCard<AddOptions extends {}>(
   if (fromZone?.zone === 'deck') {
     (fromZone as Deck).prepareCardForRemoval(card);
   }
+
+  let transmitted = preventTransmit;
+  const transmit = () => {
+    if (transmitted) return;
+    transmitted = true;
+    if (!card.mesh) {
+      const ownerId = card.clientId ?? getLocalPlayerClientId();
+      if (ownerId !== undefined) ensureCardMesh(card, ownerId);
+    }
+    if (!card.mesh) {
+      devLog.warn('[transferCard] missing mesh, skipping transmit', card.id);
+      return;
+    }
+
+    sendEvent({
+      type: 'transferCard',
+      payload: {
+        userData: serializeCardUserDataForLog(card.mesh.userData),
+        fromZoneId: fromZone?.id,
+        toZoneId: toZone?.id,
+        extendedOptions: {
+          addOptions: {
+            ...addOptions,
+            skipAnimation: false,
+          },
+          userData,
+          preventTransmit: true,
+        },
+      },
+    });
+  };
 
   if (!card.mesh) {
     const ownerId = card.clientId ?? (fromZone as Deck | undefined)?.clientId;
@@ -205,6 +243,10 @@ export async function transferCard<AddOptions extends {}>(
       });
     }
 
+    // Publish now, before waiting on art: anything the player does meanwhile (e.g. tapping the
+    // card they just played) must reach the log after this move, not before it.
+    transmit();
+
     if (textureZones.has(toZone.zone)) {
       const textureLoad = loadCardTextures(card).catch(error => {
         devLog.warn('[transferCard] texture load failed', card.detail?.name ?? card.id, error);
@@ -216,7 +258,7 @@ export async function transferCard<AddOptions extends {}>(
       ) {
         void textureLoad;
       } else {
-        await textureLoad;
+        await waitAtMost(textureLoad, TEXTURE_WAIT_MS);
       }
     }
 
@@ -267,31 +309,5 @@ export async function transferCard<AddOptions extends {}>(
     playPlayCardSound(false);
   }
 
-  if (!preventTransmit) {
-    if (!card.mesh) {
-      const ownerId = card.clientId ?? getLocalPlayerClientId();
-      if (ownerId !== undefined) ensureCardMesh(card, ownerId);
-    }
-    if (!card.mesh) {
-      devLog.warn('[transferCard] missing mesh, skipping transmit', card.id);
-      return;
-    }
-
-    sendEvent({
-      type: 'transferCard',
-      payload: {
-        userData: serializeCardUserDataForLog(card.mesh.userData),
-        fromZoneId: fromZone?.id,
-        toZoneId: toZone?.id,
-        extendedOptions: {
-          addOptions: {
-            ...addOptions,
-            skipAnimation: false,
-          },
-          userData,
-          preventTransmit: true,
-        },
-      },
-    });
-  }
+  transmit();
 }

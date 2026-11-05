@@ -27,6 +27,8 @@ import {
 import { setCardSystem as setGlobalCardSystem } from './globals';
 import { CardSystemContext } from './cardSystemContext';
 import { MTG_CARD_SYSTEM, normalizeCardSystemId } from './mtgCardSystem';
+import { isFallbackCardDetail } from './mtgApi/client';
+import { isScryfallFallbackActive } from './scryfallFallback';
 
 const defaultDeckStore = {
   decks: {},
@@ -171,6 +173,8 @@ export { serializeDeck } from './deckSerialize';
 
 function needsCardHydration(card: DetailedCardEntry) {
   if (!card.detail?.name) return true;
+  // Stopgap data from MTG API: upgrade to Scryfall data once it is reachable again.
+  if (isFallbackCardDetail(card.detail) && !isScryfallFallbackActive()) return true;
   if (card.id && card.detail.id && card.id !== card.detail.id) return true;
   if (hasRequestedPrinting(card) && !printingMatchesRequest(card.detail, card)) return true;
   return false;
@@ -326,7 +330,10 @@ export async function hydrateDeck(originalDeck: Deck) {
 
   deck = Object.assign({}, structuredClone(DEFAULT_DECK), deck);
 
-  if (originalDeck.id && contentHash) {
+  const usedFallbackData = [deck.cards, deck.inPlay, deck.sideboard, deck.tokens].some(section =>
+    Object.values(section ?? {}).some(card => isFallbackCardDetail(card?.detail)),
+  );
+  if (originalDeck.id && contentHash && !usedFallbackData) {
     void setHydratedDeck(originalDeck.id, contentHash, deck);
   }
 

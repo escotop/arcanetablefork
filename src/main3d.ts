@@ -151,6 +151,7 @@ import {
 } from './lib/loadProfile';
 import { resetPlayerLifeDeltaTracking, syncLifeDeltasFromAwareness } from './lib/playerLifeDeltaFlash';
 import { initTurnOrderSync, syncBattlefieldTurnOutlineHighlight } from './lib/turnOrder';
+import { setupSeatSync } from './lib/seatSync';
 import { createRestackEvent, createTransferCardEvent } from './lib/createEvents';
 
 var container;
@@ -566,6 +567,7 @@ export async function localInit(gameOptions: GameOptions) {
   });
 
   initTurnOrderSync();
+  setupSeatSync();
 
   provider.on('sync', isSynced => {
     if (!isSynced) return;
@@ -1627,13 +1629,14 @@ async function onDocumentDrop(event) {
             },
           });
           const extended = transferEvent.payload.extendedOptions;
-          await transferCard(card, hand, hand, {
+          const reorder = transferCard(card, hand, hand, {
             preventTransmit: true,
             localSounds: true,
             addOptions: extended?.addOptions,
             userData: extended?.userData,
           });
           dispatchGameEvent(transferEvent);
+          await reorder;
           if (nextHandInsertIndex !== undefined) nextHandInsertIndex++;
           shouldClearSelection = true;
           continue;
@@ -1667,13 +1670,16 @@ async function onDocumentDrop(event) {
         },
       });
       const extended = transferEvent.payload.extendedOptions;
-      await transferCard(card, fromZone, toZone, {
+      const move = transferCard(card, fromZone, toZone, {
         preventTransmit: true,
         localSounds: true,
         addOptions: extended?.addOptions,
         userData: extended?.userData,
       });
+      // Queue the move before awaiting the local animation/art, so a tap or flip made in the
+      // meantime is published after it (otherwise other players saw the card untapped).
       dispatchGameEvent(transferEvent);
+      await move;
       if (toZone.zone === 'hand' && nextHandInsertIndex !== undefined) nextHandInsertIndex++;
       shouldClearSelection = true;
     }
@@ -1804,13 +1810,12 @@ function onRendererMouseMove(event) {
 
 let ticks = 0;
 let interval = 1 / 30;
-let isErrored = false;
+const reportedRenderErrors = new Set<string>();
 
 export function animate() {
   if (tearingDown) return;
+  if (animating()) requestAnimationFrame(animate);
   try {
-    if (isErrored) return;
-    if (animating()) requestAnimationFrame(animate);
     let delta = clock.getDelta();
     ticks += delta;
     time += delta;
@@ -1820,9 +1825,13 @@ export function animate() {
       ticks = ticks % interval;
     }
   } catch (e) {
-    devLog.error(e);
-    reportClientError(e);
-    isErrored = true;
+    // Keep rendering: stopping here froze the board for good while sounds kept playing.
+    const key = e instanceof Error ? e.message : String(e);
+    if (!reportedRenderErrors.has(key) && reportedRenderErrors.size < 20) {
+      reportedRenderErrors.add(key);
+      devLog.error(e);
+      reportClientError(e);
+    }
   }
 }
 

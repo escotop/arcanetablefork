@@ -49,6 +49,10 @@ import {
   isHistoricalLogReplayInProgress,
   isInitialGameLogReplayComplete,
   resetGameSceneForReplay,
+  setGameLogEntryInFlight,
+  takeLateGameLogEntry,
+  hasLateGameLogEntries,
+  markInitialGameLogReplayCompleteIfCaughtUp,
 } from './lib/globals';
 import { PlayArea } from './lib/playArea';
 import { Deck } from './lib/deck';
@@ -84,6 +88,7 @@ import {
   recordReplaySkip,
 } from './lib/loadProfile';
 import { logReloadOther } from './lib/reloadOtherPlayerDebug';
+import { computeSeatDigest } from './lib/seatSync';
 import {
   appendBugGameLog,
   logBugGameMissingCardForEvent,
@@ -94,9 +99,18 @@ import {
 } from './lib/bugGameLog';
 
 type Events = ReturnType<(typeof EventCreators)[keyof typeof EventCreators]>;
+
+/** Replay must not stall on a slow image download; the texture still lands when it arrives. */
+const REMOTE_TEXTURE_WAIT_MS = 300;
+
+function waitAtMost(promise: Promise<unknown>, ms: number) {
+  return Promise.race([
+    promise.catch(() => {}),
+    new Promise<void>(resolve => setTimeout(resolve, ms)),
+  ]);
+}
 type Event = { clientID: string; skipReplay?: boolean } & Events;
 
-let events = [];
 let timing = 100;
 let processEventsChain: Promise<void> = Promise.resolve();
 
@@ -180,6 +194,7 @@ function isEphemeralEvent(event: { type?: string; payload?: Record<string, unkno
     event.type === 'transferEntireZone' ||
     event.type === 'peekCards' ||
     event.type === 'restack' ||
+    event.type === 'seatSync' ||
     isDeckToPeekTransfer(event) ||
     isDeckToHandDrawTransfer(event) ||
     isSilentTransferEvent(event)
@@ -265,12 +280,22 @@ async function tryBatchReplayEvent(
 
 function expandBulkChildEvents(srcEvent: Event) {
   return (srcEvent.events ?? [])
-    .map(e => {
-      e.clientID = srcEvent.clientID;
-      e.locallyApplied = srcEvent.locallyApplied;
-      return e;
-    })
+    .map(e => ({ ...e, clientID: srcEvent.clientID, locallyApplied: srcEvent.locallyApplied }))
     .filter(e => !shouldSkipEventOnCatchUp(e));
+}
+
+/**
+ * Work on a private copy of each gameLog entry. Handlers mutate event payloads (and keep
+ * references to nested objects in card userData); touching the objects stored in the
+ * shared Y.Array would silently change this client's copy of the log.
+ */
+function cloneLogEntry<T>(entry: T): T {
+  if (!entry || typeof entry !== 'object') return entry;
+  try {
+    return structuredClone(entry);
+  } catch {
+    return JSON.parse(JSON.stringify(entry)) as T;
+  }
 }
 
 function tryAddLogMessage(event: Event) {
@@ -286,7 +311,24 @@ function tryAddLogMessage(event: Event) {
   }
 }
 
-async function processGameLogEntry(srcEvent: Event) {
+function reportFailedEvent(
+  event: { type?: string; clientID?: unknown } | undefined,
+  index: number | 'late',
+  error: unknown,
+) {
+  const failed = {
+    index,
+    type: event?.type,
+    clientID: event?.clientID,
+    error: error instanceof Error ? error.message : String(error),
+  };
+  logReloadOther('process-events-entry-failed', failed);
+  logBugGameProcessSyncAnomaly('entry-failed', failed);
+  Sentry.captureException(error);
+  logger.error(error);
+}
+
+async function processGameLogEntry(srcEvent: Event, index: number | 'late') {
   if (shouldSkipLocallyAppliedEvent(srcEvent)) {
     if (isLoadProfiling()) recordReplaySkip('local');
     const eventsToLog =
@@ -297,6 +339,7 @@ async function processGameLogEntry(srcEvent: Event) {
     return;
   }
 
+  let events: Event[];
   if (srcEvent.type === 'bulk') {
     timing = srcEvent.timing;
     events = expandBulkChildEvents(srcEvent);
@@ -312,7 +355,7 @@ async function processGameLogEntry(srcEvent: Event) {
   }
 
   while (events.length > 0) {
-    let event = events.shift();
+    let event = events.shift()!;
     if (shouldSkipEventOnCatchUp(event)) {
       if (isLoadProfiling()) recordReplaySkip('catchUp');
       continue;
@@ -326,14 +369,19 @@ async function processGameLogEntry(srcEvent: Event) {
     if (event.type === 'waterdrop') continue;
     const clientID = Number(event.clientID);
     let playArea = Number.isFinite(clientID) ? playAreas[clientID] : undefined;
-    if (isLoadProfiling()) {
-      if (await profileReplayHandle(event.type, () => tryBatchReplayEvent(event, events, playArea))) {
-        continue;
+    // One broken event must not drop the rest of its bulk or block the whole queue.
+    try {
+      if (isLoadProfiling()) {
+        if (await profileReplayHandle(event.type, () => tryBatchReplayEvent(event, events, playArea))) {
+          continue;
+        }
+        await profileReplayHandle(event.type, () => handleEvent(event, playArea));
+      } else {
+        if (await tryBatchReplayEvent(event, events, playArea)) continue;
+        await handleEvent(event, playArea);
       }
-      await profileReplayHandle(event.type, () => handleEvent(event, playArea));
-    } else {
-      if (await tryBatchReplayEvent(event, events, playArea)) continue;
-      await handleEvent(event, playArea);
+    } catch (error) {
+      reportFailedEvent(event, index, error);
     }
     if (events.length > 0 && !shouldSkipEventTiming(event)) {
       if (isLoadProfiling()) recordReplayDelay(timing);
@@ -370,24 +418,39 @@ async function drainProcessEvents() {
     resetGameSceneForReplay();
   }
 
-  while (processedEvents() < gameLog.length) {
-    const srcEvent = gameLog.get(processedEvents());
+  while (true) {
+    // Entries Yjs inserted before our cursor (concurrent pushes) go first; the cursor already skips them.
+    const lateEvent = takeLateGameLogEntry() as Event | undefined;
+    if (lateEvent !== undefined) {
+      logReloadOther('process-events-late', { type: lateEvent?.type, clientID: lateEvent?.clientID });
+      setGameLogEntryInFlight(true);
+      try {
+        await processGameLogEntry(cloneLogEntry(lateEvent), 'late');
+      } catch (error) {
+        reportFailedEvent(lateEvent, 'late', error);
+      } finally {
+        setGameLogEntryInFlight(false);
+      }
+      continue;
+    }
+
+    if (processedEvents() >= gameLog.length) break;
+
+    const index = processedEvents();
+    const srcEvent = gameLog.get(index);
     logReloadOther('process-events-next', {
-      index: processedEvents(),
+      index,
       type: srcEvent?.type,
       clientID: srcEvent?.clientID,
     });
+    setGameLogEntryInFlight(true);
     try {
-      await processGameLogEntry(srcEvent);
+      await processGameLogEntry(cloneLogEntry(srcEvent), index);
     } catch (error) {
-      const failed = {
-        index: processedEvents(),
-        type: srcEvent?.type,
-        error: error instanceof Error ? error.message : String(error),
-      };
-      logReloadOther('process-events-entry-failed', failed);
-      logBugGameProcessSyncAnomaly('entry-failed', failed);
-      throw error;
+      // Skip it: retrying the same entry forever would freeze this client's view of the game.
+      reportFailedEvent(srcEvent, index, error);
+    } finally {
+      setGameLogEntryInFlight(false);
     }
     setProcessedEvents(e => e + 1);
   }
@@ -408,6 +471,7 @@ export function processEvents(): Promise<void> {
         processed: processedEvents(),
         logLength: gameLog.length,
       });
+      markInitialGameLogReplayCompleteIfCaughtUp();
       onGameLogProcessed?.();
     })
     .catch(error => {
@@ -431,16 +495,18 @@ export function processEvents(): Promise<void> {
 export async function waitForGameLogCatchUp(options?: { maxWaitMs?: number }) {
   const deadline = performance.now() + (options?.maxWaitMs ?? 30_000);
 
+  const caughtUp = () => processedEvents() >= gameLog.length && !hasLateGameLogEntries();
+
   while (performance.now() < deadline) {
     await processEvents();
-    if (processedEvents() >= gameLog.length) {
+    if (caughtUp()) {
       await new Promise<void>(requestAnimationFrame);
-      if (processedEvents() >= gameLog.length) return true;
+      if (caughtUp()) return true;
     }
     await new Promise(resolve => setTimeout(resolve, 25));
   }
 
-  return processedEvents() >= gameLog.length;
+  return caughtUp();
 }
 
 function waitForProviderDocumentSync(maxWaitMs: number): Promise<void> {
@@ -669,7 +735,10 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
     }
   }
   
-  expect(!!EVENTS[event.type], `${event.type} not implemented`);
+  if (!EVENTS[event.type]) {
+    logBugGameSyncEventDropped(event, 'unknown-event-type');
+    return;
+  }
 
   if (event.type === 'animateObject') {
     await EVENTS.animateObject(event, playArea);
@@ -691,7 +760,8 @@ export async function handleEvent(event: Event, playArea: PlayArea) {
     event.type === 'roll' ||
     event.type === 'coinFlip' ||
     event.type === 'cardCustomCounter' ||
-    event.type === 'playerCustomCounter'
+    event.type === 'playerCustomCounter' ||
+    event.type === 'seatSync'
   ) {
     await EVENTS[event.type]?.(event, playArea);
     return;
@@ -765,7 +835,8 @@ function applyJoinEvent(event: Event) {
     registerPlayerSession(playerSessionId, clientID);
   }
 
-  const playArea = PlayArea.FromNetworkState({ ...event.payload, clientID, clientId: clientID });
+  const state = structuredClone(event.payload ?? {});
+  const playArea = PlayArea.FromNetworkState({ ...state, clientID, clientId: clientID });
   playArea.playerSessionId = playerSessionId;
 
   table.add(playArea.mesh);
@@ -1029,21 +1100,19 @@ const EVENTS = {
       warmCardTextureCache(card);
     }
 
-    if (
-      event.clientID === getLocalPlayerClientId() &&
-      event.payload.extendedOptions?.addOptions?.skipLocalAnimation
-    ) {
-      event.payload.extendedOptions.addOptions.skipAnimation = true;
-    }
-
     const replaying = shouldSyncOrientationFromEvents();
+    const extendedOptions = event.payload.extendedOptions ?? {};
+    const skipLocalAnimation =
+      event.clientID === getLocalPlayerClientId() &&
+      !!extendedOptions.addOptions?.skipLocalAnimation;
     const transferOptions = {
-      ...(event.payload.extendedOptions ?? {}),
+      ...extendedOptions,
+      addOptions: {
+        ...(extendedOptions.addOptions ?? {}),
+        ...(replaying || skipLocalAnimation ? { skipAnimation: true } : {}),
+      },
       preventTransmit: true,
     };
-    if (replaying) {
-      transferOptions.addOptions = { ...transferOptions.addOptions, skipAnimation: true };
-    }
 
     await transferCard(card, resolvedFromZone, toZone, transferOptions);
     if (isRemotePlayerEvent(event)) {
@@ -1187,7 +1256,7 @@ const EVENTS = {
       });
     }
     if (card.mesh.userData.isDoubleSided) {
-      await loadCardTextures(card);
+      await waitAtMost(loadCardTextures(card), REMOTE_TEXTURE_WAIT_MS);
       if (!isEventCatchUpComplete() || isHistoricalLogReplayInProgress()) {
         playArea?.applyFlipVisual(card.mesh, { animate: false });
       }
@@ -1272,7 +1341,56 @@ const EVENTS = {
     if (!fromZone || !toZone || !playArea) return;
     return playArea.executeTransferEntireZone(fromZone, toZone, event.payload.addOptions);
   },
+  /** Owner re-published its whole seat because someone saw it diverge (see lib/seatSync). */
+  seatSync(event: Event) {
+    const seat = normalizeClientId(event.payload?.seat ?? event.clientID);
+    const state = event.payload?.state as Record<string, unknown> | undefined;
+    if (seat === undefined || !state) return;
+    // The owner is the source of truth for its own seat; never rebuild the local one.
+    if (playAreas[seat]?.isLocalPlayArea || seat === getLocalPlayerClientId()) return;
+    // Clients that already match the owner keep their scene untouched (no flicker).
+    const current = playAreas[seat];
+    if (current && event.payload?.digest && computeSeatDigest(current) === event.payload.digest) {
+      return;
+    }
+    rebuildRemotePlayAreaFromState(seat, state);
+    appendBugGameLog('sync-heal', 'remote seat rebuilt from owner state', {
+      seat,
+      requestId: event.payload?.requestId,
+      replay: isHistoricalLogReplayInProgress(),
+    });
+  },
 };
+
+/** Replace a remote seat with the owner's serialized state (same path as world snapshots). */
+function rebuildRemotePlayAreaFromState(clientId: number, rawState: Record<string, unknown>) {
+  const state = structuredClone(rawState);
+  const previous = playAreas[clientId];
+  const index = previous?.index ?? (state.index as number | undefined) ?? 0;
+  const playerSessionId =
+    previous?.playerSessionId ?? (state.playerSessionId as string | undefined);
+  const lastKnownDisplayName = previous?.lastKnownDisplayName;
+
+  if (previous) {
+    table.remove(previous.mesh);
+    previous.destroy();
+    setPlayAreas(clientId, undefined as unknown as PlayArea);
+  }
+
+  const area = PlayArea.fromWorldSnapshot(clientId, state as any, { isLocalPlayer: false });
+  area.index = index;
+  area.playerSessionId = playerSessionId;
+  if (lastKnownDisplayName) area.lastKnownDisplayName = lastKnownDisplayName;
+  if (playerSessionId) registerPlayerSession(playerSessionId, clientId);
+
+  table.add(area.mesh);
+  setPlayAreas(clientId, area);
+  if (!previous) setPlayerCount(count => count + 1);
+  readjustPlayAreas();
+  area.reapplyBattlefieldOrientations();
+  syncAllPlaymats();
+  syncAllCardBacks();
+}
 
 function appendCardCustomCounterLogMessages(
   clientID: number | undefined,

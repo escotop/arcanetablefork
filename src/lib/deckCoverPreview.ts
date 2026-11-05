@@ -14,6 +14,7 @@ import {
   getCardById,
   getCardBySetCollector,
   getCardNamed,
+  scryfallImageUrlFromId,
 } from './scryfall/client';
 import { getCachedCardById, getCachedCardDetail } from './scryfallCache';
 
@@ -115,7 +116,10 @@ export function scryfallCardImageUrl(
   const { scryfallId, set, collector_number, name } = resolvePrintingForPreview(card);
 
   if (scryfallId) {
-    return `https://api.scryfall.com/cards/${encodeURIComponent(scryfallId)}?format=image&version=${version}`;
+    return (
+      scryfallImageUrlFromId(scryfallId, version) ??
+      `https://api.scryfall.com/cards/${encodeURIComponent(scryfallId)}?format=image&version=${version}`
+    );
   }
   if (set && collector_number) {
     return `https://api.scryfall.com/cards/${encodeURIComponent(set)}/${encodeURIComponent(String(collector_number))}?format=image&version=${version}`;

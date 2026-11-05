@@ -9,6 +9,7 @@ import {
 } from 'three';
 import { clock, expect, sendEvent } from './globals';
 import { setCardData } from './card';
+import { devLog } from './devLog';
 
 export interface AnimationOpts {
   from?: {
@@ -162,8 +163,7 @@ export function animateObject(obj: Object3D, opts: AnimationOpts) {
 
   if (animationMap.has(obj.uuid)) {
     let animation = animationMap.get(obj.uuid);
-    if (animation.completeOnCancel) renderAnimation(animationMap.get(obj.uuid), 1);
-    cancelAnimation(obj);
+    if (animation.completeOnCancel) renderAnimation(animation, 1);
 
     animatingObjects.delete(animation);
     animationMap.delete(obj.uuid);
@@ -200,12 +200,19 @@ export function animateObject(obj: Object3D, opts: AnimationOpts) {
 }
 
 export function cancelAnimation(obj: Object3D) {
-  const { animationMap, animatingObjects } = animationGroupQueue.at(-1)!;
-  let animation = animationMap.get(obj.uuid);
-  if (!animation) return;
-  animationMap.delete(obj.uuid);
-  animatingObjects.delete(animation);
-  obj.userData.isAnimating = false;
+  let found = false;
+  for (const { animationMap, animatingObjects } of animationGroupQueue) {
+    const animation = animationMap.get(obj.uuid);
+    if (!animation) continue;
+    found = true;
+    animationMap.delete(obj.uuid);
+    animatingObjects.delete(animation);
+    // Jump to the end state instead of freezing mid-flight. Otherwise a tap that arrives
+    // while a card is still flying hand → battlefield (or before the first frame, e.g. in
+    // a hidden tab) leaves the card drawn off its slot for the other players.
+    if (animation.completeOnCancel) renderAnimation(animation, 1);
+  }
+  if (found) obj.userData.isAnimating = false;
 }
 
 function renderAnimation(animation, delta: number): boolean {
@@ -237,7 +244,15 @@ export function renderAnimations(time: number) {
   const { animatingObjects, animationMap } = animationGroupQueue[0];
   for (const animation of animatingObjects) {
     let t = Math.max(0, Math.min((time - animation.start) / animation.duration, 1));
-    if (renderAnimation(animation, t)) {
+    let done: boolean;
+    try {
+      done = renderAnimation(animation, t);
+    } catch (error) {
+      // Drop the broken animation instead of throwing every frame (which stalls the whole queue).
+      devLog.error('[animations] animation failed, dropping it', animation.obj?.userData?.id, error);
+      done = true;
+    }
+    if (done) {
       animatingObjects.delete(animation);
       animationMap.delete(animation.obj.uuid);
     }
