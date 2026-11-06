@@ -73,7 +73,10 @@ type PrintingsPanelItem =
   | { type: 'printing'; printing: CardPrintingOption }
   | { type: 'custom'; option: CustomCardArtOption };
 
+const GALLERY_PAGES_PER_BATCH = 3;
+
 const PrintingPickerModal: Component<Props> = props => {
+  let scrollContainer: HTMLDivElement | undefined;
   const auth = useAuth();
   const canFavorite = () => auth.enabled && !!auth.user();
   const liveFavorites = createMemo(() => (canFavorite() ? cardFavorites(props.entry.name) : []));
@@ -272,14 +275,21 @@ const PrintingPickerModal: Component<Props> = props => {
     void loadPage(1, false, next);
   }
 
+  /** Loads up to GALLERY_PAGES_PER_BATCH pages in a row, showing each as it arrives. */
   async function loadGalleryPage(nextPage: number, append = false) {
     if (customLoading()) return;
     setCustomLoading(true);
     try {
-      const result = await fetchGalleryCustomArt(props.entry.name, nextPage);
-      setGalleryCards(append ? [...galleryCards(), ...result.data] : result.data);
-      setGalleryPage(result.page);
-      setGalleryTotalPages(result.total_pages);
+      let pageToLoad = nextPage;
+      for (let loaded = 0; loaded < GALLERY_PAGES_PER_BATCH; loaded++) {
+        const result = await fetchGalleryCustomArt(props.entry.name, pageToLoad);
+        const keep = append || loaded > 0;
+        setGalleryCards(keep ? [...galleryCards(), ...result.data] : result.data);
+        setGalleryPage(result.page);
+        setGalleryTotalPages(result.total_pages);
+        if (result.page >= result.total_pages) break;
+        pageToLoad = result.page + 1;
+      }
     } finally {
       setCustomLoading(false);
     }
@@ -530,7 +540,7 @@ const PrintingPickerModal: Component<Props> = props => {
         </div>
       </header>
 
-      <div class='min-h-0 flex-1 overflow-y-auto p-4'>
+      <div ref={scrollContainer} class='min-h-0 flex-1 overflow-y-auto p-4'>
         <Show when={panelMode() === 'printings'}>
           <Show
             when={!loading() || printings().length > 0}
@@ -628,7 +638,13 @@ const PrintingPickerModal: Component<Props> = props => {
             <Show when={galleryPage() < galleryTotalPages()}>
               <div
                 class='flex justify-center py-6'
-                use:intersectionObserver={{ onIntersect: loadMoreGallery }}>
+                use:intersectionObserver={{
+                  root: scrollContainer,
+                  // Start the next batch about two screens before reaching the end.
+                  rootMargin: '0px 0px 200% 0px',
+                  recheck: customLoading(),
+                  onIntersect: loadMoreGallery,
+                }}>
                 <Show
                   when={customLoading()}
                   fallback={
