@@ -17,6 +17,7 @@ import BracketEstimateTag from '~/lib/ui/bracketEstimateTag';
 import { DeckBracketFilterBar, matchesDeckPanelFilters, type BracketFilter } from '~/lib/ui/deckBracketFilter';
 import { ManageDecksDropdown } from '~/lib/ui/manageDecksButton';
 import PencilIcon from 'lucide-solid/icons/pencil';
+import { ProfileMenu } from '~/lib/ui/profileMenu';
 
 function deckCardCount(deck: Deck) {
   return Object.values(deck.cards).reduce((sum, card) => sum + (card.qty ?? 1), 0);
@@ -110,11 +111,14 @@ const LandingPage: Component = () => {
   return (
     <div class='min-h-screen bg-background text-foreground'>
       <main class='mx-auto max-w-6xl px-6 py-8'>
-        <header class='mb-8'>
-          <h1 class='text-xl font-semibold tracking-tight'>Untapped Table</h1>
-          <p class='mt-1 text-sm text-muted-foreground'>
-            Virtual table to play Magic: The Gathering with your friends.
-          </p>
+        <header class='mb-8 flex items-start justify-between gap-4'>
+          <div>
+            <h1 class='text-xl font-semibold tracking-tight'>Untapped Table</h1>
+            <p class='mt-1 text-sm text-muted-foreground'>
+              Virtual table to play Magic: The Gathering with your friends.
+            </p>
+          </div>
+          <ProfileMenu />
         </header>
 
         <div class='mb-8'>

@@ -3,6 +3,7 @@ import { ColorModeProvider, ColorModeScript, createLocalStorageManager } from '@
 import { Component, ErrorBoundary, lazy, Suspense } from 'solid-js';
 import { MetaProvider } from '@solidjs/meta';
 import { CardSystemProvider } from './lib/deckStore';
+import { AuthProvider } from './lib/auth';
 import { Toaster } from './components/ui/sonner';
 import LandingPage from './routes/index';
 import ClientOnly from './lib/clientOnly';
@@ -34,6 +35,7 @@ const App: Component = () => {
               );
             }}>
             <MetaProvider>
+              <AuthProvider>
               <CardSystemProvider>
                 <ColorModeScript storageType={storageManager.type} />
                 <ColorModeProvider storageManager={storageManager}>
@@ -41,6 +43,7 @@ const App: Component = () => {
                   <Toaster />
                 </ColorModeProvider>
               </CardSystemProvider>
+              </AuthProvider>
             </MetaProvider>
           </ErrorBoundary>
         </>
