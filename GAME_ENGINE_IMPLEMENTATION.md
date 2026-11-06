@@ -2,6 +2,8 @@
 
 ## 📦 Resumen
 
+
+
 Se ha implementado **completamente** una nueva arquitectura de sincronización para resolver los problemas actuales del sistema multijugador, siguiendo las mejores prácticas propuestas en `propuesta.md`.
 
 ### ✅ Estado actual
