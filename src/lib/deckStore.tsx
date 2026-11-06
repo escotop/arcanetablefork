@@ -1,6 +1,6 @@
-import { createStore, SetStoreFunction, unwrap } from 'solid-js/store';
+import { createStore, reconcile, SetStoreFunction, unwrap } from 'solid-js/store';
 import { nanoid } from 'nanoid';
-import { createContext, onMount, ParentProps, useContext } from 'solid-js';
+import { createContext, getOwner, onCleanup, onMount, ParentProps, useContext } from 'solid-js';
 import { CardEntry, Deck, DetailedCardEntry, CardSystem } from './constants';
 import { findDeckEntryMatch, getCardKey } from './deckEntryMatch';
 import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
@@ -15,7 +15,9 @@ import { applyCustomArtToEntry } from './customCardArt';
 import {
   getMemoryDeckStore,
   hydrateDeckStoreFromIndexedDB,
+  onDeckScopeChange,
   persistDeckStore,
+  readLocalStorageDeckStoreString,
   rememberDeckStoreInMemory,
   normalizeAndMaybeMigrateDeckStore,
 } from './deckPersistence';
@@ -60,11 +62,36 @@ export const createDeckStore = () => {
     window.addEventListener('beforeunload', flushDeckStore);
   }
 
+  // Login / logout swaps which account's decks are shown.
+  const stopScopeListener = onDeckScopeChange({
+    flush: () => {
+      if (!persistTimer) return;
+      clearTimeout(persistTimer);
+      persistTimer = undefined;
+      flushDeckStore();
+    },
+    replace: next => {
+      clearTimeout(persistTimer);
+      persistTimer = undefined;
+      latestRaw = undefined;
+      setStore(reconcile(structuredClone(next)));
+    },
+  });
+  if (getOwner()) {
+    onCleanup(() => {
+      stopScopeListener();
+      if (typeof window !== 'undefined') window.removeEventListener('beforeunload', flushDeckStore);
+    });
+  }
+
   const updateStore: typeof setStore = (...update: any[]) => {
     (setStore as any)(...update);
     latestRaw = unwrap(store);
     clearTimeout(persistTimer);
-    persistTimer = setTimeout(flushDeckStore, 400);
+    persistTimer = setTimeout(() => {
+      persistTimer = undefined;
+      flushDeckStore();
+    }, 400);
   };
 
   return [store, updateStore] as const;
@@ -83,8 +110,12 @@ export function getDeckStore(): DeckStore {
   const cached = getMemoryDeckStore();
   if (cached) return cached as DeckStore;
 
-  let storeString = localStorage.getItem('mtgplayer-decks') ?? localStorage.getItem('decks');
-  if (!storeString) return defaultDeckStore;
+  let storeString = readLocalStorageDeckStoreString();
+  if (!storeString) {
+    const empty = { decks: {}, systems: {} };
+    rememberDeckStoreInMemory(empty);
+    return empty;
+  }
   let store = JSON.parse(storeString) as DeckStore;
   let migrated = false;
 

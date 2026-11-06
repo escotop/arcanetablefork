@@ -4,6 +4,7 @@ import { Component, ErrorBoundary, lazy, Suspense } from 'solid-js';
 import { MetaProvider } from '@solidjs/meta';
 import { CardSystemProvider } from './lib/deckStore';
 import { AuthProvider } from './lib/auth';
+import { DeckSyncBridge } from './lib/ui/deckSyncBridge';
 import { Toaster } from './components/ui/sonner';
 import LandingPage from './routes/index';
 import ClientOnly from './lib/clientOnly';
@@ -41,6 +42,7 @@ const App: Component = () => {
                 <ColorModeProvider storageManager={storageManager}>
                   <Suspense>{props.children}</Suspense>
                   <Toaster />
+                  <DeckSyncBridge />
                 </ColorModeProvider>
               </CardSystemProvider>
               </AuthProvider>

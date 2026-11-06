@@ -18,6 +18,7 @@ import { DeckBracketFilterBar, matchesDeckPanelFilters, type BracketFilter } fro
 import { ManageDecksDropdown } from '~/lib/ui/manageDecksButton';
 import PencilIcon from 'lucide-solid/icons/pencil';
 import { ProfileMenu } from '~/lib/ui/profileMenu';
+import { useAuth } from '~/lib/auth';
 
 function deckCardCount(deck: Deck) {
   return Object.values(deck.cards).reduce((sum, card) => sum + (card.qty ?? 1), 0);
@@ -41,6 +42,7 @@ function listDeckIds(store: { decks: Record<string, Deck>; systems: Record<strin
 
 const LandingPage: Component = () => {
   const navigate = useNavigate();
+  const auth = useAuth();
   const [gameUrl, setGameUrl] = createSignal(`/game/${nanoid()}`);
   const [, { initCardSystem }] = useCardSystemContext();
   const [deckStore, setDeckStore] = createDeckStore();
@@ -224,7 +226,9 @@ const LandingPage: Component = () => {
                 <li>Share the room link with up to 3 other players.</li>
               </ol>
               <p class='mt-6 text-base text-muted-foreground'>
-                Decks are saved in local storage. Export a backup to avoid losing them.
+                {auth.user()
+                  ? 'Decks are saved to your account and synced across devices.'
+                  : 'Decks are saved on this device. Sign in to sync them to your account, or export a backup to avoid losing them.'}
               </p>
             </div>
           </section>
