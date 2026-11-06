@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from '~/components/ui/dialog';
 import { useAuth } from '~/lib/auth';
+import { setCardFavoritesAccount } from '~/lib/cardFavorites';
 import {
   dismissUploadPrompt,
   setDeckAccount,
@@ -26,7 +27,9 @@ export const DeckSyncBridge: Component = () => {
     on(
       () => [auth.loading(), auth.user()?.id ?? null] as const,
       ([loading, uid]) => {
-        if (!loading) setDeckAccount(uid);
+        if (loading) return;
+        setDeckAccount(uid);
+        setCardFavoritesAccount(uid);
       },
     ),
   );

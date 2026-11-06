@@ -28,6 +28,15 @@ import { cn } from '~/lib/cnUtil';
 import intersectionObserver from '~/lib/intersectionObserver';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import XIcon from 'lucide-solid/icons/x';
+import BookmarkIcon from 'lucide-solid/icons/bookmark';
+import { useAuth } from '~/lib/auth';
+import {
+  cardFavorites,
+  isCustomArtFavorite,
+  isPrintingFavorite,
+  toggleCustomArtFavorite,
+  togglePrintingFavorite,
+} from '~/lib/cardFavorites';
 
 interface Props {
   entry: DetailedCardEntry;
@@ -60,7 +69,39 @@ function initialPrintLanguage(entry: DetailedCardEntry): PrintingsLanguageFilter
   return (entry.detail as { lang?: string } | undefined)?.lang === 'es' ? 'es' : 'en';
 }
 
+const FavoriteButton: Component<{ active: boolean; onToggle: () => void }> = props => (
+  <button
+    type='button'
+    class={cn(
+      'absolute right-4 top-4 z-10 flex size-8 items-center justify-center rounded-full bg-black/55 text-white shadow-md transition-colors hover:bg-black/75',
+      props.active && 'bg-primary text-primary-foreground hover:bg-primary/85',
+    )}
+    aria-label={props.active ? 'Remove from favorites' : 'Save as favorite'}
+    aria-pressed={props.active}
+    title={props.active ? 'Remove from favorites' : 'Save as favorite'}
+    onClick={event => {
+      event.stopPropagation();
+      props.onToggle();
+    }}>
+    <BookmarkIcon class='size-4' fill={props.active ? 'currentColor' : 'none'} />
+  </button>
+);
+
+type PrintingsPanelItem =
+  | { type: 'printing'; printing: CardPrintingOption }
+  | { type: 'custom'; option: CustomCardArtOption };
+
 const PrintingPickerModal: Component<Props> = props => {
+  const auth = useAuth();
+  const canFavorite = () => auth.enabled && !!auth.user();
+  const favorites = createMemo(() => (canFavorite() ? cardFavorites(props.entry.name) : []));
+  const favoritePrintings = createMemo(() =>
+    favorites().flatMap(fav => (fav.kind === 'printing' ? [fav.printing] : [])),
+  );
+  const favoriteCustomArt = createMemo(() =>
+    favorites().flatMap(fav => (fav.kind === 'custom_art' ? [fav.option] : [])),
+  );
+
   const [panelMode, setPanelMode] = createSignal<PanelMode>('printings');
   const [printLanguage, setPrintLanguage] = createSignal<PrintingsLanguageFilter>(
     initialPrintLanguage(props.entry),
@@ -88,7 +129,14 @@ const PrintingPickerModal: Component<Props> = props => {
     savedUrlsToCustomArtOptions(props.entry.name, savedUrls()),
   );
 
-  const customArtOptions = createMemo(() => [...savedCustomOptions(), ...galleryCards()]);
+  const customArtOptions = createMemo(() => {
+    const favs = favoriteCustomArt();
+    const favUrls = new Set(favs.map(option => option.imageUrl));
+    return [
+      ...favs,
+      ...[...savedCustomOptions(), ...galleryCards()].filter(option => !favUrls.has(option.imageUrl)),
+    ];
+  });
 
   const currentDeckPrinting = createMemo(() => {
     const option = entryToPrintingOption(props.entry);
@@ -117,6 +165,23 @@ const PrintingPickerModal: Component<Props> = props => {
     }
 
     return [...pinned.filter(printing => !ids.has(printing.id)), ...fetched];
+  });
+
+  /** Printings tab: every favorite (official and custom art) first, then the rest. */
+  const printingsPanelItems = createMemo<PrintingsPanelItem[]>(() => {
+    const favIds = new Set(favoritePrintings().map(printing => printing.id));
+    const items: PrintingsPanelItem[] = [];
+    for (const fav of favorites()) {
+      items.push(
+        fav.kind === 'printing'
+          ? { type: 'printing', printing: fav.printing }
+          : { type: 'custom', option: fav.option },
+      );
+    }
+    for (const printing of visiblePrintings()) {
+      if (!favIds.has(printing.id)) items.push({ type: 'printing', printing });
+    }
+    return items;
   });
 
   function printingsSearchQuery(lang = printLanguage()) {
@@ -240,6 +305,106 @@ const PrintingPickerModal: Component<Props> = props => {
     return isCustomArtImageSelected(selectedImageUrl(), option.imageUrl);
   }
 
+  function renderPrintingCard(printing: CardPrintingOption) {
+    const isSelected = () => !usingCustomArt() && printing.id === selectedId();
+    return (
+      <div class='relative'>
+        <button
+          type='button'
+          class={cn(
+            'group relative flex w-full flex-col gap-2 rounded-lg border bg-card p-2 text-left transition-colors hover:border-primary',
+            isSelected() && 'border-primary ring-2 ring-primary/40',
+          )}
+          onClick={() => props.onSelect(printing)}>
+          <div class='relative aspect-[5/7] overflow-hidden rounded-md bg-muted'>
+            <img
+              src={
+                getPrintingPreviewUrl(printing) ??
+                cardSystem.fallbackImage ??
+                '/unknown-card-image.webp'
+              }
+              alt=''
+              class='h-full w-full object-cover'
+              loading='lazy'
+              decoding='async'
+            />
+            <Show when={isSelected()}>
+              <Badge class='absolute left-2 top-2 shadow-md'>Selected</Badge>
+            </Show>
+            <Show when={printing.lang === 'es' || printing.lang === 'en'}>
+              <Badge
+                variant='secondary'
+                class='absolute bottom-2 right-2 font-mono text-[10px] uppercase shadow-md'>
+                {printing.lang}
+              </Badge>
+            </Show>
+          </div>
+          <div class='min-w-0 px-1'>
+            <div class='truncate font-mono text-xs font-bold uppercase'>
+              {getPrintingLabel(printing)}
+            </div>
+            <Show when={printing.set_name || printing.collector_number}>
+              <div class='truncate text-xs text-muted-foreground'>
+                {printing.set_name}
+                {printing.collector_number ? ` · #${printing.collector_number}` : ''}
+              </div>
+            </Show>
+          </div>
+        </button>
+        <Show when={canFavorite() && printing.id}>
+          <FavoriteButton
+            active={isPrintingFavorite(props.entry.name, printing.id)}
+            onToggle={() => void togglePrintingFavorite(props.entry.name, printing)}
+          />
+        </Show>
+      </div>
+    );
+  }
+
+  function renderCustomArtCard(option: CustomCardArtOption) {
+    const isSelected = () => isCustomArtSelected(option);
+    return (
+      <div class='relative'>
+        <button
+          type='button'
+          class={cn(
+            'group relative flex w-full flex-col gap-2 rounded-lg border bg-card p-2 text-left transition-colors hover:border-primary',
+            isSelected() && 'border-primary ring-2 ring-primary/40',
+          )}
+          onClick={() => props.onSelectCustomArt(option)}>
+          <div class='relative aspect-[5/7] overflow-hidden rounded-md bg-muted'>
+            <img
+              src={option.thumbUrl}
+              alt=''
+              class='h-full w-full object-cover'
+              loading='lazy'
+              decoding='async'
+            />
+            <Show when={isSelected()}>
+              <Badge class='absolute left-2 top-2 shadow-md'>Selected</Badge>
+            </Show>
+          </div>
+          <div class='min-w-0 px-1'>
+            <div class='truncate text-xs font-bold'>{option.label}</div>
+            <div class='truncate text-xs text-muted-foreground'>
+              {option.source === 'custom'
+                ? 'Custom URL'
+                : option.creator
+                  ? `by ${option.creator}`
+                  : 'MTGCardBuilder'}
+            </div>
+          </div>
+        </button>
+        <Show when={canFavorite()}>
+          <FavoriteButton
+            active={isCustomArtFavorite(props.entry.name, option.imageUrl)}
+            onToggle={() => void toggleCustomArtFavorite(props.entry.name, option)}
+          />
+        </Show>
+      </div>
+    );
+  }
+
   return (
     <div
       class='fixed inset-0 z-[70] flex flex-col bg-background/95 backdrop-blur-sm'
@@ -322,59 +487,16 @@ const PrintingPickerModal: Component<Props> = props => {
             <div
               class='grid gap-4'
               style={{ 'grid-template-columns': `repeat(${colsPerRow()}, minmax(0, 1fr))` }}>
-              <For each={visiblePrintings()}>
-                {printing => {
-                  const isSelected = () =>
-                    !usingCustomArt() && printing.id === selectedId();
-                  return (
-                    <button
-                      type='button'
-                      class={cn(
-                        'group relative flex flex-col gap-2 rounded-lg border bg-card p-2 text-left transition-colors hover:border-primary',
-                        isSelected() && 'border-primary ring-2 ring-primary/40',
-                      )}
-                      onClick={() => props.onSelect(printing)}>
-                      <div class='relative aspect-[5/7] overflow-hidden rounded-md bg-muted'>
-                        <img
-                          src={
-                            getPrintingPreviewUrl(printing) ??
-                            cardSystem.fallbackImage ??
-                            '/unknown-card-image.webp'
-                          }
-                          alt=''
-                          class='h-full w-full object-cover'
-                          loading='lazy'
-                          decoding='async'
-                        />
-                        <Show when={isSelected()}>
-                          <Badge class='absolute left-2 top-2 shadow-md'>Selected</Badge>
-                        </Show>
-                        <Show when={printing.lang === 'es' || printing.lang === 'en'}>
-                          <Badge
-                            variant='secondary'
-                            class='absolute right-2 top-2 font-mono text-[10px] uppercase shadow-md'>
-                            {printing.lang}
-                          </Badge>
-                        </Show>
-                      </div>
-                      <div class='min-w-0 px-1'>
-                        <div class='truncate font-mono text-xs font-bold uppercase'>
-                          {getPrintingLabel(printing)}
-                        </div>
-                        <Show when={printing.set_name || printing.collector_number}>
-                          <div class='truncate text-xs text-muted-foreground'>
-                            {printing.set_name}
-                            {printing.collector_number ? ` · #${printing.collector_number}` : ''}
-                          </div>
-                        </Show>
-                      </div>
-                    </button>
-                  );
-                }}
+              <For each={printingsPanelItems()}>
+                {item =>
+                  item.type === 'printing'
+                    ? renderPrintingCard(item.printing)
+                    : renderCustomArtCard(item.option)
+                }
               </For>
             </div>
 
-            <Show when={!loading() && visiblePrintings().length === 0}>
+            <Show when={!loading() && printingsPanelItems().length === 0}>
               <div class='py-12 text-center text-sm text-muted-foreground'>
                 {printLanguage() === 'es'
                   ? 'No Spanish printings found for this card on Scryfall'
@@ -438,43 +560,7 @@ const PrintingPickerModal: Component<Props> = props => {
                 <div class='px-1 text-center text-xs text-muted-foreground'>Add a custom image URL</div>
               </div>
 
-              <For each={customArtOptions()}>
-                {option => {
-                  const isSelected = () => isCustomArtSelected(option);
-                  return (
-                    <button
-                      type='button'
-                      class={cn(
-                        'group relative flex flex-col gap-2 rounded-lg border bg-card p-2 text-left transition-colors hover:border-primary',
-                        isSelected() && 'border-primary ring-2 ring-primary/40',
-                      )}
-                      onClick={() => props.onSelectCustomArt(option)}>
-                      <div class='relative aspect-[5/7] overflow-hidden rounded-md bg-muted'>
-                        <img
-                          src={option.thumbUrl}
-                          alt=''
-                          class='h-full w-full object-cover'
-                          loading='lazy'
-                          decoding='async'
-                        />
-                        <Show when={isSelected()}>
-                          <Badge class='absolute left-2 top-2 shadow-md'>Selected</Badge>
-                        </Show>
-                      </div>
-                      <div class='min-w-0 px-1'>
-                        <div class='truncate text-xs font-bold'>{option.label}</div>
-                        <div class='truncate text-xs text-muted-foreground'>
-                          {option.source === 'custom'
-                            ? 'Custom URL'
-                            : option.creator
-                              ? `by ${option.creator}`
-                              : 'MTGCardBuilder'}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                }}
-              </For>
+              <For each={customArtOptions()}>{option => renderCustomArtCard(option)}</For>
             </div>
 
             <Show when={!customLoading() && customArtOptions().length === 0}>
