@@ -28,8 +28,8 @@ import { cn } from '~/lib/cnUtil';
 import intersectionObserver from '~/lib/intersectionObserver';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import XIcon from 'lucide-solid/icons/x';
-import BookmarkIcon from 'lucide-solid/icons/bookmark';
 import { useAuth } from '~/lib/auth';
+import { FavoriteButton } from '~/lib/ui/favoriteButton';
 import {
   cardFavorites,
   isCustomArtFavorite,
@@ -68,24 +68,6 @@ function writeColsPerRow(value: number) {
 function initialPrintLanguage(entry: DetailedCardEntry): PrintingsLanguageFilter {
   return (entry.detail as { lang?: string } | undefined)?.lang === 'es' ? 'es' : 'en';
 }
-
-const FavoriteButton: Component<{ active: boolean; onToggle: () => void }> = props => (
-  <button
-    type='button'
-    class={cn(
-      'absolute right-4 top-4 z-10 flex size-8 items-center justify-center rounded-full bg-black/55 text-white shadow-md transition-colors hover:bg-black/75',
-      props.active && 'bg-primary text-primary-foreground hover:bg-primary/85',
-    )}
-    aria-label={props.active ? 'Remove from favorites' : 'Save as favorite'}
-    aria-pressed={props.active}
-    title={props.active ? 'Remove from favorites' : 'Save as favorite'}
-    onClick={event => {
-      event.stopPropagation();
-      props.onToggle();
-    }}>
-    <BookmarkIcon class='size-4' fill={props.active ? 'currentColor' : 'none'} />
-  </button>
-);
 
 type PrintingsPanelItem =
   | { type: 'printing'; printing: CardPrintingOption }

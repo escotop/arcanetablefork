@@ -17,6 +17,9 @@ import { scrollTarget, setScrollTarget } from '../globals';
 import { toast } from 'solid-sonner';
 import { cn } from '~/lib/cnUtil';
 import { Button } from '~/components/ui/button';
+import { useAuth } from '~/lib/auth';
+import { assetFavorites, isAssetFavorite, toggleAssetFavorite } from '~/lib/assetFavorites';
+import { FavoriteButton } from '~/lib/ui/favoriteButton';
 import { TextField, TextFieldInput } from '~/components/ui/text-field';
 import {
   Dialog,
@@ -81,6 +84,23 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
   const [searchQuery, setSearchQuery] = createSignal('');
 
   const isSearching = () => searchQuery().trim().length > 0;
+
+  const auth = useAuth();
+  const canFavorite = () => auth.enabled && !!auth.user();
+  /** Favorites matching the search, shown at the start of the first page. */
+  const favorites = createMemo(() => {
+    if (!canFavorite()) return [];
+    const query = searchQuery().trim().toLowerCase();
+    return assetFavorites('card_back').filter(
+      item => !query || item.title.toLowerCase().includes(query),
+    );
+  });
+  const visibleProducts = createMemo(() => {
+    if (page() !== 1) return products();
+    const favs = favorites();
+    const favIds = new Set(favs.map(item => String(item.id)));
+    return [...favs, ...products().filter(item => !favIds.has(String(item.id)))];
+  });
 
   const paginationNumbers = createMemo(() => buildPaginationNumbers(page(), lastPage()));
 
@@ -247,16 +267,16 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
             class='flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1'
             onWheel={handleScrollAreaWheel}>
             <Show
-              when={products().length > 0}
+              when={visibleProducts().length > 0}
               fallback={
                 <p class='py-8 text-center text-sm text-muted-foreground'>
                   {isSearching() ? 'Ningún reverso coincide con la búsqueda.' : 'Sin resultados.'}
                 </p>
               }>
               <ul class='grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'>
-                <For each={products()}>
+                <For each={visibleProducts()}>
                   {product => (
-                    <li>
+                    <li class='relative'>
                       <button
                         type='button'
                         class='group flex w-full flex-col overflow-hidden rounded-md border border-input text-left transition hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
@@ -279,6 +299,15 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
                           </span>
                         </Show>
                       </button>
+                      <Show when={canFavorite()}>
+                        <FavoriteButton
+                          class='right-2 top-2'
+                          active={isAssetFavorite('card_back', product.id)}
+                          addLabel='Guardar reverso como favorito'
+                          removeLabel='Quitar reverso de favoritos'
+                          onToggle={() => void toggleAssetFavorite('card_back', product)}
+                        />
+                      </Show>
                     </li>
                   )}
                 </For>

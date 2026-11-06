@@ -11,6 +11,7 @@ import {
 } from '~/components/ui/dialog';
 import { useAuth } from '~/lib/auth';
 import { setCardFavoritesAccount } from '~/lib/cardFavorites';
+import { setAssetFavoritesAccount } from '~/lib/assetFavorites';
 import {
   dismissUploadPrompt,
   setDeckAccount,
@@ -30,6 +31,7 @@ export const DeckSyncBridge: Component = () => {
         if (loading) return;
         setDeckAccount(uid);
         setCardFavoritesAccount(uid);
+        setAssetFavoritesAccount(uid);
       },
     ),
   );

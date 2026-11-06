@@ -16,6 +16,9 @@ import {
 import { scrollTarget, setScrollTarget } from '../globals';
 import { toast } from 'solid-sonner';
 import { Button } from '~/components/ui/button';
+import { useAuth } from '~/lib/auth';
+import { assetFavorites, isAssetFavorite, toggleAssetFavorite } from '~/lib/assetFavorites';
+import { FavoriteButton } from '~/lib/ui/favoriteButton';
 import { TextField, TextFieldInput } from '~/components/ui/text-field';
 import {
   Dialog,
@@ -82,6 +85,23 @@ const PlaymatPickerModal: Component<PlaymatPickerModalProps> = props => {
   const [searchQuery, setSearchQuery] = createSignal('');
 
   const isSearching = () => searchQuery().trim().length > 0;
+
+  const auth = useAuth();
+  const canFavorite = () => auth.enabled && !!auth.user();
+  /** Favorites matching the search, shown at the start of the first page. */
+  const favorites = createMemo(() => {
+    if (!canFavorite()) return [];
+    const query = searchQuery().trim().toLowerCase();
+    return assetFavorites('playmat').filter(
+      item => !query || item.title.toLowerCase().includes(query),
+    );
+  });
+  const visibleProducts = createMemo(() => {
+    if (page() !== 1) return products();
+    const favs = favorites();
+    const favIds = new Set(favs.map(item => String(item.id)));
+    return [...favs, ...products().filter(item => !favIds.has(String(item.id)))];
+  });
 
   const paginationNumbers = createMemo(() => buildPaginationNumbers(page(), lastPage()));
 
@@ -252,16 +272,16 @@ const PlaymatPickerModal: Component<PlaymatPickerModalProps> = props => {
             class='flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1'
             onWheel={handleScrollAreaWheel}>
             <Show
-              when={products().length > 0}
+              when={visibleProducts().length > 0}
               fallback={
                 <p class='py-8 text-center text-sm text-muted-foreground'>
                   {isSearching() ? 'Ningún playmat coincide con la búsqueda.' : 'Sin resultados.'}
                 </p>
               }>
               <ul class='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
-                <For each={products()}>
+                <For each={visibleProducts()}>
                   {product => (
-                    <li>
+                    <li class='relative'>
                       <button
                         type='button'
                         class='group flex w-full flex-col overflow-hidden rounded-md border border-input text-left transition hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
@@ -279,6 +299,15 @@ const PlaymatPickerModal: Component<PlaymatPickerModalProps> = props => {
                         </div>
                         <span class='line-clamp-2 p-2 text-xs leading-snug'>{product.title}</span>
                       </button>
+                      <Show when={canFavorite()}>
+                        <FavoriteButton
+                          class='right-2 top-2'
+                          active={isAssetFavorite('playmat', product.id)}
+                          addLabel='Guardar playmat como favorito'
+                          removeLabel='Quitar playmat de favoritos'
+                          onToggle={() => void toggleAssetFavorite('playmat', product)}
+                        />
+                      </Show>
                     </li>
                   )}
                 </For>
