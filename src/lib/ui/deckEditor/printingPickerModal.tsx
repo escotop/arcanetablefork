@@ -132,9 +132,27 @@ const PrintingPickerModal: Component<Props> = props => {
   const customArtOptions = createMemo(() => {
     const favs = favoriteCustomArt();
     const favUrls = new Set(favs.map(option => option.imageUrl));
-    return [
+    const options = [
       ...favs,
       ...[...savedCustomOptions(), ...galleryCards()].filter(option => !favUrls.has(option.imageUrl)),
+    ];
+
+    // The art currently on the card goes first (even if it's not in any list).
+    const currentUrl = props.entry.customArtUrl;
+    if (!currentUrl) return options;
+    const index = options.findIndex(option => isCustomArtSelected(option));
+    if (index >= 0) {
+      return [options[index], ...options.slice(0, index), ...options.slice(index + 1)];
+    }
+    return [
+      {
+        id: `current-${currentUrl}`,
+        imageUrl: currentUrl,
+        thumbUrl: currentUrl,
+        label: 'Current art',
+        source: 'custom' as const,
+      },
+      ...options,
     ];
   });
 
