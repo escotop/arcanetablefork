@@ -167,19 +167,51 @@ const PrintingPickerModal: Component<Props> = props => {
     return [...pinned.filter(printing => !ids.has(printing.id)), ...fetched];
   });
 
-  /** Printings tab: every favorite (official and custom art) first, then the rest. */
+  /**
+   * Printings tab: the card's current art first (official or custom), then every
+   * favorite (official and custom art), then the rest.
+   */
   const printingsPanelItems = createMemo<PrintingsPanelItem[]>(() => {
-    const favIds = new Set(favoritePrintings().map(printing => printing.id));
     const items: PrintingsPanelItem[] = [];
+    const seenPrintingIds = new Set<string>();
+    const seenCustomUrls = new Set<string>();
+    const push = (item: PrintingsPanelItem) => {
+      if (item.type === 'printing') {
+        if (seenPrintingIds.has(item.printing.id)) return;
+        seenPrintingIds.add(item.printing.id);
+      } else {
+        if (seenCustomUrls.has(item.option.imageUrl)) return;
+        seenCustomUrls.add(item.option.imageUrl);
+      }
+      items.push(item);
+    };
+
+    const currentUrl = props.entry.customArtUrl;
+    if (currentUrl) {
+      const known = customArtOptions().find(option => isCustomArtSelected(option));
+      push({
+        type: 'custom',
+        option: known ?? {
+          id: `current-${currentUrl}`,
+          imageUrl: currentUrl,
+          thumbUrl: currentUrl,
+          label: 'Current art',
+          source: 'custom',
+        },
+      });
+    } else if (currentDeckPrinting()) {
+      push({ type: 'printing', printing: currentDeckPrinting()! });
+    }
+
     for (const fav of favorites()) {
-      items.push(
+      push(
         fav.kind === 'printing'
           ? { type: 'printing', printing: fav.printing }
           : { type: 'custom', option: fav.option },
       );
     }
     for (const printing of visiblePrintings()) {
-      if (!favIds.has(printing.id)) items.push({ type: 'printing', printing });
+      push({ type: 'printing', printing });
     }
     return items;
   });

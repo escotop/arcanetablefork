@@ -98,9 +98,23 @@ const PlaymatPickerModal: Component<PlaymatPickerModalProps> = props => {
   });
   const visibleProducts = createMemo(() => {
     if (page() !== 1) return products();
-    const favs = favorites();
-    const favIds = new Set(favs.map(item => String(item.id)));
-    return [...favs, ...products().filter(item => !favIds.has(String(item.id)))];
+    // Current playmat first (when it matches the search), then favorites, then the page.
+    const query = searchQuery().trim().toLowerCase();
+    const selected = props.selected;
+    const current: MtgplaymatsProduct[] =
+      selected && (!query || selected.title.toLowerCase().includes(query))
+        ? [
+            products().find(item => item.id === selected.id) ??
+              favorites().find(item => item.id === selected.id) ?? { ...selected, handle: '' },
+          ]
+        : [];
+    const seen = new Set<string>();
+    return [...current, ...favorites(), ...products()].filter(item => {
+      const id = String(item.id);
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
   });
 
   const paginationNumbers = createMemo(() => buildPaginationNumbers(page(), lastPage()));
