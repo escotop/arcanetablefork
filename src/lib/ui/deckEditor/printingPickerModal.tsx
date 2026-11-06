@@ -76,7 +76,16 @@ type PrintingsPanelItem =
 const PrintingPickerModal: Component<Props> = props => {
   const auth = useAuth();
   const canFavorite = () => auth.enabled && !!auth.user();
-  const favorites = createMemo(() => (canFavorite() ? cardFavorites(props.entry.name) : []));
+  const liveFavorites = createMemo(() => (canFavorite() ? cardFavorites(props.entry.name) : []));
+  // After the first save/remove in this modal, keep the order the user is looking at
+  // so tiles don't jump around; the new order shows next time the modal opens.
+  const [frozenFavorites, setFrozenFavorites] = createSignal<ReturnType<
+    typeof liveFavorites
+  > | null>(null);
+  const favorites = () => frozenFavorites() ?? liveFavorites();
+  function freezeFavoriteOrder() {
+    if (!frozenFavorites()) setFrozenFavorites([...liveFavorites()]);
+  }
   const favoritePrintings = createMemo(() =>
     favorites().flatMap(fav => (fav.kind === 'printing' ? [fav.printing] : [])),
   );
@@ -171,6 +180,9 @@ const PrintingPickerModal: Component<Props> = props => {
    * Printings tab: the card's current art first (official or custom), then every
    * favorite (official and custom art), then the rest.
    */
+  // Reuse the same wrapper per printing/option so <For> keeps existing tiles
+  // instead of rebuilding the whole grid (which reset the scroll position).
+  const panelItemWrappers = new WeakMap<object, PrintingsPanelItem>();
   const printingsPanelItems = createMemo<PrintingsPanelItem[]>(() => {
     const items: PrintingsPanelItem[] = [];
     const seenPrintingIds = new Set<string>();
@@ -183,7 +195,13 @@ const PrintingPickerModal: Component<Props> = props => {
         if (seenCustomUrls.has(item.option.imageUrl)) return;
         seenCustomUrls.add(item.option.imageUrl);
       }
-      items.push(item);
+      const inner = item.type === 'printing' ? item.printing : item.option;
+      let wrapper = panelItemWrappers.get(inner);
+      if (!wrapper) {
+        wrapper = item;
+        panelItemWrappers.set(inner, wrapper);
+      }
+      items.push(wrapper);
     };
 
     const currentUrl = props.entry.customArtUrl;
@@ -386,7 +404,10 @@ const PrintingPickerModal: Component<Props> = props => {
         <Show when={canFavorite() && printing.id}>
           <FavoriteButton
             active={isPrintingFavorite(props.entry.name, printing.id)}
-            onToggle={() => void togglePrintingFavorite(props.entry.name, printing)}
+            onToggle={() => {
+              freezeFavoriteOrder();
+              void togglePrintingFavorite(props.entry.name, printing);
+            }}
           />
         </Show>
       </div>
@@ -430,7 +451,10 @@ const PrintingPickerModal: Component<Props> = props => {
         <Show when={canFavorite()}>
           <FavoriteButton
             active={isCustomArtFavorite(props.entry.name, option.imageUrl)}
-            onToggle={() => void toggleCustomArtFavorite(props.entry.name, option)}
+            onToggle={() => {
+              freezeFavoriteOrder();
+              void toggleCustomArtFavorite(props.entry.name, option);
+            }}
           />
         </Show>
       </div>
