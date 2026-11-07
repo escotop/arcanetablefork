@@ -11,6 +11,7 @@ import {
 } from '~/components/ui/dialog';
 import { DeckPreviewImage } from './deckPreviewImage';
 import { createDeckStore } from '../deckStore';
+import { markDeckDeleted } from '../deckSync';
 import { useCardSystemContext } from '../cardSystemContext';
 import { colorHashDark } from '../globals';
 import { exportAllDecksZip, mergeImportedDecks, parseDecksZip } from '../deckBulkTransfer';
@@ -173,6 +174,7 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
               }}
               onDelete={() => {
                 const deckId = deck.id;
+                markDeckDeleted(deckId);
                 setDeckStore(
                   produce(state => {
                     delete state.decks[deckId];

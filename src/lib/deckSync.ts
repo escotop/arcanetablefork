@@ -26,8 +26,13 @@ import {
  * Signed-in deck sync.
  * Supabase is the source of truth; the account's local copy (IndexedDB) is a cache the
  * app reads from. `synced` keeps, per deck, a hash of the version last confirmed on the
- * server, so we can tell local edits, local deletes and remote changes apart, even
- * across reloads or offline periods.
+ * server, so we can tell local edits and remote changes apart, even across reloads or
+ * offline periods.
+ *
+ * Safety rule: a deck is only deleted on the server when the user deleted it on purpose
+ * (`markDeckDeleted`, kept in `deleted`). A deck that is merely missing from the local
+ * cache (empty/failed cache, storage cleared, offline boot...) is restored from the
+ * server instead of being deleted there.
  */
 
 const SYNC_DEBOUNCE_MS = 1000;
@@ -59,10 +64,33 @@ function saveSynced(uid: string, synced: Record<string, string>) {
   }
 }
 
+function deletedKey(uid: string) {
+  return `mtgplayer-deck-deleted:${uid}`;
+}
+
+function loadDeleted(uid: string): Set<string> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(deletedKey(uid)) ?? '[]');
+    return new Set(Array.isArray(parsed) ? parsed.filter(id => typeof id === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDeleted(uid: string, ids: Set<string>) {
+  try {
+    localStorage.setItem(deletedKey(uid), JSON.stringify([...ids]));
+  } catch {
+    // If this fails the deck just comes back from the server: safe side.
+  }
+}
+
 // ---------- state ----------
 
 let account: string | null = null;
 let synced: Record<string, string> = {};
+/** Decks the user explicitly deleted here; only these are deleted on the server. */
+let deleted = new Set<string>();
 /** Decks just taken from the server: their next local save marks them as synced. */
 const adoptOnPersist = new Set<string>();
 let ready = false;
@@ -111,12 +139,19 @@ async function runSync() {
   setSyncing(true);
   const uid = account;
   let failed = false;
+  let missingLocally = false;
 
   try {
     const store = getMemoryDeckStore();
     if (!store || getDeckScope() !== uid) return;
 
-    for (const [id, deck] of Object.entries(store.decks)) {
+    // Only write with a session that belongs to this account.
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (account !== uid) return;
+    const sessionOk = sessionData.session?.user.id === uid;
+    if (!sessionOk) failed = true;
+
+    for (const [id, deck] of sessionOk ? Object.entries(store.decks) : []) {
       const hash = deckHash(deck);
       if (synced[id] === hash) continue;
       const { deck: p_deck, cards: p_cards } = deckToRemote({ ...deck, id });
@@ -131,8 +166,14 @@ async function runSync() {
       saveSynced(uid, synced);
     }
 
-    for (const id of Object.keys(synced)) {
-      if (store.decks[id]) continue;
+    // Server deletes happen only for decks the user deleted on purpose.
+    for (const id of sessionOk ? [...deleted] : []) {
+      if (store.decks[id]) {
+        // Brought back (e.g. re-imported): keep it.
+        deleted.delete(id);
+        saveDeleted(uid, deleted);
+        continue;
+      }
       const { error } = await supabase.from('decks').delete().eq('id', id);
       if (account !== uid) return;
       if (error) {
@@ -140,12 +181,23 @@ async function runSync() {
         console.error('[deckSync] delete failed', id, error);
         continue;
       }
+      deleted.delete(id);
+      saveDeleted(uid, deleted);
       delete synced[id];
       saveSynced(uid, synced);
     }
+
+    // Synced decks missing here without an explicit delete: restore them, never delete.
+    missingLocally =
+      sessionOk && Object.keys(synced).some(id => !store.decks[id] && !deleted.has(id));
   } finally {
     syncRunning = false;
     setSyncing(false);
+  }
+
+  if (missingLocally && account === uid) {
+    console.warn('[deckSync] decks missing from the local cache; restoring from the server');
+    await pullAndMerge(uid);
   }
 
   if (failed) {
@@ -210,24 +262,30 @@ async function pullAndMerge(uid: string) {
   const merged: Record<string, Deck> = {};
   adoptOnPersist.clear();
 
+  // An empty answer while we know of synced decks usually means a bad/expired session
+  // (RLS returns no rows instead of an error). Don't treat it as "everything deleted".
+  const trustRemoteDeletes = remote.length > 0 || Object.keys(synced).length === 0;
+
   const remoteById = new Map(remote.map(deck => [deck.id, deck]));
   for (const [id, remoteDeck] of remoteById) {
     const localDeck = local.decks[id];
     const wasSynced = id in synced;
     if (localDeck && wasSynced && deckHash(localDeck) !== synced[id]) {
       merged[id] = localDeck; // edited here since last sync: push it
-    } else if (!localDeck && wasSynced) {
-      // deleted here since last sync: leave it out so the sync deletes it
+    } else if (!localDeck && deleted.has(id)) {
+      // deleted here on purpose: leave it out so the sync deletes it
     } else {
+      // Includes decks missing from the local cache for any other reason: restore them.
       merged[id] = remoteDeck;
       adoptOnPersist.add(id);
+      if (deleted.delete(id)) saveDeleted(uid, deleted);
     }
   }
 
   for (const [id, localDeck] of Object.entries(local.decks)) {
     if (remoteById.has(id)) continue;
     const wasSynced = id in synced;
-    if (wasSynced && deckHash(localDeck) === synced[id]) {
+    if (trustRemoteDeletes && wasSynced && deckHash(localDeck) === synced[id]) {
       delete synced[id]; // deleted on another device
       continue;
     }
@@ -257,6 +315,7 @@ async function activate(uid: string) {
   account = uid;
   ready = false;
   synced = loadSynced(uid);
+  deleted = loadDeleted(uid);
   await switchDeckScope(uid, getDeckStore);
   if (account !== uid) return;
 
@@ -312,6 +371,16 @@ export function uploadLocalDecks(deckIds: string[]) {
   for (const { deck } of toAdd) decks[deck.id] = deck;
   replaceCurrentDeckStore({ decks, systems: buildSystems(decks, current.systems) });
   setUploadCandidates([]);
+}
+
+/**
+ * Call when the user deletes a deck on purpose. Only decks marked here are deleted on
+ * the server; anything else missing locally is restored from it.
+ */
+export function markDeckDeleted(deckId: string) {
+  if (!account || getDeckScope() !== account) return;
+  deleted.add(deckId);
+  saveDeleted(account, deleted);
 }
 
 export function dismissUploadPrompt() {

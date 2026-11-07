@@ -9,6 +9,7 @@ import { DeckPreviewImage } from '~/lib/ui/deckPreviewImage';
 import { useCardSystemContext } from '~/lib/cardSystemContext';
 import { Deck } from '~/lib/constants';
 import { createDeckStore } from '~/lib/deckStore';
+import { markDeckDeleted } from '~/lib/deckSync';
 import { getDeckCoverMetadata } from '~/lib/deck';
 import { isBrokenDeckCoverUrl } from '~/lib/deckCoverPreview';
 import { DeckEditor } from '~/lib/ui/deckEditor';
@@ -100,6 +101,7 @@ const LandingPage: Component = () => {
   }
 
   function deleteDeck(deckId: string) {
+    markDeckDeleted(deckId);
     setDeckStore(
       produce(state => {
         delete state.decks[deckId];
