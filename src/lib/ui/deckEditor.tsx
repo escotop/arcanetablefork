@@ -1574,6 +1574,8 @@ export const DeckEditor: Component<Props> = props => {
                     value={activeSubtypes()}
                     onChange={setActiveSubtypes}
                   />
+                </Show>
+                <Show when={tabSupportsSubtypeFilter(typeFilter()) || typeFilter() === 'deck'}>
                   <ManaFilter
                     value={activeManaFilters()}
                     excluded={excludedManaFilters()}

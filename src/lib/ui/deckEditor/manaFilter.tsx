@@ -11,10 +11,12 @@ import {
 
 const MANA_OPTIONS: ManaBucket[] = ['W', 'U', 'B', 'R', 'G', 'C'];
 
-const MODE_OPTIONS: { mode: ManaFilterMode; label: string; hint: string }[] = [
-  { mode: 'or', label: 'OR', hint: 'Cards with any of the selected colors' },
-  { mode: 'and', label: 'AND', hint: 'Cards with all the selected colors at once' },
+const MODE_OPTIONS: { mode: ManaFilterMode; label: string }[] = [
+  { mode: 'or', label: 'OR' },
+  { mode: 'and', label: 'AND' },
 ];
+
+const VIEWPORT_MARGIN = 8;
 
 interface Props {
   /** Colors the card must contain (combined with `mode`). */
@@ -50,6 +52,32 @@ function ManaOptionLabel(props: { bucket: ManaBucket; excluded?: boolean }) {
 const ManaFilter: Component<Props> = props => {
   const [open, setOpen] = createSignal(false);
   const [anchorRect, setAnchorRect] = createSignal<DOMRect>();
+  const [menuSize, setMenuSize] = createSignal({ width: 0, height: 0 });
+
+  /** Below the trigger, flipped above when there's no room, and always inside the viewport. */
+  const menuPosition = () => {
+    const anchor = anchorRect()!;
+    const { width, height } = menuSize();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    const left = Math.max(
+      VIEWPORT_MARGIN,
+      Math.min(anchor.left, viewportWidth - width - VIEWPORT_MARGIN),
+    );
+    let top = anchor.bottom + 4;
+    if (top + height > viewportHeight - VIEWPORT_MARGIN && anchor.top - 4 - height >= VIEWPORT_MARGIN) {
+      top = anchor.top - 4 - height;
+    }
+    top = Math.max(VIEWPORT_MARGIN, Math.min(top, viewportHeight - height - VIEWPORT_MARGIN));
+
+    return {
+      top: `${top}px`,
+      left: `${left}px`,
+      'max-height': `${viewportHeight - VIEWPORT_MARGIN * 2}px`,
+      'max-width': `${viewportWidth - VIEWPORT_MARGIN * 2}px`,
+    };
+  };
   let rootRef: HTMLDivElement | undefined;
   let menuRef: HTMLDivElement | undefined;
   let ignoreOutsideClose = false;
@@ -137,7 +165,6 @@ const ManaFilter: Component<Props> = props => {
               type='button'
               role='radio'
               aria-checked={props.mode === option.mode}
-              title={option.hint}
               class={cn(
                 'flex-1 rounded-sm px-2 py-1 text-xs font-semibold text-muted-foreground outline-none hover:text-foreground',
                 props.mode === option.mode && 'bg-background text-foreground shadow-sm',
@@ -151,11 +178,6 @@ const ManaFilter: Component<Props> = props => {
             </button>
           )}
         </For>
-      </div>
-      <div class='mb-1 px-2 text-[11px] leading-tight text-muted-foreground'>
-        {MODE_OPTIONS.find(option => option.mode === props.mode)?.hint}
-        <br />
-        Click again to exclude a color. Lands: mana they produce.
       </div>
       <For each={MANA_OPTIONS}>
         {bucket => (
@@ -176,14 +198,7 @@ const ManaFilter: Component<Props> = props => {
               </Show>
             </span>
             <ManaOptionLabel bucket={bucket} excluded={stateOf(bucket) === 'exclude'} />
-            <span class='flex-1 text-muted-foreground'>{bucket === 'C' ? 'Colorless' : bucket}</span>
-            <span class='text-[10px] text-muted-foreground'>
-              {stateOf(bucket) === 'include'
-                ? 'contains'
-                : stateOf(bucket) === 'exclude'
-                  ? 'excludes'
-                  : ''}
-            </span>
+            <span class='text-muted-foreground'>{bucket === 'C' ? 'Colorless' : bucket}</span>
           </button>
         )}
       </For>
@@ -230,7 +245,7 @@ const ManaFilter: Component<Props> = props => {
       <Show when={selectedOptions().length > 0}>
         <span
           class='shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground'
-          title={props.mode === 'and' ? 'All selected colors' : 'Any selected color'}>
+>
           {selectedOptions().length > 1 ? (props.mode === 'and' ? 'AND' : 'OR') : selectedOptions().length}
         </span>
       </Show>
@@ -250,12 +265,16 @@ const ManaFilter: Component<Props> = props => {
       <Portal>
         <Show when={open() && anchorRect()}>
           <div
-            ref={menuRef}
-            class='fixed z-[100] min-w-[10rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-80'
-            style={{
-              top: `${anchorRect()!.bottom + 4}px`,
-              left: `${anchorRect()!.left}px`,
+            ref={element => {
+              menuRef = element;
+              const observer = new ResizeObserver(() =>
+                setMenuSize({ width: element.offsetWidth, height: element.offsetHeight }),
+              );
+              observer.observe(element);
+              onCleanup(() => observer.disconnect());
             }}
+            class='fixed z-[100] min-w-[10rem] overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-80'
+            style={menuPosition()}
             onPointerDownCapture={() => {
               ignoreOutsideClose = true;
               window.setTimeout(() => {
