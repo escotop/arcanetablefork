@@ -91,6 +91,7 @@ export function slimCardDetail(detail: CardEntryDetail): CardEntryDetail {
     effect: detail.effect,
     flavor: detail.flavor,
     mana_cost: detail.mana_cost,
+    produced_mana: (detail as CardEntryDetail & { produced_mana?: string[] }).produced_mana,
     power: detail.power,
     toughness: detail.toughness,
     loyalty: (detail as { loyalty?: string | number }).loyalty,

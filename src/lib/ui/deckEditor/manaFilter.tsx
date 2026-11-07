@@ -1,30 +1,48 @@
 import { Component, createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import CheckIcon from 'lucide-solid/icons/check';
+import BanIcon from 'lucide-solid/icons/ban';
 import { cn } from '~/lib/cnUtil';
 import {
   MANA_COLORS,
   type ManaBucket,
+  type ManaFilterMode,
 } from '~/lib/manaCost';
 
 const MANA_OPTIONS: ManaBucket[] = ['W', 'U', 'B', 'R', 'G', 'C'];
 
+const MODE_OPTIONS: { mode: ManaFilterMode; label: string; hint: string }[] = [
+  { mode: 'or', label: 'OR', hint: 'Cards with any of the selected colors' },
+  { mode: 'and', label: 'AND', hint: 'Cards with all the selected colors at once' },
+];
+
 interface Props {
+  /** Colors the card must contain (combined with `mode`). */
   value: ManaBucket[];
-  onChange(value: ManaBucket[]): void;
+  /** Colors the card must not contain. */
+  excluded: ManaBucket[];
+  onChange(value: ManaBucket[], excluded: ManaBucket[]): void;
+  mode: ManaFilterMode;
+  onModeChange(mode: ManaFilterMode): void;
 }
 
-function ManaOptionLabel(props: { bucket: ManaBucket }) {
+function ManaOptionLabel(props: { bucket: ManaBucket; excluded?: boolean }) {
   const style = MANA_COLORS[props.bucket];
   return (
     <span
-      class='inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold leading-none shadow-sm ring-1 ring-black/10'
+      class={cn(
+        'relative inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold leading-none shadow-sm ring-1 ring-black/10',
+        props.excluded && 'opacity-60 ring-2 ring-destructive',
+      )}
       style={{
         background: style.color,
         color: style.textColor,
       }}
       aria-hidden='true'>
       {props.bucket}
+      <Show when={props.excluded}>
+        <span class='absolute left-1/2 top-1/2 h-0.5 w-6 -translate-x-1/2 -translate-y-1/2 -rotate-45 rounded bg-destructive' />
+      </Show>
     </span>
   );
 }
@@ -39,10 +57,16 @@ const ManaFilter: Component<Props> = props => {
   const selectedOptions = createMemo(() =>
     props.value.filter(option => MANA_OPTIONS.includes(option)),
   );
-
-  const unselectedOptions = createMemo(() =>
-    MANA_OPTIONS.filter(option => !props.value.includes(option)),
+  const excludedOptions = createMemo(() =>
+    props.excluded.filter(option => MANA_OPTIONS.includes(option)),
   );
+  const activeCount = () => selectedOptions().length + excludedOptions().length;
+
+  function stateOf(bucket: ManaBucket): 'none' | 'include' | 'exclude' {
+    if (props.value.includes(bucket)) return 'include';
+    if (props.excluded.includes(bucket)) return 'exclude';
+    return 'none';
+  }
 
   function updateAnchorRect() {
     if (!rootRef) return;
@@ -67,14 +91,16 @@ const ManaFilter: Component<Props> = props => {
     }, 0);
   }
 
-  function toggleMana(bucket: ManaBucket, event: Event) {
+  /** Each click cycles: off → contains → doesn't contain → off. */
+  function cycleMana(bucket: ManaBucket, event: Event) {
     keepOpenThroughPointer(event);
 
-    if (props.value.includes(bucket)) {
-      props.onChange(props.value.filter(value => value !== bucket));
-    } else {
-      props.onChange([...props.value, bucket]);
-    }
+    const include = props.value.filter(value => value !== bucket);
+    const exclude = props.excluded.filter(value => value !== bucket);
+    const state = stateOf(bucket);
+    if (state === 'none') include.push(bucket);
+    else if (state === 'include') exclude.push(bucket);
+    props.onChange(include, exclude);
 
     setOpen(true);
   }
@@ -104,34 +130,60 @@ const ManaFilter: Component<Props> = props => {
 
   const menuContent = () => (
     <>
-      <For each={selectedOptions()}>
+      <div class='mb-1 flex gap-1 rounded-sm bg-muted p-0.5' role='radiogroup' aria-label='Match mode'>
+        <For each={MODE_OPTIONS}>
+          {option => (
+            <button
+              type='button'
+              role='radio'
+              aria-checked={props.mode === option.mode}
+              title={option.hint}
+              class={cn(
+                'flex-1 rounded-sm px-2 py-1 text-xs font-semibold text-muted-foreground outline-none hover:text-foreground',
+                props.mode === option.mode && 'bg-background text-foreground shadow-sm',
+              )}
+              onPointerDown={event => {
+                keepOpenThroughPointer(event);
+                props.onModeChange(option.mode);
+                setOpen(true);
+              }}>
+              {option.label}
+            </button>
+          )}
+        </For>
+      </div>
+      <div class='mb-1 px-2 text-[11px] leading-tight text-muted-foreground'>
+        {MODE_OPTIONS.find(option => option.mode === props.mode)?.hint}
+        <br />
+        Click again to exclude a color. Lands: mana they produce.
+      </div>
+      <For each={MANA_OPTIONS}>
         {bucket => (
           <button
             type='button'
-            class='relative flex w-full cursor-default select-none items-center gap-2 rounded-sm bg-accent/50 py-1.5 pl-8 pr-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground'
-            onPointerDown={event => toggleMana(bucket, event)}>
+            class={cn(
+              'relative flex w-full cursor-default select-none items-center gap-2 rounded-sm py-1.5 pl-8 pr-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground',
+              stateOf(bucket) === 'include' && 'bg-accent/50',
+              stateOf(bucket) === 'exclude' && 'bg-destructive/10',
+            )}
+            onPointerDown={event => cycleMana(bucket, event)}>
             <span class='absolute left-2 flex size-3.5 items-center justify-center'>
-              <CheckIcon class='size-4' />
+              <Show when={stateOf(bucket) === 'include'}>
+                <CheckIcon class='size-4' />
+              </Show>
+              <Show when={stateOf(bucket) === 'exclude'}>
+                <BanIcon class='size-4 text-destructive' />
+              </Show>
             </span>
-            <ManaOptionLabel bucket={bucket} />
-            <span class='text-muted-foreground'>{bucket === 'C' ? 'Colorless' : bucket}</span>
-          </button>
-        )}
-      </For>
-      <Show when={selectedOptions().length > 0 && unselectedOptions().length > 0}>
-        <div class='my-1 border-t border-border' />
-      </Show>
-      <For each={unselectedOptions()}>
-        {bucket => (
-          <button
-            type='button'
-            class='relative flex w-full cursor-default select-none items-center gap-2 rounded-sm py-1.5 pl-8 pr-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground'
-            onPointerDown={event => toggleMana(bucket, event)}>
-            <span class='absolute left-2 flex size-3.5 items-center justify-center opacity-0'>
-              <CheckIcon class='size-4' />
+            <ManaOptionLabel bucket={bucket} excluded={stateOf(bucket) === 'exclude'} />
+            <span class='flex-1 text-muted-foreground'>{bucket === 'C' ? 'Colorless' : bucket}</span>
+            <span class='text-[10px] text-muted-foreground'>
+              {stateOf(bucket) === 'include'
+                ? 'contains'
+                : stateOf(bucket) === 'exclude'
+                  ? 'excludes'
+                  : ''}
             </span>
-            <ManaOptionLabel bucket={bucket} />
-            <span class='text-muted-foreground'>{bucket === 'C' ? 'Colorless' : bucket}</span>
           </button>
         )}
       </For>
@@ -164,17 +216,22 @@ const ManaFilter: Component<Props> = props => {
         }
       }}>
       <Show
-        when={selectedOptions().length > 0}
+        when={activeCount() > 0}
         fallback={<span class='min-w-0 flex-1 truncate text-muted-foreground'>Mana</span>}>
         <div class='flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden'>
           <For each={selectedOptions()}>
             {bucket => <ManaOptionLabel bucket={bucket} />}
           </For>
+          <For each={excludedOptions()}>
+            {bucket => <ManaOptionLabel bucket={bucket} excluded />}
+          </For>
         </div>
       </Show>
       <Show when={selectedOptions().length > 0}>
-        <span class='shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground'>
-          {selectedOptions().length}
+        <span
+          class='shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground'
+          title={props.mode === 'and' ? 'All selected colors' : 'Any selected color'}>
+          {selectedOptions().length > 1 ? (props.mode === 'and' ? 'AND' : 'OR') : selectedOptions().length}
         </span>
       </Show>
       <svg

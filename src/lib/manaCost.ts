@@ -251,22 +251,91 @@ export function getManaBucketsInEntry(entry?: { detail?: CardEntryDetail }): Set
   return present;
 }
 
+export type ManaFilterMode = 'and' | 'or';
+
+type DetailWithProduced = CardEntryDetail & { produced_mana?: string[] };
+
+const BASIC_LAND_TYPES: [RegExp, ManaBucket][] = [
+  [/\bPlains\b/, 'W'],
+  [/\bIsland\b/, 'U'],
+  [/\bSwamp\b/, 'B'],
+  [/\bMountain\b/, 'R'],
+  [/\bForest\b/, 'G'],
+];
+
+const ANY_COLOR_TEXT = /mana of any (one )?colou?r|any combination of colou?rs|mana of any type/i;
+
+function isLandEntry(detail: CardEntryDetail): boolean {
+  const frontType = detail.card_faces?.[0]?.type_line ?? detail.type_line ?? '';
+  return /\bLand\b/.test(frontType);
+}
+
+/** Mana a land can add: Scryfall's produced_mana when present, otherwise read from its text. */
+export function getManaBucketsProducedByEntry(detail: CardEntryDetail): Set<ManaBucket> {
+  const present = new Set<ManaBucket>();
+  const produced = (detail as DetailWithProduced).produced_mana;
+  if (Array.isArray(produced) && produced.length) {
+    for (const symbol of produced) {
+      if (symbol in MANA_COLORS) present.add(symbol as ManaBucket);
+    }
+    return present;
+  }
+
+  const faces = detail.card_faces?.length ? detail.card_faces : [detail];
+  for (const face of faces) {
+    for (const [pattern, bucket] of BASIC_LAND_TYPES) {
+      if (pattern.test(face.type_line ?? '')) present.add(bucket);
+    }
+    for (const line of (face.oracle_text ?? '').split('\n')) {
+      const addIndex = line.search(/\badd\b/i);
+      if (addIndex < 0) continue;
+      const clause = line.slice(addIndex);
+      if (ANY_COLOR_TEXT.test(clause)) {
+        for (const bucket of COLORED_DISPLAY_ORDER) present.add(bucket);
+      }
+      for (const match of clause.matchAll(/\{([WUBRGC])\}/g)) {
+        present.add(match[1] as ManaBucket);
+      }
+    }
+  }
+  return present;
+}
+
+/**
+ * Colors a card counts as for the mana filter. Lands use the mana they produce;
+ * other cards use the colored symbols in their cost, or C when they have none.
+ */
+export function getManaFilterBuckets(entry?: { detail?: CardEntryDetail }): Set<ManaBucket> {
+  if (!entry?.detail) return new Set();
+  if (isLandEntry(entry.detail)) return getManaBucketsProducedByEntry(entry.detail);
+
+  const colors = new Set<ManaBucket>(
+    [...getManaBucketsInEntry(entry)].filter(bucket => bucket !== 'C'),
+  );
+  if (colors.size === 0) colors.add('C');
+  return colors;
+}
+
+/**
+ * `selected` with 'or': the card has at least one of them (it may have other colors too).
+ * `selected` with 'and': the card has every one of them.
+ * `excluded`: the card has none of them.
+ */
 export function entryMatchesManaFilter(
   entry: { detail?: CardEntryDetail; qty?: number } | undefined,
   selected: ManaBucket[],
+  mode: ManaFilterMode = 'or',
+  excluded: ManaBucket[] = [],
 ): boolean {
-  if (!selected.length) return true;
+  if (!selected.length && !excluded.length) return true;
   if (!entry || entry.qty === 0) return false;
 
-  const present = getManaBucketsInEntry(entry);
-  const selectedSet = new Set(selected);
-
-  for (const bucket of present) {
-    if (bucket === 'C') continue;
-    if (!selectedSet.has(bucket)) return false;
-  }
-
-  return true;
+  const buckets = getManaFilterBuckets(entry);
+  if (excluded.some(bucket => buckets.has(bucket))) return false;
+  if (!selected.length) return true;
+  return mode === 'and'
+    ? selected.every(bucket => buckets.has(bucket))
+    : selected.some(bucket => buckets.has(bucket));
 }
 
 type DetailWithMana = CardEntryDetail & { mana_cost?: string };

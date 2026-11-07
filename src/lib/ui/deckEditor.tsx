@@ -114,7 +114,7 @@ import {
 } from './deckEditor/cardSubtypes';
 import SubtypeFilter from './deckEditor/subtypeFilter';
 import ManaFilter from './deckEditor/manaFilter';
-import { entryMatchesManaFilter, type ManaBucket } from '../manaCost';
+import { entryMatchesManaFilter, type ManaBucket, type ManaFilterMode } from '../manaCost';
 import CommanderBracketModal from './deckEditor/commanderBracketModal';
 import BracketEstimateTag from './bracketEstimateTag';
 import {
@@ -183,6 +183,8 @@ export const DeckEditor: Component<Props> = props => {
   const [typeFilter, setTypeFilter] = createSignal('deck');
   const [activeSubtypes, setActiveSubtypes] = createSignal<string[]>([]);
   const [activeManaFilters, setActiveManaFilters] = createSignal<ManaBucket[]>([]);
+  const [manaFilterMode, setManaFilterMode] = createSignal<ManaFilterMode>('or');
+  const [excludedManaFilters, setExcludedManaFilters] = createSignal<ManaBucket[]>([]);
   let formRef: HTMLFormElement;
 
   const [deck, setDeck] = createStore<Deck>(
@@ -859,7 +861,7 @@ export const DeckEditor: Component<Props> = props => {
     const hasTextSearch = searchQuery().length > 0;
     const hasTypeFilter = hasCatalogTypeFilter();
     const hasSubtypeFilter = activeSubtypes().length > 0;
-    const hasManaFilter = activeManaFilters().length > 0;
+    const hasManaFilter = activeManaFilters().length > 0 || excludedManaFilters().length > 0;
     if (isCatalogTab() || isSideboardTab()) {
       return hasTextSearch || hasTypeFilter || hasSubtypeFilter || hasManaFilter;
     }
@@ -1040,13 +1042,14 @@ export const DeckEditor: Component<Props> = props => {
     catalogTypeFilter();
     setActiveSubtypes([]);
     setActiveManaFilters([]);
+    setExcludedManaFilters([]);
   });
 
   function entryPassesFilters(entry: DetailedCardEntry | undefined) {
     return (
       entryMatchesSearch(entry) &&
       entryMatchesSubtypeFilter(entry, activeSubtypes()) &&
-      entryMatchesManaFilter(entry, activeManaFilters())
+      entryMatchesManaFilter(entry, activeManaFilters(), manaFilterMode(), excludedManaFilters())
     );
   }
 
@@ -1080,7 +1083,7 @@ export const DeckEditor: Component<Props> = props => {
     return results.filter(
       card =>
         entryMatchesSubtypeFilter(card, activeSubtypes()) &&
-        entryMatchesManaFilter(card, activeManaFilters()),
+        entryMatchesManaFilter(card, activeManaFilters(), manaFilterMode(), excludedManaFilters()),
     );
   });
 
@@ -1571,7 +1574,16 @@ export const DeckEditor: Component<Props> = props => {
                     value={activeSubtypes()}
                     onChange={setActiveSubtypes}
                   />
-                  <ManaFilter value={activeManaFilters()} onChange={setActiveManaFilters} />
+                  <ManaFilter
+                    value={activeManaFilters()}
+                    excluded={excludedManaFilters()}
+                    onChange={(include, exclude) => {
+                      setActiveManaFilters(include);
+                      setExcludedManaFilters(exclude);
+                    }}
+                    mode={manaFilterMode()}
+                    onModeChange={setManaFilterMode}
+                  />
                 </Show>
               </div>
             </div>
