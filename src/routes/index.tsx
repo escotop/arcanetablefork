@@ -10,10 +10,17 @@ import { useCardSystemContext } from '~/lib/cardSystemContext';
 import { Deck } from '~/lib/constants';
 import { createDeckStore } from '~/lib/deckStore';
 import { markDeckDeleted } from '~/lib/deckSync';
+import {
+  COLOR_IDENTITY_VERSION,
+  IDENTITY_ORDER,
+  resolveDeckColorIdentity,
+  type IdentityColor,
+} from '~/lib/deckColorIdentity';
+import { MANA_ICON_BY_BUCKET } from '~/lib/manaCost';
 import { getDeckCoverMetadata } from '~/lib/deck';
 import { isBrokenDeckCoverUrl } from '~/lib/deckCoverPreview';
 import { DeckEditor } from '~/lib/ui/deckEditor';
-import { compareDecksByBracket } from '~/lib/commanderBracket';
+import { compareDecksByBracket, getBracketTagLabel } from '~/lib/commanderBracket';
 import BracketEstimateTag from '~/lib/ui/bracketEstimateTag';
 import { DeckBracketFilterBar, matchesDeckPanelFilters, type BracketFilter } from '~/lib/ui/deckBracketFilter';
 import { ManageDecksDropdown } from '~/lib/ui/manageDecksButton';
@@ -21,9 +28,53 @@ import PencilIcon from 'lucide-solid/icons/pencil';
 import { ProfileMenu } from '~/lib/ui/profileMenu';
 import { useAuth } from '~/lib/auth';
 
-function deckCardCount(deck: Deck) {
-  return Object.values(deck.cards).reduce((sum, card) => sum + (card.qty ?? 1), 0);
-}
+const IDENTITY_NAMES: Record<IdentityColor, string> = {
+  W: 'White',
+  U: 'Blue',
+  B: 'Black',
+  R: 'Red',
+  G: 'Green',
+};
+
+/**
+ * Mana symbols of the deck's color identity; works it out once for decks without it
+ * (or with one computed by an older version of the rules).
+ */
+const DeckColorIdentity: Component<{ deck: Deck; onResolved(colors: string[]): void }> = props => {
+  const isCurrent = () =>
+    !!props.deck.colorIdentity && props.deck.colorIdentityVersion === COLOR_IDENTITY_VERSION;
+
+  onMount(() => {
+    if (isCurrent()) return;
+    const deckId = props.deck.id;
+    void resolveDeckColorIdentity(props.deck).then(colors => {
+      if (colors && props.deck.id === deckId && !isCurrent()) {
+        props.onResolved(colors);
+      }
+    });
+  });
+
+  const colors = () =>
+    IDENTITY_ORDER.filter(color => props.deck.colorIdentity?.includes(color));
+
+  return (
+    <Show when={colors().length > 0}>
+      <div class='mt-1 flex h-4 shrink-0 items-center gap-1'>
+        <For each={colors()}>
+          {color => (
+            <img
+              src={MANA_ICON_BY_BUCKET[color]}
+              alt={IDENTITY_NAMES[color]}
+              title={IDENTITY_NAMES[color]}
+              class='size-4 drop-shadow'
+              draggable={false}
+            />
+          )}
+        </For>
+      </div>
+    </Show>
+  );
+};
 
 function listDeckIds(store: { decks: Record<string, Deck>; systems: Record<string, string[]> }) {
   const ids = new Set<string>();
@@ -49,11 +100,14 @@ const LandingPage: Component = () => {
   const [deckStore, setDeckStore] = createDeckStore();
   const [editingDeck, setEditingDeck] = createSignal<Deck>();
   const [bracketFilter, setBracketFilter] = createSignal<BracketFilter>('all');
+  const [manaColorFilter, setManaColorFilter] = createSignal<IdentityColor[]>([]);
   const [deckSearchQuery, setDeckSearchQuery] = createSignal('');
 
   const decks = createMemo(() => listDeckIds(deckStore));
   const filteredDecks = createMemo(() =>
-    decks().filter(deck => matchesDeckPanelFilters(deck, bracketFilter(), deckSearchQuery())),
+    decks().filter(deck =>
+      matchesDeckPanelFilters(deck, bracketFilter(), deckSearchQuery(), manaColorFilter()),
+    ),
   );
 
   createEffect(() => {
@@ -152,12 +206,14 @@ const LandingPage: Component = () => {
                   onChange={setBracketFilter}
                   searchQuery={deckSearchQuery()}
                   onSearchChange={setDeckSearchQuery}
+                  manaColors={manaColorFilter()}
+                  onManaColorsChange={setManaColorFilter}
                 />
                 <Show
                   when={filteredDecks().length > 0}
                   fallback={
                     <p class='text-sm text-muted-foreground'>
-                      No decks match your search or bracket filter.
+                      No decks match your filters.
                     </p>
                   }>
                   <div class='grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4'>
@@ -184,19 +240,35 @@ const LandingPage: Component = () => {
                             <p class='truncate text-base font-semibold text-white'>
                               {deck.name || 'Untitled'}
                             </p>
-                            <p class='mt-0.5 text-xs text-white/75'>{deckCardCount(deck)} cards</p>
-                            <div class='mt-2 flex flex-wrap items-center gap-1.5'>
-                              <BracketEstimateTag bracket={deck.bracketEstimate} />
-                              <Show when={deck.tags?.length}>
-                                <For each={deck.tags}>
-                                  {tag => (
-                                    <span class='rounded bg-white/90 px-2 py-0.5 text-xs leading-none text-black'>
-                                      {tag.name}
-                                    </span>
-                                  )}
-                                </For>
-                              </Show>
-                            </div>
+                            <DeckColorIdentity
+                              deck={deck}
+                              onResolved={colors =>
+                                setDeckStore('decks', deck.id, current => ({
+                                  ...current,
+                                  colorIdentity: colors,
+                                  colorIdentityVersion: COLOR_IDENTITY_VERSION,
+                                }))
+                              }
+                            />
+                            <Show
+                              when={
+                                (deck.bracketEstimate != null &&
+                                  getBracketTagLabel(deck.bracketEstimate)) ||
+                                deck.tags?.length
+                              }>
+                              <div class='mt-2 flex flex-wrap items-center gap-1.5'>
+                                <BracketEstimateTag bracket={deck.bracketEstimate} />
+                                <Show when={deck.tags?.length}>
+                                  <For each={deck.tags}>
+                                    {tag => (
+                                      <span class='rounded bg-white/90 px-2 py-0.5 text-xs leading-none text-black'>
+                                        {tag.name}
+                                      </span>
+                                    )}
+                                  </For>
+                                </Show>
+                              </div>
+                            </Show>
                           </div>
                         </button>
                         <Button

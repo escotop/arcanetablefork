@@ -1,5 +1,6 @@
 import { Deck, DetailedCardEntry } from './constants';
 import { getDeckCoverMetadata } from './deck';
+import { COLOR_IDENTITY_VERSION, computeDeckColorIdentity } from './deckColorIdentity';
 
 export function slimCardForPersistence(card: DetailedCardEntry): DetailedCardEntry {
   const {
@@ -41,6 +42,12 @@ export function serializeDeck(deck: Deck) {
   }
 
   Object.assign(serializedDeck, getDeckCoverMetadata(deck));
+  // Recompute while card details are loaded; otherwise keep the stored value.
+  const colorIdentity = computeDeckColorIdentity(deck);
+  if (colorIdentity) {
+    serializedDeck.colorIdentity = colorIdentity;
+    serializedDeck.colorIdentityVersion = COLOR_IDENTITY_VERSION;
+  }
   return serializedDeck;
 }
 

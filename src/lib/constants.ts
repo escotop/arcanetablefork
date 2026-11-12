@@ -174,6 +174,10 @@ export interface Deck {
   cardList?: string;
   coverImage?: string;
   coverImageFullArt?: boolean;
+  /** Color identity (WUBRG order), computed when the deck's card details are known. */
+  colorIdentity?: string[];
+  /** COLOR_IDENTITY_VERSION used to compute colorIdentity. */
+  colorIdentityVersion?: number;
   counters?: Counter[];
 }
 

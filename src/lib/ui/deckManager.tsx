@@ -12,6 +12,7 @@ import {
 import { DeckPreviewImage } from './deckPreviewImage';
 import { createDeckStore } from '../deckStore';
 import { markDeckDeleted } from '../deckSync';
+import type { IdentityColor } from '../deckColorIdentity';
 import { useCardSystemContext } from '../cardSystemContext';
 import { colorHashDark } from '../globals';
 import { exportAllDecksZip, mergeImportedDecks, parseDecksZip } from '../deckBulkTransfer';
@@ -48,10 +49,16 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
     props.selectedDeckId ?? deckStore?.systems[cardSystemStore.system]?.[0],
   );
   const [bracketFilter, setBracketFilter] = createSignal<BracketFilter>('all');
+  const [manaColorFilter, setManaColorFilter] = createSignal<IdentityColor[]>([]);
   const [deckSearchQuery, setDeckSearchQuery] = createSignal('');
 
   function deckMatchesFilters(deckId: string) {
-    return matchesDeckPanelFilters(deckStore.decks[deckId], bracketFilter(), deckSearchQuery());
+    return matchesDeckPanelFilters(
+      deckStore.decks[deckId],
+      bracketFilter(),
+      deckSearchQuery(),
+      manaColorFilter(),
+    );
   }
 
   function filterDeckIds(deckIds: string[]) {
@@ -205,6 +212,8 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
                 onChange={setBracketFilter}
                 searchQuery={deckSearchQuery()}
                 onSearchChange={setDeckSearchQuery}
+                manaColors={manaColorFilter()}
+                onManaColorsChange={setManaColorFilter}
                 searchBarEnd={
                   props.showMoxfieldImport ? (
                     <Button
