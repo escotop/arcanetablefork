@@ -757,41 +757,46 @@ export async function loadCardTextures(
  * Start loading card face textures into the shared cache without waiting.
  * Does not change what is shown on the mesh.
  */
-function prefetchCardFaceTexturesIntoCache(card: Card): void {
-  void (async () => {
-    try {
-      if (!getCardImage(card)) {
-        await ensureCardImageDetail(card);
-      }
-
-      const front =
-        normalizeTextureUrl(card.customArtUrl ?? getCardImage(card, 0) ?? '') ?? '';
-      if (!front) return;
-
-      void loadTextureMaterial(front, cardTextureMaterialCache).catch(() => {});
-
-      const needsBack =
-        card.mesh?.userData.isDoubleSided ||
-        card.detail?.layout === 'transform' ||
-        (card.detail?.card_faces && card.detail.card_faces.length > 1);
-      if (needsBack) {
-        const back = normalizeTextureUrl(getCardImage(card, 1) ?? '');
-        if (back) {
-          void loadTextureMaterial(back, cardTextureMaterialCache).catch(() => {});
-        }
-      }
-    } catch (error) {
-      devLog.warn('[prefetchCardFaceTexturesIntoCache] failed', card.detail?.name ?? card.id, error);
+async function prefetchCardFaceTexturesIntoCache(card: Card): Promise<void> {
+  try {
+    if (!getCardImage(card)) {
+      await ensureCardImageDetail(card);
     }
-  })();
+
+    const front =
+      normalizeTextureUrl(card.customArtUrl ?? getCardImage(card, 0) ?? '') ?? '';
+    if (!front) return;
+
+    const jobs = [loadTextureMaterial(front, cardTextureMaterialCache)];
+
+    const needsBack =
+      card.mesh?.userData.isDoubleSided ||
+      card.detail?.layout === 'transform' ||
+      (card.detail?.card_faces && card.detail.card_faces.length > 1);
+    if (needsBack) {
+      const back = normalizeTextureUrl(getCardImage(card, 1) ?? '');
+      if (back) {
+        jobs.push(loadTextureMaterial(back, cardTextureMaterialCache));
+      }
+    }
+
+    await Promise.allSettled(jobs);
+  } catch (error) {
+    devLog.warn('[prefetchCardFaceTexturesIntoCache] failed', card.detail?.name ?? card.id, error);
+  }
 }
 
 /**
  * Use when a card becomes visible (e.g. opponent plays from hand).
  */
 export function warmCardTextureCache(card: Card): void {
+  void warmCardTextureCacheAsync(card);
+}
+
+/** Same as warmCardTextureCache, but resolves once the textures are cached. */
+export function warmCardTextureCacheAsync(card: Card): Promise<void> {
   restoreCardDetailIfStripped(card);
-  prefetchCardFaceTexturesIntoCache(card);
+  return prefetchCardFaceTexturesIntoCache(card);
 }
 
 /** Apply front/back from warm cache as soon as the card leaves a hidden hand. */

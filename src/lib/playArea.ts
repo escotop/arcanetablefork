@@ -55,6 +55,7 @@ import { hydrateDeck } from './deckStore';
 import {
   cardFromDeckEntry,
   prefetchDeckTopCardArt,
+  prefetchLibraryCustomArt,
   preloadStackTextures,
   scheduleOpponentHandTexturePrefetch,
 } from './cardLoading';
@@ -1095,6 +1096,7 @@ export class PlayArea {
   }
 
   loadTextures(): Promise<void> {
+    prefetchLibraryCustomArt(this.deck);
     if (this.isLocalPlayArea) {
       const handJobs = this.hand.cards
         .filter(card => card.mesh)

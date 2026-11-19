@@ -6,6 +6,7 @@ import {
   loadCardTextures,
   prefetchHiddenHandCardTextureCache,
   warmCardTextureCache,
+  warmCardTextureCacheAsync,
 } from './card';
 import type { CardStack } from './cardStack';
 import type { Hand } from './hand';
@@ -83,11 +84,36 @@ export function onStackCardAdded(zone: CardStack) {
   void preloadStackTextures(zone);
 }
 
-/** Prefetch the next drawn card's face art while it is still on top of the deck. */
+const DECK_TOP_PREFETCH_COUNT = 3;
+const LIBRARY_CUSTOM_ART_CONCURRENCY = 3;
+
+/** Prefetch the next drawn cards' face art while they are still on top of the deck. */
 export function prefetchDeckTopCardArt(deck: { cards: Card[] }) {
-  const top = deck.cards[0];
-  if (!top) return;
-  warmCardTextureCache(top);
+  deck.cards.slice(0, DECK_TOP_PREFETCH_COUNT).forEach(card => warmCardTextureCache(card));
+}
+
+const prefetchedLibraryCustomArt = new Set<string>();
+
+/**
+ * Custom art is slow to fetch the first time (proxy has to resize it), so warm the
+ * texture cache for every custom printing in the library up front, a few at a time.
+ */
+export function prefetchLibraryCustomArt(deck: { cards: Card[] }) {
+  const pending = deck.cards.filter(card => {
+    const url = card.customArtUrl;
+    if (!url || prefetchedLibraryCustomArt.has(url)) return false;
+    prefetchedLibraryCustomArt.add(url);
+    return true;
+  });
+  if (!pending.length) return;
+
+  let index = 0;
+  const next = (): Promise<void> => {
+    const card = pending[index++];
+    if (!card) return Promise.resolve();
+    return warmCardTextureCacheAsync(card).then(next);
+  };
+  for (let i = 0; i < LIBRARY_CUSTOM_ART_CONCURRENCY; i++) void next();
 }
 
 const opponentHandPrefetchQueues = new WeakMap<Hand, number>();

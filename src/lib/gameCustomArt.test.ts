@@ -1,18 +1,23 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const warmed = vi.hoisted(() => [] as string[]);
+
 // card.ts pulls in the 3D engine and .tsx UI, which this test environment can't load.
 vi.mock('./card', () => ({
   ensureCardMesh: () => {},
   loadCardTextures: async () => {},
   prefetchHiddenHandCardTextureCache: () => {},
   warmCardTextureCache: () => {},
+  warmCardTextureCacheAsync: async (card: { customArtUrl?: string }) => {
+    warmed.push(card.customArtUrl!);
+  },
 }));
 vi.mock('./globals', () => ({ cardsById: new Map() }));
 
-import type { CardEntryDetail } from './constants';
+import type { Card, CardEntryDetail } from './constants';
 import { parseImportedCardList } from './deckParser';
 import { slimSerializedCardEntry } from './gameLogEvents';
-import { cardFromDeckEntry } from './cardLoading';
+import { cardFromDeckEntry, prefetchLibraryCustomArt } from './cardLoading';
 import { getDisplayTextureUrl, getTextureLoadUrlCandidates } from './customCardArt';
 
 // Lines taken from a real deck with custom printings (mtgcardbuilder art on wasabisys).
@@ -67,6 +72,21 @@ describe('custom printings reach the other players', () => {
       2,
     );
     expect(rebuilt.customArtUrl).toBe(entry.customArtUrl);
+  });
+});
+
+describe('custom art is ready before it is drawn', () => {
+  it('warms every custom printing in the library, once per image', async () => {
+    const cards = parseImportedCardList(DECK).cards.map(
+      (entry, index) => ({ id: `l${index}`, customArtUrl: entry.customArtUrl }) as Card,
+    );
+    const expected = cards.flatMap(card => (card.customArtUrl ? [card.customArtUrl] : []));
+
+    prefetchLibraryCustomArt({ cards });
+    prefetchLibraryCustomArt({ cards });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(warmed.sort()).toEqual(expected.sort());
   });
 });
 
