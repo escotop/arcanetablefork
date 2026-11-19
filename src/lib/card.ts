@@ -633,9 +633,14 @@ export function isOpponentPrivateHandCard(card: Card): boolean {
 
 /** Hidden-hand sync strips images; restore from mesh userData (e.g. transfer events) before loading. */
 export function restoreCardDetailIfStripped(card: Card) {
-  if (getCardImage(card)) return;
-
   const embedded = card.mesh?.userData?.card as Card | undefined;
+
+  // Custom printing known in the shared data but missing on the card: use it.
+  if (!card.customArtUrl && embedded?.customArtUrl && !isOpponentPrivateHandCard(card)) {
+    card.customArtUrl = embedded.customArtUrl;
+  }
+
+  if (getCardImage(card)) return;
   if (!embedded?.detail) return;
 
   const embeddedImage = getCardImage(embedded as Card);
@@ -1045,7 +1050,9 @@ export function resolveImageUrl(
 ) {
   if (!uris) return undefined;
 
-  const direct = uris.png ?? uris.large ?? uris.normal;
+  // 'large' (672x936 JPG, ~130 KB) instead of 'png' (745x1040, ~1.3 MB): same look on a
+  // card texture, about 10x less to download.
+  const direct = uris.large ?? uris.png ?? uris.normal;
   if (format === 'scryfall' && direct) return direct;
 
   const full = Object.values(uris.full ?? {});

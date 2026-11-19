@@ -571,6 +571,12 @@ function applyEventUserData(card: Card, userData: Record<string, unknown>) {
     if (USERDATA_BLOCK_LIST.includes(key)) return;
     setCardData(card.mesh!, key, value);
   });
+  // The rendered art comes from card.customArtUrl, not from userData: keep them in step.
+  // (Cards going into an opponent's hidden hand are stripped again by Hand.addCard.)
+  const sentCustomArt = (fields.card as { customArtUrl?: unknown } | undefined)?.customArtUrl;
+  if (typeof sentCustomArt === 'string' && sentCustomArt && card.customArtUrl !== sentCustomArt) {
+    card.customArtUrl = sentCustomArt;
+  }
   if (
     orientationChanged &&
     card.mesh.userData.location === 'battlefield' &&

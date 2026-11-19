@@ -234,7 +234,9 @@ export function getDisplayTextureUrl(url: string | undefined): string | undefine
   const normalized = normalizeTextureUrl(url);
   if (!normalized) return undefined;
   if (needsCrossOriginImageFallback(normalized)) {
-    return buildPublicImageProxyUrl(normalized) ?? normalized;
+    return (
+      buildPublicImageProxyUrl(normalized, { width: CUSTOM_ART_PREVIEW_WIDTH }) ?? normalized
+    );
   }
   return getTextureLoadUrl(normalized) ?? normalized;
 }
@@ -253,6 +255,8 @@ export function getTextureLoadUrlCandidates(url: string | undefined): string[] {
   const weserv = buildPublicImageProxyUrl(normalized);
 
   if (crossOrigin) {
+    // Resized first (fast); the full-size versions stay as fallbacks.
+    push(buildPublicImageProxyUrl(normalized, { width: CUSTOM_ART_TEXTURE_WIDTH }));
     push(weserv);
   }
 
@@ -273,11 +277,24 @@ export function getTextureLoadUrlCandidates(url: string | undefined): string[] {
   return candidates;
 }
 
-export function buildPublicImageProxyUrl(url: string): string | undefined {
+/**
+ * Width custom art is resized to by the proxy. Custom art is often a multi-MB PNG
+ * (e.g. ~4.7 MB from mtgcardbuilder); resized to WebP it is ~150 KB and loads 10-20x faster.
+ */
+export const CUSTOM_ART_TEXTURE_WIDTH = 745;
+export const CUSTOM_ART_PREVIEW_WIDTH = 1000;
+
+export function buildPublicImageProxyUrl(
+  url: string,
+  resize?: { width: number },
+): string | undefined {
   try {
     const parsed = new URL(url);
     const resource = `${parsed.host}${parsed.pathname}${parsed.search}`;
-    return `https://images.weserv.nl/?url=${encodeURIComponent(resource)}`;
+    const base = `https://images.weserv.nl/?url=${encodeURIComponent(resource)}`;
+    if (!resize) return base;
+    // withoutEnlargement keeps small images as they are; webp keeps transparency.
+    return `${base}&w=${resize.width}&we&output=webp&q=88`;
   } catch {
     return undefined;
   }

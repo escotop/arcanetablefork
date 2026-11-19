@@ -16,7 +16,8 @@ export function cardFromDeckEntry(entry: unknown, clientId: number): Card {
   const record = entry as {
     id?: string;
     detail?: Card['detail'];
-    userData?: { card?: { detail?: Card['detail'] }; id?: string };
+    customArtUrl?: string;
+    userData?: { card?: { detail?: Card['detail']; customArtUrl?: string }; id?: string };
     mesh?: Card['mesh'];
   };
 
@@ -25,6 +26,8 @@ export function cardFromDeckEntry(entry: unknown, clientId: number): Card {
       id: record.id ?? record.userData.id ?? nanoid(),
       clientId,
       detail: record.userData.card.detail ?? record.detail!,
+      // Keep the owner's custom printing (was dropped, so opponents saw the default art).
+      customArtUrl: record.userData.card.customArtUrl ?? record.customArtUrl,
       modifiers: {} as Card['modifiers'],
     };
     cardsById.set(card.id, card);
@@ -35,7 +38,7 @@ export function cardFromDeckEntry(entry: unknown, clientId: number): Card {
     id: record.id || nanoid(),
     clientId,
     detail: record.detail!,
-    customArtUrl: (record as { customArtUrl?: string }).customArtUrl,
+    customArtUrl: record.customArtUrl,
     modifiers: {} as Card['modifiers'],
     mesh: record.mesh,
   };

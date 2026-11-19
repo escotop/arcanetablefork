@@ -566,10 +566,13 @@ export class Deck implements CardZone<{ location: 'top' | 'bottom' }> {
           : {
               id: card.id,
               detail: slimCardDetailForLog(card.detail as Record<string, unknown> | undefined),
+              // Custom printings must reach the other players too.
+              customArtUrl: card.customArtUrl,
               userData: {
                 id: card.id,
                 card: {
                   detail: slimCardDetailForLog(card.detail as Record<string, unknown> | undefined),
+                  customArtUrl: card.customArtUrl,
                 },
                 clientId: card.clientId,
               },
