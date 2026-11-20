@@ -12,6 +12,7 @@ import {
 import { DeckPreviewImage } from './deckPreviewImage';
 import { createDeckStore } from '../deckStore';
 import { markDeckDeleted } from '../deckSync';
+import { compareDecksForList } from '../deckOrder';
 import type { IdentityColor } from '../deckColorIdentity';
 import { useCardSystemContext } from '../cardSystemContext';
 import { colorHashDark } from '../globals';
@@ -46,7 +47,7 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
   const [moxfieldImportOpen, setMoxfieldImportOpen] = createSignal(false);
   let importInput: HTMLInputElement | undefined;
   const [selectedDeckId, setSelectedDeckId] = createSignal(
-    props.selectedDeckId ?? deckStore?.systems[cardSystemStore.system]?.[0],
+    props.selectedDeckId ?? allDeckIds()[0],
   );
   const [bracketFilter, setBracketFilter] = createSignal<BracketFilter>('all');
   const [manaColorFilter, setManaColorFilter] = createSignal<IdentityColor[]>([]);
@@ -62,7 +63,9 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
   }
 
   function filterDeckIds(deckIds: string[]) {
-    return deckIds.filter(id => deckMatchesFilters(id));
+    return deckIds
+      .filter(id => deckStore.decks[id] && deckMatchesFilters(id))
+      .sort((left, right) => compareDecksForList(deckStore.decks[left], deckStore.decks[right]));
   }
 
   const hasMatchingDecks = createMemo(() => allDeckIds().some(id => deckMatchesFilters(id)));
@@ -77,7 +80,9 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
     for (const id of Object.keys(deckStore.decks)) {
       ids.add(id);
     }
-    return [...ids];
+    return [...ids].sort((left, right) =>
+      compareDecksForList(deckStore.decks[left], deckStore.decks[right]),
+    );
   }
 
   createEffect(() => {
@@ -177,7 +182,9 @@ export const DeckManagerDialog: Component<DeckManagerDialogProps> = props => {
                   updatedDeck.id,
                   ...entries.filter(id => id && id !== updatedDeck.id),
                 ]);
-                setDeckStore('decks', { [updatedDeck.id]: updatedDeck });
+                setDeckStore('decks', {
+                  [updatedDeck.id]: { ...updatedDeck, lastUsedAt: Date.now() },
+                });
               }}
               onDelete={() => {
                 const deckId = deck.id;

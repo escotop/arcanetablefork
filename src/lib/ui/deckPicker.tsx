@@ -21,6 +21,7 @@ import {
   TextFieldLabel,
 } from '~/components/ui/text-field';
 import { createDeckStore } from '../deckStore';
+import { compareDecksForList } from '../deckOrder';
 import { useCardSystemContext } from '../cardSystemContext';
 import { setIsSpectating } from '../globals';
 import { DeckManagerDialog } from './deckManager';
@@ -36,7 +37,8 @@ export default function DeckPicker(props: Props) {
   const [deckStore] = createDeckStore();
   const [cardSystemStore] = useCardSystemContext();
   const [selectedDeckId, setSelectedDeckId] = createSignal<string>(
-    deckStore?.systems[cardSystemStore.system]?.[0],
+    Object.values(deckStore?.decks ?? {}).sort(compareDecksForList)[0]?.id ??
+      deckStore?.systems[cardSystemStore.system]?.[0],
   );
   const [sessionOptions, setSessionOptions] = createSignal();
 

@@ -20,7 +20,8 @@ import { MANA_ICON_BY_BUCKET } from '~/lib/manaCost';
 import { getDeckCoverMetadata } from '~/lib/deck';
 import { isBrokenDeckCoverUrl } from '~/lib/deckCoverPreview';
 import { DeckEditor } from '~/lib/ui/deckEditor';
-import { compareDecksByBracket, getBracketTagLabel } from '~/lib/commanderBracket';
+import { getBracketTagLabel } from '~/lib/commanderBracket';
+import { compareDecksForList } from '~/lib/deckOrder';
 import BracketEstimateTag from '~/lib/ui/bracketEstimateTag';
 import { DeckBracketFilterBar, matchesDeckPanelFilters, type BracketFilter } from '~/lib/ui/deckBracketFilter';
 import { ManageDecksDropdown } from '~/lib/ui/manageDecksButton';
@@ -89,7 +90,7 @@ function listDeckIds(store: { decks: Record<string, Deck>; systems: Record<strin
   return [...ids]
     .map(id => store.decks[id])
     .filter(Boolean)
-    .sort(compareDecksByBracket);
+    .sort(compareDecksForList);
 }
 
 const LandingPage: Component = () => {
@@ -150,7 +151,11 @@ const LandingPage: Component = () => {
       ...entries.filter(id => id && id !== updatedDeck.id),
     ]);
     setDeckStore('decks', {
-      [updatedDeck.id]: { ...updatedDeck, ...getDeckCoverMetadata(updatedDeck) },
+      [updatedDeck.id]: {
+        ...updatedDeck,
+        ...getDeckCoverMetadata(updatedDeck),
+        lastUsedAt: Date.now(),
+      },
     });
   }
 

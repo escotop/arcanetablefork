@@ -179,6 +179,8 @@ export interface Deck {
   /** COLOR_IDENTITY_VERSION used to compute colorIdentity. */
   colorIdentityVersion?: number;
   counters?: Counter[];
+  /** Last time the deck was saved in the editor or picked to play (ms since epoch). */
+  lastUsedAt?: number;
 }
 
 export interface CardSystem {

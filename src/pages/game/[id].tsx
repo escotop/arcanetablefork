@@ -3,7 +3,7 @@ import { Component, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { unwrap } from 'solid-js/store';
 import { toast } from 'solid-sonner';
 import { useCardSystemContext } from '~/lib/cardSystemContext';
-import { getDeckStore } from '~/lib/deckStore';
+import { getDeckStore, markDeckUsed } from '~/lib/deckStore';
 import {
   cleanup,
   isInitialized,
@@ -84,6 +84,7 @@ const GamePage: Component = props => {
                 if (!deck) {
                   throw new Error('Mazo no encontrado');
                 }
+                markDeckUsed(deck.id);
                 const cardSystem = await profileAsync('setCardSystem', () =>
                   setCardSystem(deck.system || cardSystemStore.system),
                 );

@@ -20,6 +20,7 @@ import {
   readLocalStorageDeckStoreString,
   rememberDeckStoreInMemory,
   normalizeAndMaybeMigrateDeckStore,
+  replaceCurrentDeckStore,
 } from './deckPersistence';
 import {
   computeDeckContentHash,
@@ -190,6 +191,17 @@ export function getDeckStore(): DeckStore {
   store = normalizeAndMaybeMigrateDeckStore(store, persistDeckStoreQuiet);
   rememberDeckStoreInMemory(store);
   return store;
+}
+
+/** Mark a deck as just used so deck lists show it first. */
+export function markDeckUsed(deckId: string) {
+  const store = getDeckStore();
+  const deck = store.decks[deckId];
+  if (!deck) return;
+  replaceCurrentDeckStore({
+    ...store,
+    decks: { ...store.decks, [deckId]: { ...deck, lastUsedAt: Date.now() } },
+  });
 }
 
 const DEFAULT_DECK = {
