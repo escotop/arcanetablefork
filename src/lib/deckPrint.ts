@@ -56,12 +56,17 @@ export interface PrintDeckProgress {
 type PdfImageFormat = 'PNG' | 'JPEG';
 
 type PdfRasterImage = {
-  dataUrl: string;
+  data: Uint8Array;
   format: PdfImageFormat;
   alias: string;
 };
 
-const PDF_RASTER_FORMAT: PdfImageFormat = 'PNG';
+/**
+ * JPEG at maximum quality: jsPDF embeds JPEG bytes as they are, while PNG had to be decoded
+ * and re-compressed in JavaScript (~0.5 s per image vs ~12 ms). Pages are opaque anyway.
+ */
+const PDF_RASTER_FORMAT: PdfImageFormat = 'JPEG';
+const PDF_JPEG_QUALITY = 1;
 /** Parallel image fetches; browsers limit ~6 connections per origin but proxy may differ. */
 const PRINT_PDF_FETCH_CONCURRENCY = 8;
 
@@ -156,7 +161,7 @@ async function rasterizeImageSourceForPdf(
   targetWidth: number,
   targetHeight: number,
   blackCorners: boolean,
-): Promise<{ dataUrl: string; format: PdfImageFormat }> {
+): Promise<{ data: Uint8Array; format: PdfImageFormat }> {
   const canvas = document.createElement('canvas');
   canvas.width = targetWidth;
   canvas.height = targetHeight;
@@ -179,7 +184,14 @@ async function rasterizeImageSourceForPdf(
     ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
   }
 
-  return { dataUrl: canvas.toDataURL('image/png'), format: PDF_RASTER_FORMAT };
+  const blob = await new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob(
+      result => (result ? resolve(result) : reject(new Error('Failed to encode image for PDF'))),
+      'image/jpeg',
+      PDF_JPEG_QUALITY,
+    ),
+  );
+  return { data: new Uint8Array(await blob.arrayBuffer()), format: PDF_RASTER_FORMAT };
 }
 
 async function rasterizeImageElementForPdf(
@@ -187,7 +199,7 @@ async function rasterizeImageElementForPdf(
   targetWidth: number,
   targetHeight: number,
   blackCorners: boolean,
-): Promise<{ dataUrl: string; format: PdfImageFormat }> {
+): Promise<{ data: Uint8Array; format: PdfImageFormat }> {
   return rasterizeImageSourceForPdf(image, targetWidth, targetHeight, blackCorners);
 }
 
@@ -196,9 +208,14 @@ async function rasterizeBlobForPdf(
   targetWidth: number,
   targetHeight: number,
   blackCorners: boolean,
-): Promise<{ dataUrl: string; format: PdfImageFormat }> {
+): Promise<{ data: Uint8Array; format: PdfImageFormat }> {
   if (typeof createImageBitmap !== 'undefined') {
-    const bitmap = await createImageBitmap(blob);
+    // Decode and resize off the main thread (custom art is often 1500x2100).
+    const bitmap = await createImageBitmap(blob, {
+      resizeWidth: targetWidth,
+      resizeHeight: targetHeight,
+      resizeQuality: 'high',
+    }).catch(() => createImageBitmap(blob));
     try {
       return await rasterizeImageSourceForPdf(bitmap, targetWidth, targetHeight, blackCorners);
     } finally {
@@ -220,7 +237,7 @@ async function fetchImageForPdf(
   targetWidth: number,
   targetHeight: number,
   blackCorners: boolean,
-): Promise<{ dataUrl: string; format: PdfImageFormat }> {
+): Promise<{ data: Uint8Array; format: PdfImageFormat }> {
   const response = await fetch(loadUrl, { credentials: 'omit' });
   if (!response.ok) {
     throw new Error(`Failed to fetch image (${response.status})`);
@@ -235,7 +252,7 @@ async function loadImageForPdf(
   targetWidth: number,
   targetHeight: number,
   blackCorners: boolean,
-): Promise<{ dataUrl: string; format: PdfImageFormat }> {
+): Promise<{ data: Uint8Array; format: PdfImageFormat }> {
   const candidates = getTextureLoadUrlCandidates(url, { fullSize: true });
   if (!candidates.length) {
     throw new Error('Missing image URL');
@@ -420,14 +437,13 @@ export async function generateDeckPdf(
 
     for (const placement of pages[pageIndex]) {
       doc.addImage(
-        placement.image.dataUrl,
+        placement.image.data,
         placement.image.format,
         placement.x,
         placement.y,
         layout.cardWidthMm,
         layout.cardHeightMm,
         placement.image.alias,
-        'SLOW',
       );
     }
 
@@ -441,14 +457,13 @@ export async function generateDeckPdf(
           layout,
         );
         doc.addImage(
-          backImage.dataUrl,
+          backImage.data,
           backImage.format,
           x,
           y,
           layout.cardWidthMm,
           layout.cardHeightMm,
           backImage.alias,
-          'SLOW',
         );
       }
     }
