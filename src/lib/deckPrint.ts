@@ -1,4 +1,4 @@
-import { getCardImage } from './card';
+import { getPrintCardImage } from './card';
 import {
   getTextureLoadUrlCandidates,
 } from './customCardArt';
@@ -7,6 +7,7 @@ import {
   collectUniquePrintImageUrls,
   estimatePrintDeckLayout,
   fillTransparentPixelsBlack,
+  fillWhiteCornersBlack,
   mirroredPrintCardPositionMm,
   printCardPositionMm,
   printImagePixelSize,
@@ -92,18 +93,18 @@ export function buildPrintDeckCardList(
 function isDoubleFacedForPrint(card: DetailedCardEntry): boolean {
   const faces = card.detail?.card_faces;
   if (!faces || faces.length < 2) return false;
-  return !!getCardImage(card, 1);
+  return !!getPrintCardImage(card, 1);
 }
 
 function getPrintFaceSlots(card: DetailedCardEntry): { name: string; imageUrl: string }[] {
-  const frontUrl = getCardImage(card, 0);
+  const frontUrl = getPrintCardImage(card, 0);
   if (!frontUrl) return [];
 
   if (!isDoubleFacedForPrint(card)) {
     return [{ name: card.name, imageUrl: frontUrl }];
   }
 
-  const backUrl = getCardImage(card, 1);
+  const backUrl = getPrintCardImage(card, 1);
   if (!backUrl) {
     return [{ name: card.name, imageUrl: frontUrl }];
   }
@@ -170,6 +171,7 @@ async function rasterizeImageSourceForPdf(
     ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
     const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
     fillTransparentPixelsBlack(imageData.data);
+    fillWhiteCornersBlack(imageData.data, targetWidth, targetHeight);
     ctx.putImageData(imageData, 0, 0);
   } else {
     ctx.fillStyle = '#ffffff';

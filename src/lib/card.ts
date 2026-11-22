@@ -1076,6 +1076,16 @@ export function getCardImage(card: DetailedCardEntry | Card, face = 0) {
   return normalizeTextureUrl(resolveImageUrl(getImageUris(card, face)));
 }
 
+/**
+ * Image for printing: the PNG when there is one (higher resolution, and its corners are
+ * transparent so "black corners" can fill them), otherwise the usual card image.
+ */
+export function getPrintCardImage(card: DetailedCardEntry | Card, face = 0) {
+  if (face === 0 && card.customArtUrl) return getCardImage(card, face);
+  const png = getImageUris(card, face)?.png;
+  return png ? normalizeTextureUrl(png) : getCardImage(card, face);
+}
+
 const MAX_CARD_TEXTURE_DIMENSION = 2048;
 
 function clampTextureBitmap(bitmap: ImageBitmap): ImageBitmap {
