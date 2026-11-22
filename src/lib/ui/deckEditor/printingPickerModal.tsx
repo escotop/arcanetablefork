@@ -7,6 +7,7 @@ import {
   CustomCardArtOption,
   fetchGalleryCustomArt,
   getSavedCustomArtUrls,
+  isTokenCardDetail,
   isCustomArtImageSelected,
   savedUrlsToCustomArtOptions,
 } from '~/lib/customCardArt';
@@ -41,6 +42,8 @@ import {
 interface Props {
   entry: DetailedCardEntry;
   pinnedPrintings?: CardPrintingOption[];
+  /** Search custom art as a token ("<name> token"); detected from the card type if omitted. */
+  isToken?: boolean;
   onSelect(printing: CardPrintingOption): void;
   onSelectCustomArt(option: CustomCardArtOption): void;
   onClose(): void;
@@ -282,7 +285,9 @@ const PrintingPickerModal: Component<Props> = props => {
     try {
       let pageToLoad = nextPage;
       for (let loaded = 0; loaded < GALLERY_PAGES_PER_BATCH; loaded++) {
-        const result = await fetchGalleryCustomArt(props.entry.name, pageToLoad);
+        const result = await fetchGalleryCustomArt(props.entry.name, pageToLoad, {
+          token: props.isToken ?? isTokenCardDetail(props.entry.detail),
+        });
         const keep = append || loaded > 0;
         setGalleryCards(keep ? [...galleryCards(), ...result.data] : result.data);
         setGalleryPage(result.page);

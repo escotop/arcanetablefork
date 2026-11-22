@@ -99,11 +99,38 @@ export function galleryEntryMatchesCardName(
   return getGalleryNameCandidates(cardName).some(candidate => candidate === normalizedSearchName);
 }
 
+export function isTokenCardDetail(detail?: Partial<CardEntryDetail> | null): boolean {
+  const layout = (detail as { layout?: string } | undefined)?.layout;
+  if (layout === 'token' || layout === 'double_faced_token') return true;
+  return /\btoken\b/i.test(detail?.type_line ?? '');
+}
+
+/**
+ * Token customs are often uploaded without a card name ("null") and titled like
+ * "Zesty Goblin Token_5"; accept those when the title has the token name and "token".
+ */
+export function galleryTokenEntryMatches(
+  tokenName: string,
+  searchCardName?: string | null,
+  edition?: string | null,
+): boolean {
+  if (galleryEntryMatchesCardName(tokenName, searchCardName)) return true;
+  const normalizedSearchName = normalizeGalleryName(searchCardName ?? '');
+  if (normalizedSearchName && normalizedSearchName !== 'null') return false;
+
+  const title = ` ${normalizeGalleryName(edition ?? '')} `;
+  if (!title.includes(' token ')) return false;
+  return getGalleryNameCandidates(tokenName).some(name => title.includes(` ${name} `));
+}
+
 export async function fetchGalleryCustomArt(
   cardName: string,
   page = 1,
+  options: { token?: boolean } = {},
 ): Promise<CustomCardArtResponse> {
-  const searchName = getGallerySearchName(cardName);
+  const baseName = getGallerySearchName(cardName);
+  const searchName =
+    options.token && !/\btoken$/i.test(baseName) ? `${baseName} token` : baseName;
   const formData = new FormData();
   formData.append('action', 'builder_ajax');
   formData.append('method', 'search_gallery_cards');
@@ -137,13 +164,15 @@ export async function fetchGalleryCustomArt(
         .filter(
           entry =>
             entry.image_url &&
-            galleryEntryMatchesCardName(cardName, entry.search_card_name),
+            (options.token
+              ? galleryTokenEntryMatches(cardName, entry.search_card_name, entry.card_edition)
+              : galleryEntryMatchesCardName(cardName, entry.search_card_name)),
         )
         .map(entry => ({
           id: `gallery-${entry.id ?? entry.image_url}`,
           imageUrl: entry.image_url!,
           thumbUrl: entry.thumb_url || entry.image_url!,
-          label: entry.card_edition || entry.search_card_name || searchName,
+          label: entry.card_edition || entry.search_card_name || baseName,
           source: 'gallery' as const,
           creator: entry.user_name,
           searchCardName: entry.search_card_name ?? undefined,

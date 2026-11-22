@@ -1,7 +1,9 @@
 import { expect, test, vi } from 'vitest';
 import {
   galleryEntryMatchesCardName,
+  galleryTokenEntryMatches,
   getGallerySearchName,
+  isTokenCardDetail,
   getTextureLoadUrl,
 } from './customCardArt';
 
@@ -35,6 +37,26 @@ test('galleryEntryMatchesCardName ignores creative edition titles', () => {
   expect(
     galleryEntryMatchesCardName('Sol Ring', null),
   ).toBe(false);
+});
+
+test('token customs match by card name, or by an unnamed title with the name and "token"', () => {
+  // Real gallery entries returned for "Goblin token" / "Treasure token".
+  expect(galleryTokenEntryMatches('Goblin', 'Goblin', 'Toby Goblin Token')).toBe(true);
+  expect(galleryTokenEntryMatches('Goblin', 'null', 'Zesty Goblin Token_5')).toBe(true);
+  expect(galleryTokenEntryMatches('Goblin', 'null', 'goblin token 1/1 haste deathtouch')).toBe(true);
+  expect(galleryTokenEntryMatches('Treasure', 'null', 'Momoyo Himemushi Treasure Token')).toBe(true);
+
+  // A named card that isn't the token, or a title without the name or the word token.
+  expect(galleryTokenEntryMatches('Goblin', 'Krenko, Mob Boss', 'Krenko, Mob Boss (scry)3')).toBe(false);
+  expect(galleryTokenEntryMatches('Treasure', 'null', 'desert pyramid_')).toBe(false);
+  expect(galleryTokenEntryMatches('Treasure', 'null', 'Treasure chest art')).toBe(false);
+  expect(galleryTokenEntryMatches('Elf', 'null', 'Elfball Token')).toBe(false);
+});
+
+test('isTokenCardDetail detects tokens from layout or type line', () => {
+  expect(isTokenCardDetail({ type_line: 'Token Creature — Goblin' })).toBe(true);
+  expect(isTokenCardDetail({ type_line: 'Token Artifact — Treasure' })).toBe(true);
+  expect(isTokenCardDetail({ type_line: 'Creature — Goblin Warrior' })).toBe(false);
 });
 
 test('getTextureLoadUrl routes Scryfall CDN through same-origin image proxy', () => {

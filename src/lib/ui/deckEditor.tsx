@@ -1955,6 +1955,7 @@ export const DeckEditor: Component<Props> = props => {
           <PrintingPickerModal
             entry={getTokenDeckEntry(tokenPrintingPickerKey()!)!}
             pinnedPrintings={getTokenPinnedPrintings(tokenPrintingPickerKey()!)}
+            isToken
             onClose={() => setTokenPrintingPickerKey(undefined)}
             onSelect={printing => {
               void changeTokenPrinting(tokenPrintingPickerKey()!, printing);
