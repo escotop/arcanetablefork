@@ -100,5 +100,9 @@ describe('lighter custom art images', () => {
     // Full-size fallbacks are still there.
     expect(rest.some(candidate => !candidate.includes('&w='))).toBe(true);
     expect(getDisplayTextureUrl(url)).toContain('&w=1000');
+    // Printing never uses a resized copy.
+    expect(getTextureLoadUrlCandidates(url, { fullSize: true }).some(c => c.includes('&w='))).toBe(
+      false,
+    );
   });
 });

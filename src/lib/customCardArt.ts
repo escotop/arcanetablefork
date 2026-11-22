@@ -242,7 +242,10 @@ export function getDisplayTextureUrl(url: string | undefined): string | undefine
 }
 
 /** Ordered fallbacks for fetching remote card art (proxy, direct, weserv). */
-export function getTextureLoadUrlCandidates(url: string | undefined): string[] {
+export function getTextureLoadUrlCandidates(
+  url: string | undefined,
+  options: { fullSize?: boolean } = {},
+): string[] {
   const normalized = normalizeTextureUrl(url);
   if (!normalized) return [];
 
@@ -256,7 +259,10 @@ export function getTextureLoadUrlCandidates(url: string | undefined): string[] {
 
   if (crossOrigin) {
     // Resized first (fast); the full-size versions stay as fallbacks.
-    push(buildPublicImageProxyUrl(normalized, { width: CUSTOM_ART_TEXTURE_WIDTH }));
+    // Printing asks for fullSize: it needs every pixel, not speed.
+    if (!options.fullSize) {
+      push(buildPublicImageProxyUrl(normalized, { width: CUSTOM_ART_TEXTURE_WIDTH }));
+    }
     push(weserv);
   }
 

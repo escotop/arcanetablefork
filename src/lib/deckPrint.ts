@@ -236,7 +236,7 @@ async function loadImageForPdf(
   targetHeight: number,
   blackCorners: boolean,
 ): Promise<{ dataUrl: string; format: PdfImageFormat }> {
-  const candidates = getTextureLoadUrlCandidates(url);
+  const candidates = getTextureLoadUrlCandidates(url, { fullSize: true });
   if (!candidates.length) {
     throw new Error('Missing image URL');
   }
