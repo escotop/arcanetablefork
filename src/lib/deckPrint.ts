@@ -1,4 +1,5 @@
 import { getPrintCardImage } from './card';
+import { findImageTrimBounds } from './cardBackBounds';
 import {
   getTextureLoadUrlCandidates,
 } from './customCardArt';
@@ -203,19 +204,39 @@ async function rasterizeImageElementForPdf(
   return rasterizeImageSourceForPdf(image, targetWidth, targetHeight, blackCorners);
 }
 
+/** Decodes only the visible card of an image with transparent margins (card backs). */
+async function createTrimmedBitmap(blob: Blob, targetWidth: number, targetHeight: number) {
+  const full = await createImageBitmap(blob);
+  const bounds = findImageTrimBounds(full, full.width, full.height);
+  if (!bounds) return full;
+  try {
+    return await createImageBitmap(full, bounds.x, bounds.y, bounds.width, bounds.height, {
+      resizeWidth: targetWidth,
+      resizeHeight: targetHeight,
+      resizeQuality: 'high',
+    });
+  } finally {
+    full.close();
+  }
+}
+
 async function rasterizeBlobForPdf(
   blob: Blob,
   targetWidth: number,
   targetHeight: number,
   blackCorners: boolean,
+  trimMargins = false,
 ): Promise<{ data: Uint8Array; format: PdfImageFormat }> {
   if (typeof createImageBitmap !== 'undefined') {
     // Decode and resize off the main thread (custom art is often 1500x2100).
-    const bitmap = await createImageBitmap(blob, {
-      resizeWidth: targetWidth,
-      resizeHeight: targetHeight,
-      resizeQuality: 'high',
-    }).catch(() => createImageBitmap(blob));
+    const bitmap = await (trimMargins
+      ? createTrimmedBitmap(blob, targetWidth, targetHeight)
+      : createImageBitmap(blob, {
+          resizeWidth: targetWidth,
+          resizeHeight: targetHeight,
+          resizeQuality: 'high',
+        })
+    ).catch(() => createImageBitmap(blob));
     try {
       return await rasterizeImageSourceForPdf(bitmap, targetWidth, targetHeight, blackCorners);
     } finally {
@@ -237,6 +258,7 @@ async function fetchImageForPdf(
   targetWidth: number,
   targetHeight: number,
   blackCorners: boolean,
+  trimMargins: boolean,
 ): Promise<{ data: Uint8Array; format: PdfImageFormat }> {
   const response = await fetch(loadUrl, { credentials: 'omit' });
   if (!response.ok) {
@@ -244,7 +266,7 @@ async function fetchImageForPdf(
   }
 
   const blob = await response.blob();
-  return rasterizeBlobForPdf(blob, targetWidth, targetHeight, blackCorners);
+  return rasterizeBlobForPdf(blob, targetWidth, targetHeight, blackCorners, trimMargins);
 }
 
 async function loadImageForPdf(
@@ -252,6 +274,7 @@ async function loadImageForPdf(
   targetWidth: number,
   targetHeight: number,
   blackCorners: boolean,
+  trimMargins = false,
 ): Promise<{ data: Uint8Array; format: PdfImageFormat }> {
   const candidates = getTextureLoadUrlCandidates(url, { fullSize: true });
   if (!candidates.length) {
@@ -261,7 +284,7 @@ async function loadImageForPdf(
   let lastError: Error | undefined;
   for (const loadUrl of candidates) {
     try {
-      return await fetchImageForPdf(loadUrl, targetWidth, targetHeight, blackCorners);
+      return await fetchImageForPdf(loadUrl, targetWidth, targetHeight, blackCorners, trimMargins);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
     }
@@ -342,6 +365,8 @@ export async function generateDeckPdf(
       printPixels.width,
       printPixels.height,
       options.blackCorners,
+      // Card backs like Hearthstone's have transparent margins around the card.
+      options.addCardBacks && imageUrl === options.cardBack?.imageUrl,
     )
       .then(raster => {
         const entry: PdfRasterImage = { ...raster, alias: `p${nextImageAlias++}` };

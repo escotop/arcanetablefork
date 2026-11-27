@@ -1,0 +1,2137 @@
+[
+ {
+  "id": 0,
+  "name": "Classic",
+  "nameEs": "Clásico",
+  "category": "Basic",
+  "hqUrl": "https://i.pinimg.com/originals/ed/b4/41/edb441805dd7ac2a4436a8478de0f95a.jpg"
+ },
+ {
+  "id": 158,
+  "name": "Random",
+  "category": "Basic"
+ },
+ {
+  "id": 4,
+  "name": "Fireside",
+  "nameEs": "Junto al fuego",
+  "category": "Fireside"
+ },
+ {
+  "id": 7,
+  "name": "Heroic Naxxramas",
+  "nameEs": "Naxxramas heroico",
+  "category": "Achievements"
+ },
+ {
+  "id": 21,
+  "name": "Nefarian",
+  "category": "Achievements"
+ },
+ {
+  "id": 37,
+  "name": "Staff of Origination",
+  "nameEs": "Bastón de los Orígenes",
+  "category": "Achievements"
+ },
+ {
+  "id": 53,
+  "name": "The Blue Portal",
+  "nameEs": "El portal azul",
+  "category": "Achievements"
+ },
+ {
+  "id": 119,
+  "name": "Candle King",
+  "nameEs": "Rey Vela",
+  "category": "Achievements"
+ },
+ {
+  "id": 131,
+  "name": "Monster Hunter",
+  "nameEs": "Cazadores de monstruos",
+  "category": "Achievements"
+ },
+ {
+  "id": 143,
+  "name": "Boomsday!",
+  "nameEs": "¡Armagebum!",
+  "category": "Achievements"
+ },
+ {
+  "id": 153,
+  "name": "Rumble Runner",
+  "nameEs": "Los juegos de los loa",
+  "category": "Achievements"
+ },
+ {
+  "id": 168,
+  "name": "Prize of Shadows",
+  "nameEs": "Premio de las sombras",
+  "category": "Achievements"
+ },
+ {
+  "id": 169,
+  "name": "Got Away with It!",
+  "nameEs": "¡Me salí con la mía!",
+  "category": "Achievements"
+ },
+ {
+  "id": 178,
+  "name": "Titanic Tasks",
+  "nameEs": "Tareas titánicas",
+  "category": "Achievements"
+ },
+ {
+  "id": 179,
+  "name": "Tomb Invader",
+  "nameEs": "Invasor de tumbas",
+  "category": "Achievements"
+ },
+ {
+  "id": 189,
+  "name": "Book of Explorers",
+  "nameEs": "Libro de los expedicionarios",
+  "category": "Achievements"
+ },
+ {
+  "id": 190,
+  "name": "Book of E.V.I.L.",
+  "nameEs": "Libro del MAL",
+  "category": "Achievements"
+ },
+ {
+  "id": 203,
+  "name": "Rusted Legion",
+  "nameEs": "Legión Oxidada",
+  "category": "Achievements"
+ },
+ {
+  "id": 216,
+  "name": "Sideshow Glow",
+  "nameEs": "Luces de feria",
+  "category": "Achievements"
+ },
+ {
+  "id": 217,
+  "name": "Flight of the Val’kyr",
+  "nameEs": "Vuelo de las Val'kyr",
+  "category": "Achievements"
+ },
+ {
+  "id": 226,
+  "name": "The Barrens",
+  "nameEs": "Los Baldíos",
+  "category": "Achievements"
+ },
+ {
+  "id": 227,
+  "name": "Zuldazar",
+  "category": "Achievements"
+ },
+ {
+  "id": 231,
+  "name": "Mysteries of the Phoenix",
+  "nameEs": "Misterios del fénix",
+  "category": "Achievements"
+ },
+ {
+  "id": 237,
+  "name": "Yrel",
+  "category": "Achievements"
+ },
+ {
+  "id": 239,
+  "name": "Stormwind",
+  "nameEs": "Ventormenta",
+  "category": "Achievements"
+ },
+ {
+  "id": 255,
+  "name": "Gift of Elune",
+  "nameEs": "Don de Elune",
+  "category": "Achievements"
+ },
+ {
+  "id": 299,
+  "name": "Stormpike Spirit",
+  "nameEs": "Espíritu Pico Tormenta",
+  "category": "Achievements"
+ },
+ {
+  "id": 300,
+  "name": "Frostwolf Fervor",
+  "nameEs": "Fervor Lobo Gélido",
+  "category": "Achievements"
+ },
+ {
+  "id": 313,
+  "name": "Shimmering Snowflake",
+  "nameEs": "Copo de nieve reluciente",
+  "category": "Achievements"
+ },
+ {
+  "id": 317,
+  "name": "Submarine",
+  "nameEs": "Submarino",
+  "category": "Achievements"
+ },
+ {
+  "id": 338,
+  "name": "Ghost Ship",
+  "nameEs": "Barco fantasma",
+  "category": "Achievements"
+ },
+ {
+  "id": 343,
+  "name": "Revendreth",
+  "category": "Achievements"
+ },
+ {
+  "id": 349,
+  "name": "Deviate Delight",
+  "nameEs": "Delicia de pez descarriado",
+  "category": "Achievements"
+ },
+ {
+  "id": 360,
+  "name": "Darion Mograine",
+  "category": "Achievements"
+ },
+ {
+  "id": 361,
+  "name": "Festival",
+  "category": "Achievements"
+ },
+ {
+  "id": 367,
+  "name": "Halveria",
+  "category": "Achievements"
+ },
+ {
+  "id": 377,
+  "name": "Titanic",
+  "nameEs": "Titánico",
+  "category": "Achievements"
+ },
+ {
+  "id": 396,
+  "name": "Sargeras",
+  "category": "Achievements"
+ },
+ {
+  "id": 399,
+  "name": "Badlands",
+  "nameEs": "Tierras Inhóspitas",
+  "category": "Achievements"
+ },
+ {
+  "id": 410,
+  "name": "Reska",
+  "category": "Achievements"
+ },
+ {
+  "id": 423,
+  "name": "Labyrinth",
+  "nameEs": "Laberinto",
+  "category": "Achievements"
+ },
+ {
+  "id": 440,
+  "name": "Dark Beyond",
+  "category": "Achievements"
+ },
+ {
+  "id": 466,
+  "name": "Dreamscape",
+  "category": "Achievements"
+ },
+ {
+  "id": 482,
+  "name": "The Lost City",
+  "category": "Achievements"
+ },
+ {
+  "id": 503,
+  "name": "Time War",
+  "category": "Achievements"
+ },
+ {
+  "id": 25,
+  "name": "Alleria",
+  "category": "Heroes",
+  "hqUrl": "https://i.pinimg.com/originals/16/6e/1b/166e1beee58541041d60b0c5e213312e.png"
+ },
+ {
+  "id": 26,
+  "name": "Magni",
+  "category": "Heroes"
+ },
+ {
+  "id": 27,
+  "name": "Medivh",
+  "category": "Heroes"
+ },
+ {
+  "id": 60,
+  "name": "Tyrande",
+  "category": "Heroes",
+  "hqUrl": "https://i.pinimg.com/originals/5b/7f/d9/5b7fd93532746ec5918937a2d9134457.png"
+ },
+ {
+  "id": 188,
+  "name": "Dame Hazelbark",
+  "nameEs": "Dama Avellanera",
+  "category": "Heroes"
+ },
+ {
+  "id": 191,
+  "name": "Banshee Queen",
+  "nameEs": "Reina Alma en Pena",
+  "category": "Heroes"
+ },
+ {
+  "id": 196,
+  "name": "Wondrous Wisdomcard",
+  "nameEs": "Carta sabia maravillosa",
+  "category": "Heroes"
+ },
+ {
+  "id": 205,
+  "name": "Aranna",
+  "category": "Heroes"
+ },
+ {
+  "id": 208,
+  "name": "Kel'Thuzad",
+  "category": "Heroes"
+ },
+ {
+  "id": 215,
+  "name": "N'Zoth",
+  "category": "Heroes"
+ },
+ {
+  "id": 223,
+  "name": "Hamuul",
+  "category": "Heroes"
+ },
+ {
+  "id": 250,
+  "name": "Katrana",
+  "category": "Heroes"
+ },
+ {
+  "id": 252,
+  "name": "Firelord",
+  "nameEs": "Señor del Fuego",
+  "category": "Heroes"
+ },
+ {
+  "id": 286,
+  "name": "Vanndar",
+  "category": "Heroes"
+ },
+ {
+  "id": 291,
+  "name": "Edwin",
+  "category": "Heroes"
+ },
+ {
+  "id": 292,
+  "name": "Celeste",
+  "category": "Heroes"
+ },
+ {
+  "id": 295,
+  "name": "Infernal Armor",
+  "nameEs": "Armadura infernal",
+  "category": "Heroes"
+ },
+ {
+  "id": 296,
+  "name": "Steel Guardian",
+  "nameEs": "Guardián de acero",
+  "category": "Heroes"
+ },
+ {
+  "id": 304,
+  "name": "Greatfather Winter",
+  "nameEs": "Gran Padre Invierno",
+  "category": "Heroes"
+ },
+ {
+  "id": 307,
+  "name": "Diao Chan",
+  "category": "Heroes"
+ },
+ {
+  "id": 308,
+  "name": "Xuen",
+  "category": "Heroes"
+ },
+ {
+  "id": 316,
+  "name": "Sir Finley Mrrgglton",
+  "category": "Heroes"
+ },
+ {
+  "id": 321,
+  "name": "Azshara",
+  "category": "Heroes"
+ },
+ {
+  "id": 329,
+  "name": "Faelin",
+  "category": "Heroes"
+ },
+ {
+  "id": 331,
+  "name": "Leeroy",
+  "category": "Heroes"
+ },
+ {
+  "id": 337,
+  "name": "Garona",
+  "category": "Heroes"
+ },
+ {
+  "id": 342,
+  "name": "Denathrius",
+  "category": "Heroes"
+ },
+ {
+  "id": 348,
+  "name": "Magical Guardian Elise",
+  "nameEs": "Elise guardiana mágica",
+  "category": "Heroes"
+ },
+ {
+  "id": 350,
+  "name": "Lor'themar",
+  "category": "Heroes"
+ },
+ {
+  "id": 352,
+  "name": "CookinReno",
+  "nameEs": "Reno cocinero",
+  "category": "Heroes"
+ },
+ {
+  "id": 354,
+  "name": "Jaraxxustein",
+  "category": "Heroes"
+ },
+ {
+  "id": 362,
+  "name": "Omen",
+  "nameEs": "Augurio",
+  "category": "Heroes"
+ },
+ {
+  "id": 364,
+  "name": "Saraad",
+  "category": "Heroes"
+ },
+ {
+  "id": 365,
+  "name": "Hedanis",
+  "category": "Heroes"
+ },
+ {
+  "id": 366,
+  "name": "Inzah",
+  "category": "Heroes"
+ },
+ {
+  "id": 368,
+  "name": "E.T.C.",
+  "nameEs": "ETC",
+  "category": "Heroes"
+ },
+ {
+  "id": 371,
+  "name": "Kit",
+  "category": "Heroes"
+ },
+ {
+  "id": 374,
+  "name": "Inge",
+  "category": "Heroes"
+ },
+ {
+  "id": 381,
+  "name": "V-07-TR-0N",
+  "category": "Heroes"
+ },
+ {
+  "id": 382,
+  "name": "Thorim",
+  "category": "Heroes"
+ },
+ {
+  "id": 401,
+  "name": "Nozdormu",
+  "category": "Heroes"
+ },
+ {
+  "id": 404,
+  "name": "Lana'thel",
+  "category": "Heroes"
+ },
+ {
+  "id": 407,
+  "name": "Elise",
+  "category": "Heroes"
+ },
+ {
+  "id": 409,
+  "name": "Ulfar",
+  "category": "Heroes"
+ },
+ {
+  "id": 413,
+  "name": "Godfrey",
+  "category": "Heroes"
+ },
+ {
+  "id": 418,
+  "name": "Disidra",
+  "category": "Heroes"
+ },
+ {
+  "id": 419,
+  "name": "Kailene",
+  "category": "Heroes"
+ },
+ {
+  "id": 420,
+  "name": "Patches",
+  "nameEs": "Parches",
+  "category": "Heroes"
+ },
+ {
+  "id": 421,
+  "name": "Zail Starfallen",
+  "nameEs": "Zail Astrocaído",
+  "category": "Heroes"
+ },
+ {
+  "id": 425,
+  "name": "Boulderfist",
+  "category": "Heroes"
+ },
+ {
+  "id": 427,
+  "name": "Whizbang",
+  "nameEs": "Zumbang",
+  "category": "Heroes"
+ },
+ {
+  "id": 429,
+  "name": "King Krush",
+  "nameEs": "[PH] King Krush",
+  "category": "Heroes"
+ },
+ {
+  "id": 431,
+  "name": "Arfus",
+  "category": "Heroes"
+ },
+ {
+  "id": 436,
+  "name": "Hakkar",
+  "category": "Heroes"
+ },
+ {
+  "id": 437,
+  "name": "Marin",
+  "category": "Heroes"
+ },
+ {
+  "id": 438,
+  "name": "Poxi",
+  "category": "Heroes"
+ },
+ {
+  "id": 441,
+  "name": "A. F. Kay",
+  "category": "Heroes"
+ },
+ {
+  "id": 443,
+  "name": "Brightmane",
+  "category": "Heroes"
+ },
+ {
+  "id": 445,
+  "name": "Prophet Velen",
+  "category": "Heroes"
+ },
+ {
+  "id": 446,
+  "name": "Leyara",
+  "category": "Heroes"
+ },
+ {
+  "id": 447,
+  "name": "Mudan",
+  "category": "Heroes"
+ },
+ {
+  "id": 452,
+  "name": "Warlord Draka",
+  "category": "Heroes"
+ },
+ {
+  "id": 454,
+  "name": "Nathanos",
+  "category": "Heroes"
+ },
+ {
+  "id": 455,
+  "name": "Akama",
+  "category": "Heroes"
+ },
+ {
+  "id": 458,
+  "name": "Murgulis",
+  "category": "Heroes"
+ },
+ {
+  "id": 459,
+  "name": "Raynor",
+  "category": "Heroes"
+ },
+ {
+  "id": 461,
+  "name": "Artanis",
+  "category": "Heroes"
+ },
+ {
+  "id": 462,
+  "name": "Ysera",
+  "category": "Heroes"
+ },
+ {
+  "id": 463,
+  "name": "Vanessa",
+  "category": "Heroes"
+ },
+ {
+  "id": 468,
+  "name": "Xavius",
+  "category": "Heroes"
+ },
+ {
+  "id": 470,
+  "name": "Vivian",
+  "category": "Heroes"
+ },
+ {
+  "id": 473,
+  "name": "Umbra",
+  "category": "Heroes"
+ },
+ {
+  "id": 474,
+  "name": "The Jailer",
+  "category": "Heroes"
+ },
+ {
+  "id": 477,
+  "name": "Feathermoon",
+  "category": "Heroes"
+ },
+ {
+  "id": 478,
+  "name": "Aegwynn",
+  "category": "Heroes"
+ },
+ {
+  "id": 481,
+  "name": "Ahune",
+  "category": "Heroes"
+ },
+ {
+  "id": 486,
+  "name": "Dirdra",
+  "category": "Heroes"
+ },
+ {
+  "id": 488,
+  "name": "Winter Queen",
+  "category": "Heroes"
+ },
+ {
+  "id": 489,
+  "name": "Faerin",
+  "category": "Heroes"
+ },
+ {
+  "id": 493,
+  "name": "Alexstrasza",
+  "category": "Heroes"
+ },
+ {
+  "id": 494,
+  "name": "Chromie",
+  "category": "Heroes"
+ },
+ {
+  "id": 495,
+  "name": "Broxigar",
+  "category": "Heroes"
+ },
+ {
+  "id": 502,
+  "name": "Mekkatorque",
+  "category": "Heroes"
+ },
+ {
+  "id": 507,
+  "name": "Wilfred Fizzlebang",
+  "category": "Heroes"
+ },
+ {
+  "id": 509,
+  "name": "Allari the Souleater",
+  "category": "Heroes"
+ },
+ {
+  "id": 511,
+  "name": "King Maluk",
+  "category": "Heroes"
+ },
+ {
+  "id": 514,
+  "name": "Sinestra",
+  "category": "Heroes"
+ },
+ {
+  "id": 522,
+  "name": "Tsulong",
+  "category": "Heroes"
+ },
+ {
+  "id": 525,
+  "name": "Merithra",
+  "category": "Heroes"
+ },
+ {
+  "id": 526,
+  "name": "Magmaw",
+  "category": "Heroes"
+ },
+ {
+  "id": 528,
+  "name": "Nefarius",
+  "category": "Heroes"
+ },
+ {
+  "id": 532,
+  "name": "Benedictus",
+  "category": "Heroes"
+ },
+ {
+  "id": 535,
+  "name": "Kayn Sunfury",
+  "category": "Heroes"
+ },
+ {
+  "id": 536,
+  "name": "Tarecgosa",
+  "category": "Heroes"
+ },
+ {
+  "id": 537,
+  "name": "Mistress Nagmara",
+  "category": "Heroes"
+ },
+ {
+  "id": 538,
+  "name": "Gazlowe",
+  "category": "Heroes"
+ },
+ {
+  "id": 542,
+  "name": "G'huun",
+  "category": "Heroes"
+ },
+ {
+  "id": 544,
+  "name": "High Commander Beatrix",
+  "category": "Heroes"
+ },
+ {
+  "id": 547,
+  "name": "Wuxia Sylvanas",
+  "category": "Heroes"
+ },
+ {
+  "id": 548,
+  "name": "Millhouse Manastorm",
+  "category": "Heroes"
+ },
+ {
+  "id": 549,
+  "name": "Aya",
+  "category": "Heroes"
+ },
+ {
+  "id": 550,
+  "name": "Irida",
+  "category": "Heroes"
+ },
+ {
+  "id": 551,
+  "name": "Wuxia Fireheart",
+  "category": "Heroes"
+ },
+ {
+  "id": 553,
+  "name": "Eternal Scarab",
+  "category": "Heroes"
+ },
+ {
+  "id": 555,
+  "name": "Kirin Tor",
+  "category": "Heroes"
+ },
+ {
+  "id": 560,
+  "name": "Arator",
+  "category": "Heroes"
+ },
+ {
+  "id": 562,
+  "name": "Zuramat",
+  "category": "Heroes"
+ },
+ {
+  "id": 1,
+  "name": "Pandaria",
+  "category": "Seasonal",
+  "hqUrl": "https://i.pinimg.com/originals/81/cb/18/81cb1814f8fb3b1c26c35c90943d1e8b.jpg"
+ },
+ {
+  "id": 2,
+  "name": "Black Temple",
+  "nameEs": "Templo Oscuro",
+  "category": "Seasonal"
+ },
+ {
+  "id": 3,
+  "name": "Rainbow!",
+  "nameEs": "¡Arcoíris!",
+  "category": "Seasonal"
+ },
+ {
+  "id": 6,
+  "name": "Naxxramas",
+  "category": "Seasonal"
+ },
+ {
+  "id": 8,
+  "name": "Icecrown",
+  "nameEs": "Corona de Hielo",
+  "category": "Seasonal"
+ },
+ {
+  "id": 9,
+  "name": "Pirates!",
+  "nameEs": "¡Piratas!",
+  "category": "Seasonal"
+ },
+ {
+  "id": 10,
+  "name": "Hallow's End",
+  "nameEs": "Halloween",
+  "category": "Seasonal"
+ },
+ {
+  "id": 11,
+  "name": "Goblins",
+  "category": "Seasonal"
+ },
+ {
+  "id": 15,
+  "name": "Gnomes",
+  "nameEs": "Gnomos",
+  "category": "Seasonal"
+ },
+ {
+  "id": 16,
+  "name": "Maraad",
+  "category": "Seasonal"
+ },
+ {
+  "id": 17,
+  "name": "Lunar New Year",
+  "nameEs": "Año Nuevo lunar",
+  "category": "Seasonal"
+ },
+ {
+  "id": 19,
+  "name": "Ragnaros",
+  "category": "Seasonal"
+ },
+ {
+  "id": 22,
+  "name": "Cupcake",
+  "nameEs": "Pastelito",
+  "category": "Seasonal"
+ },
+ {
+  "id": 23,
+  "name": "Ninjas!",
+  "nameEs": "¡Ninjas!",
+  "category": "Seasonal",
+  "hqUrl": "https://i.pinimg.com/originals/7e/ce/77/7ece773df823a302521fe3b6e89a0498.png"
+ },
+ {
+  "id": 28,
+  "name": "Darnassus",
+  "category": "Seasonal",
+  "hqUrl": "https://i.pinimg.com/originals/26/d6/f3/26d6f31856e007c24af69fbaf790c161.png"
+ },
+ {
+  "id": 30,
+  "name": "Darkspear",
+  "nameEs": "Lanza Negra",
+  "category": "Seasonal",
+  "hqUrl": "https://i.pinimg.com/originals/7c/7f/2b/7c7f2b5b94f8cb4c12357f64ce1dd56f.png"
+ },
+ {
+  "id": 32,
+  "name": "Tournament Grounds",
+  "nameEs": "Terrenos del torneo",
+  "category": "Seasonal"
+ },
+ {
+  "id": 34,
+  "name": "Exodar",
+  "category": "Seasonal"
+ },
+ {
+  "id": 35,
+  "name": "Highmaul",
+  "nameEs": "Ogrópolis",
+  "category": "Seasonal"
+ },
+ {
+  "id": 36,
+  "name": "Explorer's Map",
+  "nameEs": "Mapa de expedicionario",
+  "category": "Seasonal"
+ },
+ {
+  "id": 40,
+  "name": "Love Is in the Air",
+  "nameEs": "Se respira amor",
+  "category": "Seasonal"
+ },
+ {
+  "id": 41,
+  "name": "Thunder Bluff",
+  "nameEs": "Cima del Trueno",
+  "category": "Seasonal"
+ },
+ {
+  "id": 42,
+  "name": "Thrall",
+  "category": "Seasonal"
+ },
+ {
+  "id": 46,
+  "name": "Hogger",
+  "category": "Seasonal",
+  "hqUrl": "https://i.pinimg.com/originals/e3/40/b8/e340b895873c52d7358ffbeef7a4400f.png"
+ },
+ {
+  "id": 47,
+  "name": "Clutch of Yogg-Saron",
+  "nameEs": "Posesión de Yogg-Saron",
+  "category": "Seasonal",
+  "hqUrl": "https://i.pinimg.com/originals/5e/98/9b/5e989bd3da6976faaed86554c53e1f6c.png"
+ },
+ {
+  "id": 48,
+  "name": "Shadowmoon Valley",
+  "nameEs": "Valle Sombraluna",
+  "category": "Seasonal",
+  "hqUrl": "https://i.pinimg.com/originals/c1/c4/49/c1c44982ae70896af50d5ed1e3460c9b.png"
+ },
+ {
+  "id": 49,
+  "name": "Zul'Drak",
+  "category": "Seasonal",
+  "hqUrl": "https://i.pinimg.com/originals/45/a9/e6/45a9e60b7ad56f80607204cf78372854.png"
+ },
+ {
+  "id": 50,
+  "name": "Halfhill",
+  "nameEs": "El Alcor",
+  "category": "Seasonal",
+  "hqUrl": "https://i.pinimg.com/originals/a7/ec/27/a7ec27aa4dbe83811ed035c99f04358d.png"
+ },
+ {
+  "id": 54,
+  "name": "Tinyfin Beach",
+  "nameEs": "Playa de Aletín",
+  "category": "Seasonal",
+  "hqUrl": "https://i.pinimg.com/originals/68/89/98/688998337788bf61cc4c2f77da5daa98.png"
+ },
+ {
+  "id": 58,
+  "name": "Medivh's Invitation",
+  "nameEs": "Invitación de Medivh",
+  "category": "Seasonal",
+  "hqUrl": "https://i.pinimg.com/originals/c4/fb/43/c4fb43bc7bc2b279a4a3200cceaf4e6c.png"
+ },
+ {
+  "id": 61,
+  "name": "Legion",
+  "nameEs": "Legión",
+  "category": "Seasonal"
+ },
+ {
+  "id": 62,
+  "name": "Pie",
+  "nameEs": "Tarta",
+  "category": "Seasonal",
+  "hqUrl": "https://i.pinimg.com/originals/e8/bc/39/e8bc39c93f5b98845849c3a24217b2be.png"
+ },
+ {
+  "id": 66,
+  "name": "Jade Lotus",
+  "nameEs": "Loto de Jade",
+  "category": "Seasonal",
+  "hqUrl": "https://i.pinimg.com/originals/18/c3/64/18c364d71bdccda2eac184b671b458a0.png"
+ },
+ {
+  "id": 67,
+  "name": "Grimy Goons",
+  "nameEs": "Matones Mugrientos",
+  "category": "Seasonal"
+ },
+ {
+  "id": 68,
+  "name": "Kabal",
+  "category": "Seasonal"
+ },
+ {
+  "id": 69,
+  "name": "Year of the Kraken",
+  "nameEs": "Año del Kraken",
+  "category": "Seasonal"
+ },
+ {
+  "id": 71,
+  "name": "Sunwell",
+  "nameEs": "Fuente del Sol",
+  "category": "Seasonal"
+ },
+ {
+  "id": 93,
+  "name": "Un'goro Mystery",
+  "nameEs": "Misterio de Un'Goro",
+  "category": "Seasonal"
+ },
+ {
+  "id": 95,
+  "name": "The Magic of Dalaran",
+  "nameEs": "Magia de Dalaran",
+  "category": "Seasonal"
+ },
+ {
+  "id": 96,
+  "name": "Gone Fishin'",
+  "nameEs": "De pesca",
+  "category": "Seasonal"
+ },
+ {
+  "id": 101,
+  "name": "HearthS'mores",
+  "nameEs": "Hoguera",
+  "category": "Seasonal"
+ },
+ {
+  "id": 103,
+  "name": "Blood Knight",
+  "nameEs": "Caballero de sangre",
+  "category": "Seasonal"
+ },
+ {
+  "id": 106,
+  "name": "Frost Knight",
+  "nameEs": "Caballero de escarcha",
+  "category": "Seasonal"
+ },
+ {
+  "id": 114,
+  "name": "Unholy Knight",
+  "nameEs": "Caballero profano",
+  "category": "Seasonal"
+ },
+ {
+  "id": 122,
+  "name": "Catacomber",
+  "nameEs": "Catacumbeando",
+  "category": "Seasonal"
+ },
+ {
+  "id": 123,
+  "name": "Frostfire",
+  "nameEs": "Pirofrío",
+  "category": "Seasonal"
+ },
+ {
+  "id": 128,
+  "name": "Sparkles",
+  "nameEs": "Brillitos",
+  "category": "Seasonal"
+ },
+ {
+  "id": 130,
+  "name": "Year of the Mammoth",
+  "nameEs": "Año del Mamut",
+  "category": "Seasonal"
+ },
+ {
+  "id": 135,
+  "name": "Raise the Roof",
+  "nameEs": "Para aullarte mejor",
+  "category": "Seasonal"
+ },
+ {
+  "id": 136,
+  "name": "Lunara's Garden",
+  "nameEs": "Jardín de Lunara",
+  "category": "Seasonal"
+ },
+ {
+  "id": 137,
+  "name": "Back in Blue",
+  "nameEs": "Poder Azul",
+  "category": "Seasonal"
+ },
+ {
+  "id": 138,
+  "name": "Lightforged",
+  "nameEs": "Forjado por la Luz",
+  "category": "Seasonal"
+ },
+ {
+  "id": 139,
+  "name": "Lemonade",
+  "nameEs": "Limonada",
+  "category": "Seasonal"
+ },
+ {
+  "id": 144,
+  "name": "VanCardback",
+  "nameEs": "Dorso de VanCarta",
+  "category": "Seasonal"
+ },
+ {
+  "id": 145,
+  "name": "Dr. Boom's Lab",
+  "nameEs": "Laboratorio del Dr. Bum",
+  "category": "Seasonal"
+ },
+ {
+  "id": 147,
+  "name": "Moonwell",
+  "nameEs": "Poza de la luna",
+  "category": "Seasonal"
+ },
+ {
+  "id": 149,
+  "name": "Frostwolf",
+  "nameEs": "Lobo Gélido",
+  "category": "Seasonal"
+ },
+ {
+  "id": 154,
+  "name": "Chillin’",
+  "nameEs": "De hielo",
+  "category": "Seasonal"
+ },
+ {
+  "id": 155,
+  "name": "Pizza Stone",
+  "nameEs": "Piedra de pizza",
+  "category": "Seasonal"
+ },
+ {
+  "id": 162,
+  "name": "Kul Tiras",
+  "category": "Seasonal"
+ },
+ {
+  "id": 163,
+  "name": "Card of Shadows",
+  "nameEs": "Carta de las Sombras",
+  "category": "Seasonal"
+ },
+ {
+  "id": 165,
+  "name": "Awesome Blossom",
+  "nameEs": "Flor magnífica",
+  "category": "Seasonal"
+ },
+ {
+  "id": 167,
+  "name": "Suramar",
+  "category": "Seasonal"
+ },
+ {
+  "id": 172,
+  "name": "Shado-Pan",
+  "nameEs": "Shadopan",
+  "category": "Seasonal"
+ },
+ {
+  "id": 175,
+  "name": "Sea of Dunes",
+  "nameEs": "Mar de dunas",
+  "category": "Seasonal"
+ },
+ {
+  "id": 176,
+  "name": "Year of the Raven",
+  "nameEs": "Año del Cuervo",
+  "category": "Seasonal"
+ },
+ {
+  "id": 177,
+  "name": "Darkmoon Faire",
+  "nameEs": "Feria de la Luna Negra",
+  "category": "Seasonal"
+ },
+ {
+  "id": 185,
+  "name": "Cake of the Dead",
+  "nameEs": "Tarta de los muertos",
+  "category": "Seasonal"
+ },
+ {
+  "id": 186,
+  "name": "Hellfire Peninsula",
+  "nameEs": "Fuego Infernal",
+  "category": "Seasonal"
+ },
+ {
+  "id": 193,
+  "name": "Shoring Up",
+  "nameEs": "A toda costa",
+  "category": "Seasonal"
+ },
+ {
+  "id": 194,
+  "name": "Desert Bloom",
+  "nameEs": "Flor del desierto",
+  "category": "Seasonal"
+ },
+ {
+  "id": 197,
+  "name": "Playing Koi",
+  "nameEs": "Koi",
+  "category": "Seasonal"
+ },
+ {
+  "id": 198,
+  "name": "Blushroom",
+  "nameEs": "Champirrubor",
+  "category": "Seasonal"
+ },
+ {
+  "id": 201,
+  "name": "Swamp Light",
+  "nameEs": "Luz de pantano",
+  "category": "Seasonal"
+ },
+ {
+  "id": 202,
+  "name": "Mystic Forest",
+  "nameEs": "Bosque místico",
+  "category": "Seasonal"
+ },
+ {
+  "id": 204,
+  "name": "Rise Up!",
+  "nameEs": "¡Álzate!",
+  "category": "Seasonal"
+ },
+ {
+  "id": 207,
+  "name": "Scholomance",
+  "category": "Seasonal"
+ },
+ {
+  "id": 209,
+  "name": "Faerie Tail",
+  "nameEs": "Alas feéricas",
+  "category": "Seasonal"
+ },
+ {
+  "id": 210,
+  "name": "The Breaker",
+  "nameEs": "El Rompedor",
+  "category": "Seasonal"
+ },
+ {
+  "id": 211,
+  "name": "Autumn Leaf",
+  "nameEs": "Hoja otoñal",
+  "category": "Seasonal"
+ },
+ {
+  "id": 212,
+  "name": "Valorous Virtue",
+  "nameEs": "Virtud valerosa",
+  "category": "Seasonal"
+ },
+ {
+  "id": 218,
+  "name": "Ironforge",
+  "nameEs": "Forjaz",
+  "category": "Seasonal"
+ },
+ {
+  "id": 219,
+  "name": "Year of the Phoenix",
+  "nameEs": "Año del Fénix",
+  "category": "Seasonal"
+ },
+ {
+  "id": 220,
+  "name": "Cobalt Vault",
+  "nameEs": "Cámara de cobalto",
+  "category": "Seasonal"
+ },
+ {
+  "id": 221,
+  "name": "Vale of Eternal Blossoms",
+  "nameEs": "Valle de la Flor Eterna",
+  "category": "Seasonal"
+ },
+ {
+  "id": 224,
+  "name": "Wailing Caverns",
+  "nameEs": "Cuevas de los Lamentos",
+  "category": "Seasonal"
+ },
+ {
+  "id": 235,
+  "name": "Varian",
+  "category": "Seasonal"
+ },
+ {
+  "id": 236,
+  "name": "Shamrock n' Roll",
+  "nameEs": "Trébol de la suerte",
+  "category": "Seasonal"
+ },
+ {
+  "id": 238,
+  "name": "Utgarde Keep",
+  "nameEs": "Fortaleza de Utgarde",
+  "category": "Seasonal"
+ },
+ {
+  "id": 242,
+  "name": "Ramen",
+  "category": "Seasonal"
+ },
+ {
+  "id": 249,
+  "name": "Herbalist",
+  "nameEs": "Herborista",
+  "category": "Seasonal"
+ },
+ {
+  "id": 282,
+  "name": "Scarf of the Hearth",
+  "nameEs": "Bufanda del hogar",
+  "category": "Seasonal"
+ },
+ {
+  "id": 285,
+  "name": "Carved Autumn",
+  "nameEs": "Otoño tallado",
+  "category": "Seasonal"
+ },
+ {
+  "id": 301,
+  "name": "Take the Cake",
+  "nameEs": "Se lleva la tarta",
+  "category": "Seasonal"
+ },
+ {
+  "id": 302,
+  "name": "Fortune's Favor",
+  "nameEs": "La suerte a favor",
+  "category": "Seasonal"
+ },
+ {
+  "id": 309,
+  "name": "Year of the Gryphon",
+  "nameEs": "Año del Grifo",
+  "category": "Seasonal"
+ },
+ {
+  "id": 312,
+  "name": "Dancing Lion",
+  "nameEs": "León danzante",
+  "category": "Seasonal"
+ },
+ {
+  "id": 314,
+  "name": "Rain on the Pane",
+  "nameEs": "Lluvia en la ventana",
+  "category": "Seasonal"
+ },
+ {
+  "id": 318,
+  "name": "Driftwood",
+  "nameEs": "Madera a la deriva",
+  "category": "Seasonal"
+ },
+ {
+  "id": 325,
+  "name": "Violet Hold",
+  "nameEs": "Bastión Violeta",
+  "category": "Seasonal"
+ },
+ {
+  "id": 326,
+  "name": "Self-Made",
+  "nameEs": "Hecho a mano",
+  "category": "Seasonal"
+ },
+ {
+  "id": 334,
+  "name": "Celestial Starlight",
+  "nameEs": "Luz estelar celestial",
+  "category": "Seasonal"
+ },
+ {
+  "id": 344,
+  "name": "Fire Plume",
+  "nameEs": "Penacho en Llamas",
+  "category": "Seasonal"
+ },
+ {
+  "id": 345,
+  "name": "Pumpkin",
+  "nameEs": "Calabaza",
+  "category": "Seasonal"
+ },
+ {
+  "id": 347,
+  "name": "Lunchbox",
+  "nameEs": "Fiambrera",
+  "category": "Seasonal"
+ },
+ {
+  "id": 353,
+  "name": "Fall Journey",
+  "nameEs": "Viaje de otoño",
+  "category": "Seasonal"
+ },
+ {
+  "id": 356,
+  "name": "Present",
+  "nameEs": "Presente",
+  "category": "Seasonal"
+ },
+ {
+  "id": 357,
+  "name": "Savory Soup",
+  "nameEs": "Soba sabrosa",
+  "category": "Seasonal"
+ },
+ {
+  "id": 358,
+  "name": "Sparkling Sprout",
+  "nameEs": "Brote brillante",
+  "category": "Seasonal"
+ },
+ {
+  "id": 359,
+  "name": "Tranquility",
+  "nameEs": "Tranquilidad",
+  "category": "Seasonal"
+ },
+ {
+  "id": 369,
+  "name": "Brook and Branch",
+  "nameEs": "Río y rama",
+  "category": "Seasonal"
+ },
+ {
+  "id": 370,
+  "name": "Ancient Ruin",
+  "nameEs": "Ruina ancestral",
+  "category": "Seasonal"
+ },
+ {
+  "id": 373,
+  "name": "Emerald Dream",
+  "nameEs": "Sueño Esmeralda",
+  "category": "Seasonal"
+ },
+ {
+  "id": 375,
+  "name": "Harvest Wreath",
+  "nameEs": "Corona de la cosecha",
+  "category": "Seasonal"
+ },
+ {
+  "id": 378,
+  "name": "Year of the Hydra",
+  "nameEs": "Año de la Hidra",
+  "category": "Seasonal"
+ },
+ {
+  "id": 394,
+  "name": "Good Gourd",
+  "nameEs": "Buena calabaza",
+  "category": "Seasonal"
+ },
+ {
+  "id": 406,
+  "name": "Moonkin",
+  "nameEs": "Lechúcico",
+  "category": "Seasonal"
+ },
+ {
+  "id": 408,
+  "name": "Snow Bell",
+  "nameEs": "Campana nevada",
+  "category": "Seasonal"
+ },
+ {
+  "id": 411,
+  "name": "Tuskarr Tundra",
+  "nameEs": "Colmillarr Tundra",
+  "category": "Seasonal"
+ },
+ {
+  "id": 416,
+  "name": "Exquisite Equinox",
+  "nameEs": "Equinoccio exquisito",
+  "category": "Seasonal"
+ },
+ {
+  "id": 417,
+  "name": "Hippogryph Hatchling",
+  "nameEs": "Prole de hipogrifo",
+  "category": "Seasonal"
+ },
+ {
+  "id": 424,
+  "name": "Castle Nathria",
+  "nameEs": "Castillo de Nathria",
+  "category": "Seasonal"
+ },
+ {
+  "id": 430,
+  "name": "Glowcap Festival",
+  "category": "Seasonal"
+ },
+ {
+  "id": 432,
+  "name": "Midsummer",
+  "category": "Seasonal"
+ },
+ {
+  "id": 433,
+  "name": "Dance Party",
+  "category": "Seasonal"
+ },
+ {
+  "id": 435,
+  "name": "Spectral Garden",
+  "category": "Seasonal"
+ },
+ {
+  "id": 442,
+  "name": "Niuzao",
+  "category": "Seasonal"
+ },
+ {
+  "id": 449,
+  "name": "Tavern Trellis",
+  "category": "Seasonal"
+ },
+ {
+  "id": 450,
+  "name": "Faire Play",
+  "category": "Seasonal"
+ },
+ {
+  "id": 453,
+  "name": "Gnomeregan",
+  "category": "Seasonal"
+ },
+ {
+  "id": 456,
+  "name": "Blighted Souls",
+  "category": "Seasonal"
+ },
+ {
+  "id": 457,
+  "name": "Sweetheart",
+  "category": "Seasonal"
+ },
+ {
+  "id": 460,
+  "name": "The Swarm",
+  "category": "Seasonal"
+ },
+ {
+  "id": 464,
+  "name": "Waywatcher",
+  "category": "Seasonal"
+ },
+ {
+  "id": 469,
+  "name": "Emerald Nightmare",
+  "category": "Seasonal"
+ },
+ {
+  "id": 472,
+  "name": "Crackle",
+  "category": "Seasonal"
+ },
+ {
+  "id": 475,
+  "name": "Seeker",
+  "category": "Seasonal"
+ },
+ {
+  "id": 480,
+  "name": "Gardens of the Lost City",
+  "category": "Seasonal"
+ },
+ {
+  "id": 483,
+  "name": "Year of the Pegasus",
+  "category": "Seasonal"
+ },
+ {
+  "id": 490,
+  "name": "Cultist",
+  "category": "Seasonal"
+ },
+ {
+  "id": 496,
+  "name": "Zereth Mortis",
+  "category": "Seasonal"
+ },
+ {
+  "id": 504,
+  "name": "Year of the Wolf",
+  "category": "Seasonal"
+ },
+ {
+  "id": 505,
+  "name": "Hour of Twilight",
+  "category": "Seasonal"
+ },
+ {
+  "id": 515,
+  "name": "Spirit of the Horse",
+  "category": "Seasonal"
+ },
+ {
+  "id": 518,
+  "name": "High King",
+  "category": "Seasonal"
+ },
+ {
+  "id": 519,
+  "name": "Wyrmrest",
+  "category": "Seasonal"
+ },
+ {
+  "id": 533,
+  "name": "Resistance",
+  "category": "Seasonal"
+ },
+ {
+  "id": 534,
+  "name": "Regrowth",
+  "category": "Seasonal"
+ },
+ {
+  "id": 543,
+  "name": "Detective",
+  "category": "Seasonal"
+ },
+ {
+  "id": 557,
+  "name": "Justice",
+  "category": "Seasonal"
+ },
+ {
+  "id": 559,
+  "name": "Defias",
+  "category": "Seasonal"
+ },
+ {
+  "id": 5,
+  "name": "Legend",
+  "nameEs": "Leyenda",
+  "category": "Legend",
+  "hqUrl": "https://i.pinimg.com/originals/26/2c/4a/262c4a30fa1cd4174d262c866c57c894.png"
+ },
+ {
+  "id": 13,
+  "name": "Dalaran Flame",
+  "nameEs": "Fuego de Dalaran",
+  "category": "Esports"
+ },
+ {
+  "id": 33,
+  "name": "Power Core",
+  "nameEs": "Núcleo de energía",
+  "category": "Esports",
+  "hqUrl": "https://i.pinimg.com/originals/8a/10/8a/8a108a478f3f25158750cdedc4001370.png"
+ },
+ {
+  "id": 94,
+  "name": "Thrill of Victory",
+  "nameEs": "Emoción de la victoria",
+  "category": "Esports"
+ },
+ {
+  "id": 97,
+  "name": "Call of the Void",
+  "nameEs": "Llamada del Vacío",
+  "category": "Esports"
+ },
+ {
+  "id": 98,
+  "name": "Call of the Light",
+  "nameEs": "Llamada de la Luz",
+  "category": "Esports"
+ },
+ {
+  "id": 14,
+  "name": "Warlords",
+  "category": "Games",
+  "hqUrl": "https://i.pinimg.com/originals/88/36/45/883645db1fd9896d42b745906140d5ef.png"
+ },
+ {
+  "id": 24,
+  "name": "Heroes of the Storm",
+  "category": "Games"
+ },
+ {
+  "id": 39,
+  "name": "Legacy of the Void",
+  "category": "Games"
+ },
+ {
+  "id": 44,
+  "name": "Overwatch",
+  "category": "Games"
+ },
+ {
+  "id": 125,
+  "name": "Azeroth is Burning",
+  "nameEs": "Azeroth en llamas",
+  "category": "Games"
+ },
+ {
+  "id": 150,
+  "name": "The Third War",
+  "nameEs": "La Tercera Guerra",
+  "category": "Games"
+ },
+ {
+  "id": 403,
+  "name": "Warcraft Rumble",
+  "category": "Games"
+ },
+ {
+  "id": 479,
+  "name": "Sanctuary",
+  "category": "Games"
+ },
+ {
+  "id": 29,
+  "name": "Samsung Galaxy",
+  "category": "Promotion",
+  "hqUrl": "https://i.pinimg.com/originals/d7/40/ed/d740ed2acaeeec8c5619b42cb959f53a.png"
+ },
+ {
+  "id": 152,
+  "name": "Good Cheer",
+  "nameEs": "Diversión",
+  "category": "Promotion"
+ },
+ {
+  "id": 159,
+  "name": "Pristine Scenes",
+  "nameEs": "Resplandeciente",
+  "category": "Promotion"
+ },
+ {
+  "id": 160,
+  "name": "Legion Schemes",
+  "nameEs": "Planes de la Legión",
+  "category": "Promotion"
+ },
+ {
+  "id": 161,
+  "name": "Machine Dreams",
+  "nameEs": "Sueños mecánicos",
+  "category": "Promotion"
+ },
+ {
+  "id": 195,
+  "name": "Year of the Dragon",
+  "nameEs": "Año del Dragón",
+  "category": "Promotion"
+ },
+ {
+  "id": 253,
+  "name": "Unseen Gleams",
+  "nameEs": "Destellos nunca vistos",
+  "category": "Promotion"
+ },
+ {
+  "id": 283,
+  "name": "Moonlight Might",
+  "nameEs": "Poderío lunar",
+  "category": "Promotion"
+ },
+ {
+  "id": 510,
+  "name": "Hearth & Home",
+  "category": "Promotion"
+ },
+ {
+  "id": 18,
+  "name": "Molten Core",
+  "nameEs": "Núcleo de Magma",
+  "category": "Pre-Purchase"
+ },
+ {
+  "id": 31,
+  "name": "The Grand Tournament",
+  "nameEs": "El Gran Torneo",
+  "category": "Pre-Purchase",
+  "hqUrl": "https://i.pinimg.com/originals/58/c5/58/58c558fe4d6847359225c32425f804b5.png"
+ },
+ {
+  "id": 45,
+  "name": "Eyes of C'Thun",
+  "nameEs": "Ojos de C'Thun",
+  "category": "Pre-Purchase"
+ },
+ {
+  "id": 56,
+  "name": "Karazhan Nights",
+  "nameEs": "Noches de Karazhan",
+  "category": "Pre-Purchase"
+ },
+ {
+  "id": 70,
+  "name": "Fossil",
+  "nameEs": "Fósil",
+  "category": "Pre-Purchase"
+ },
+ {
+  "id": 99,
+  "name": "Frostmourne",
+  "nameEs": "Agonía de Escarcha",
+  "category": "Pre-Purchase"
+ },
+ {
+  "id": 118,
+  "name": "For the Hoard!",
+  "nameEs": "¡A las catacumbas!",
+  "category": "Pre-Purchase"
+ },
+ {
+  "id": 129,
+  "name": "In a Dark Wood",
+  "nameEs": "En un bosque oscuro",
+  "category": "Pre-Purchase"
+ },
+ {
+  "id": 142,
+  "name": "Mecha-Jaraxxus",
+  "nameEs": "Mecajaraxxus",
+  "category": "Pre-Purchase"
+ },
+ {
+  "id": 151,
+  "name": "Ready to Rumble!",
+  "nameEs": "¡Listos para la arena!",
+  "category": "Pre-Purchase"
+ },
+ {
+  "id": 164,
+  "name": "Jewel of Lazul",
+  "nameEs": "Joya de Lazul",
+  "category": "Pre-Purchase"
+ },
+ {
+  "id": 166,
+  "name": "Stolen Thunder",
+  "nameEs": "Trueno robado",
+  "category": "Pre-Purchase"
+ },
+ {
+  "id": 173,
+  "name": "League of Explorers",
+  "nameEs": "Liga de Expedicionarios",
+  "category": "Pre-Purchase"
+ },
+ {
+  "id": 174,
+  "name": "Elise’s Journal",
+  "nameEs": "Diario de Elise",
+  "category": "Pre-Purchase"
+ },
+ {
+  "id": 181,
+  "name": "The Shattering",
+  "nameEs": "El estrago",
+  "category": "Pre-Purchase"
+ },
+ {
+  "id": 200,
+  "name": "Serpentine",
+  "nameEs": "Serpentina",
+  "category": "Pre-Purchase"
+ },
+ {
+  "id": 12,
+  "name": "Blizzard 2014",
+  "category": "Blizzard"
+ },
+ {
+  "id": 38,
+  "name": "Blizzard 2015",
+  "category": "Blizzard"
+ },
+ {
+  "id": 64,
+  "name": "Welcome Inn",
+  "nameEs": "Bienvenidos",
+  "category": "Blizzard",
+  "hqUrl": "https://i.pinimg.com/originals/ec/b5/dd/ecb5ddf994ed0220978a2b39fd99f64a.png"
+ },
+ {
+  "id": 148,
+  "name": "Blizzard Events 2018",
+  "nameEs": "Eventos de Blizzard 2018",
+  "category": "Blizzard"
+ },
+ {
+  "id": 180,
+  "name": "Blizzard Events 2019",
+  "nameEs": "Eventos de Blizzard 2019",
+  "category": "Blizzard"
+ },
+ {
+  "id": 222,
+  "name": "30 Years of Blizzard",
+  "nameEs": "30 años de Blizzard",
+  "category": "Blizzard"
+ },
+ {
+  "id": 397,
+  "name": "Blizzard Events 2023",
+  "nameEs": "Eventos de Blizzard 2023",
+  "category": "Blizzard"
+ },
+ {
+  "id": 20,
+  "name": "Golden Celebration",
+  "nameEs": "Celebración de oro",
+  "category": "Golden"
+ },
+ {
+  "id": 232,
+  "name": "Golden Skies",
+  "nameEs": "Cielos áureos",
+  "category": "Golden"
+ },
+ {
+  "id": 43,
+  "name": "Winter Veil Wreath",
+  "nameEs": "Guirnalda de invierno",
+  "category": "Events"
+ },
+ {
+  "id": 65,
+  "name": "Secret Level",
+  "nameEs": "Nivel secreto",
+  "category": "Events"
+ },
+ {
+  "id": 156,
+  "name": "Winter Veil Treat",
+  "nameEs": "Galleta festiva",
+  "category": "Events"
+ },
+ {
+  "id": 157,
+  "name": "Mark of Hakkar",
+  "nameEs": "Marca de Hakkar",
+  "category": "Events"
+ },
+ {
+  "id": 379,
+  "name": "Diablo Lilith",
+  "category": "Events"
+ },
+ {
+  "id": 402,
+  "name": "Blizzard For All 2023",
+  "nameEs": "Blizzard para todos 2023",
+  "category": "Events"
+ },
+ {
+  "id": 422,
+  "name": "10 Years in the Tavern",
+  "category": "Events"
+ },
+ {
+  "id": 451,
+  "name": "Heroes of Warcraft",
+  "category": "Events"
+ },
+ {
+  "id": 491,
+  "name": "Rebirth Celebration",
+  "category": "Events"
+ },
+ {
+  "id": 500,
+  "name": "Champion’s Crest 2025",
+  "category": "Events"
+ },
+ {
+  "id": 513,
+  "name": "Cataclysm",
+  "category": "Events"
+ },
+ {
+  "id": 516,
+  "name": "End Time",
+  "category": "Events"
+ },
+ {
+  "id": 517,
+  "name": "Pu Lao",
+  "category": "Events"
+ },
+ {
+  "id": 521,
+  "name": "Worldbreaker",
+  "category": "Events"
+ },
+ {
+  "id": 524,
+  "name": "Golden Dragon",
+  "category": "Events"
+ },
+ {
+  "id": 529,
+  "name": "Cataclysmic Brawler",
+  "category": "Events"
+ },
+ {
+  "id": 531,
+  "name": "Legend of the Scarab",
+  "category": "Events"
+ },
+ {
+  "id": 556,
+  "name": "Jailbreak Brawler",
+  "category": "Events"
+ },
+ {
+  "id": 563,
+  "name": "Getaway",
+  "category": "Events"
+ },
+ {
+  "id": 341,
+  "name": "Prince Renathal",
+  "nameEs": "Príncipe Renathal",
+  "category": "Other"
+ },
+ {
+  "id": 346,
+  "name": "Death Knight",
+  "nameEs": "Caballero de la Muerte",
+  "category": "Other"
+ },
+ {
+  "id": 351,
+  "name": "The Lich King",
+  "nameEs": "El Rey Exánime",
+  "category": "Other"
+ },
+ {
+  "id": 434,
+  "name": "Paradise",
+  "category": "Other"
+ },
+ {
+  "id": 444,
+  "name": "20 Years of WoW",
+  "category": "Other"
+ },
+ {
+  "id": 476,
+  "name": "Clever Girl",
+  "category": "Other"
+ },
+ {
+  "id": 498,
+  "name": "Husk",
+  "category": "Other"
+ },
+ {
+  "id": 539,
+  "name": "Dragonqueen",
+  "category": "Other"
+ },
+ {
+  "id": 540,
+  "name": "Black Empire",
+  "category": "Other"
+ },
+ {
+  "id": 541,
+  "name": "Raid Finder",
+  "category": "Other"
+ },
+ {
+  "id": 545,
+  "name": "Blade of the Black Empire",
+  "category": "Other"
+ },
+ {
+  "id": 552,
+  "name": "Maiev",
+  "category": "Other"
+ },
+ {
+  "id": 564,
+  "name": "Lich Lord",
+  "category": "Other"
+ }
+]

@@ -6,6 +6,7 @@ import {
   TextureLoader,
 } from 'three';
 import { isOpponentPrivateHandCard, loadCardTextures } from './card';
+import { findImageTrimBounds } from './cardBackBounds';
 import type { PlayArea } from './playArea';
 import {
   cardBackTexture,
@@ -107,6 +108,19 @@ function configureCardBackTexture(texture: Texture) {
   texture.userData.isCardBack = true;
 }
 
+/** Stretch the visible card over the face when the image has transparent margins. */
+function trimCardBackTexture(texture: Texture) {
+  const image = texture.image as HTMLImageElement | undefined;
+  const width = image?.naturalWidth || image?.width;
+  const height = image?.naturalHeight || image?.height;
+  if (!image || !width || !height) return;
+  const bounds = findImageTrimBounds(image, width, height);
+  if (!bounds) return;
+  texture.repeat.set(bounds.width / width, bounds.height / height);
+  // UVs start at the bottom of the image (flipY).
+  texture.offset.set(bounds.x / width, 1 - (bounds.y + bounds.height) / height);
+}
+
 async function loadCardBackTexture(url: string, applyKey: string): Promise<Texture> {
   const cached = textureByApplyKey.get(applyKey);
   if (cached) return cached;
@@ -127,6 +141,7 @@ async function loadCardBackTexture(url: string, applyKey: string): Promise<Textu
       url,
       texture => {
         configureCardBackTexture(texture);
+        trimCardBackTexture(texture);
         textureByApplyKey.set(applyKey, texture);
         loadPromises.delete(applyKey);
         resolve(texture);

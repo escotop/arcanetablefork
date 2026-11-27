@@ -35,6 +35,7 @@ import {
   mpcfillCardBackImageUrl,
 } from '../mpcfill/client';
 import type { MpcfillCardBackProduct } from '../mpcfill/client';
+import { HEARTHSTONE_CARD_BACKS_URL, searchHearthstoneCardBacks } from '../hearthstoneCardBacks';
 import type { SavedCardBack } from '../savedCardBack';
 
 export interface CardBackPickerModalProps {
@@ -74,6 +75,18 @@ function buildPaginationNumbers(current: number, lastPage: number): number[] {
 
 const SEARCH_DEBOUNCE_MS = 300;
 
+type CardBackSource = 'mpcfill' | 'hearthstone';
+
+const SOURCES: { id: CardBackSource; label: string }[] = [
+  { id: 'mpcfill', label: 'MPC Autofill' },
+  { id: 'hearthstone', label: 'Hearthstone' },
+];
+
+function loadSourcePage(source: CardBackSource, query: string, page: number) {
+  if (source === 'hearthstone') return Promise.resolve(searchHearthstoneCardBacks(query, page));
+  return exploreMpcfillCardbacks(query, page);
+}
+
 const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
   const [page, setPage] = createSignal(1);
   const [products, setProducts] = createSignal<MpcfillCardBackProduct[]>([]);
@@ -82,6 +95,7 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
   const [lastPage, setLastPage] = createSignal(1);
   const [searchInput, setSearchInput] = createSignal('');
   const [searchQuery, setSearchQuery] = createSignal('');
+  const [source, setSource] = createSignal<CardBackSource>('mpcfill');
 
   const isSearching = () => searchQuery().trim().length > 0;
 
@@ -91,8 +105,11 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
   const favorites = createMemo(() => {
     if (!canFavorite()) return [];
     const query = searchQuery().trim().toLowerCase();
+    const hearthstone = source() === 'hearthstone';
     return assetFavorites('card_back').filter(
-      item => !query || item.title.toLowerCase().includes(query),
+      item =>
+        String(item.id).startsWith('hearthstone-') === hearthstone &&
+        (!query || item.title.toLowerCase().includes(query)),
     );
   });
   const visibleProducts = createMemo(() => {
@@ -111,7 +128,7 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
     const requestId = ++catalogRequestId;
     setLoading(true);
     try {
-      const result = await exploreMpcfillCardbacks(searchQuery(), targetPage);
+      const result = await loadSourcePage(source(), searchQuery(), targetPage);
       if (requestId !== catalogRequestId) return;
       setProducts(result.products);
       setPage(targetPage);
@@ -132,6 +149,7 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
     if (!props.open) return;
     setSearchInput('');
     setSearchQuery('');
+    setSource(props.selected?.id.startsWith('hearthstone-') ? 'hearthstone' : 'mpcfill');
     setLastPage(1);
     setHasNextPage(false);
   });
@@ -146,6 +164,7 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
   createEffect(() => {
     if (!props.open) return;
     searchQuery();
+    source();
     void loadPage(1);
   });
 
@@ -226,18 +245,49 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
         <DialogHeader>
           <DialogTitle>Elegir reverso de carta</DialogTitle>
           <DialogDescription>
-            Catálogo de{' '}
-            <a
-              href={MPCFILL_EXPLORE_URL}
-              target='_blank'
-              rel='noopener noreferrer'
-              class='underline'>
-              MPC Autofill
-            </a>
-            {' '}
-            (tipo Cardback).
+            <Show
+              when={source() === 'hearthstone'}
+              fallback={
+                <>
+                  Catálogo de{' '}
+                  <a
+                    href={MPCFILL_EXPLORE_URL}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    class='underline'>
+                    MPC Autofill
+                  </a>{' '}
+                  (tipo Cardback).
+                </>
+              }>
+              Reversos de{' '}
+              <a
+                href={HEARTHSTONE_CARD_BACKS_URL}
+                target='_blank'
+                rel='noopener noreferrer'
+                class='underline'>
+                Hearthstone Wiki
+              </a>
+              . Resolución media (≈400×600): bien en mesa, algo blandos al imprimir.
+            </Show>
           </DialogDescription>
         </DialogHeader>
+
+        <div class='flex gap-2' role='tablist' aria-label='Origen de los reversos'>
+          <For each={SOURCES}>
+            {item => (
+              <Button
+                type='button'
+                role='tab'
+                size='sm'
+                variant={source() === item.id ? 'default' : 'outline'}
+                aria-selected={source() === item.id}
+                onClick={() => setSource(item.id)}>
+                {item.label}
+              </Button>
+            )}
+          </For>
+        </div>
 
         <TextField class='w-full'>
           <div class='relative'>

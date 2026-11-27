@@ -1,4 +1,4 @@
-import { Component, createEffect, createMemo, createSignal, Show } from 'solid-js';
+import { Component, createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { Button } from '~/components/ui/button';
 import { Checkbox } from '~/components/ui/checkbox';
@@ -40,6 +40,8 @@ import { toast } from 'solid-sonner';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import type { SavedCardBack } from '~/lib/savedCardBack';
 import CardBackPickerModal from '~/lib/ui/cardBackPickerModal';
+import { describePrintQuality, findImageTrimBounds } from '~/lib/cardBackBounds';
+import { mpcfillCardBackImageUrl } from '~/lib/mpcfill/client';
 import TokenCopiesModal from './tokenCopiesModal';
 import { getTokenKey } from '~/lib/deckTokens';
 
@@ -64,6 +66,45 @@ const PrintDeckModal: Component<Props> = props => {
   const [progress, setProgress] = createSignal('');
   const [selectedCardBack, setSelectedCardBack] = createSignal<SavedCardBack | undefined>();
   const [cardBackPickerOpen, setCardBackPickerOpen] = createSignal(false);
+  /** Pixel size of the chosen back (visible card only), or 'error' if it couldn't load. */
+  const [cardBackQuality, setCardBackQuality] = createSignal<
+    { width: number; height: number } | 'error' | undefined
+  >();
+
+  createEffect(() => {
+    const back = selectedCardBack();
+    setCardBackQuality(undefined);
+    if (!back?.imageUrl) return;
+    let cancelled = false;
+    onCleanup(() => (cancelled = true));
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.onload = () => {
+      if (cancelled) return;
+      const bounds = findImageTrimBounds(image, image.naturalWidth, image.naturalHeight);
+      setCardBackQuality(
+        bounds ?? { width: image.naturalWidth, height: image.naturalHeight },
+      );
+    };
+    image.onerror = () => !cancelled && setCardBackQuality('error');
+    image.src = mpcfillCardBackImageUrl(back.imageUrl);
+  });
+
+  const cardBackPrintQuality = createMemo(() => {
+    const size = cardBackQuality();
+    if (!size || size === 'error') return undefined;
+    const layout = estimatePrintDeckLayout(options());
+    return describePrintQuality(size.width, size.height, layout.cardWidthMm, layout.cardHeightMm);
+  });
+  const qualityLevel = () => cardBackPrintQuality()?.level;
+  const cardBackQualityText = () => {
+    const state = cardBackQuality();
+    if (state === 'error') return 'Quality unknown (image did not load)';
+    const quality = cardBackPrintQuality();
+    if (!quality) return 'Checking quality…';
+    const label = { high: 'high', medium: 'medium', low: 'low — may look soft' }[quality.level];
+    return `${quality.width}×${quality.height} px · ~${quality.dpi} DPI (${label})`;
+  };
   const [tokenCopiesOpen, setTokenCopiesOpen] = createSignal(false);
   /** Copies to print per token key (default 1 each). */
   const [tokenCopies, setTokenCopies] = createSignal<Record<string, number>>({});
@@ -290,6 +331,16 @@ const PrintDeckModal: Component<Props> = props => {
                     </Button>
                     <Show when={selectedCardBack()}>
                       <span class='text-sm text-muted-foreground'>{selectedCardBack()!.title}</span>
+                      <span
+                        class='text-xs'
+                        classList={{
+                          'text-muted-foreground': !cardBackQuality() || cardBackQuality() === 'error',
+                          'text-green-600 dark:text-green-400': qualityLevel() === 'high',
+                          'text-amber-600 dark:text-amber-400': qualityLevel() === 'medium',
+                          'text-red-600 dark:text-red-400': qualityLevel() === 'low',
+                        }}>
+                        {cardBackQualityText()}
+                      </span>
                     </Show>
                   </div>
                 </Show>

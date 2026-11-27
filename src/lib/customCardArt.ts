@@ -197,7 +197,13 @@ export function buildCustomArtImageUris(
   };
 }
 
-const TEXTURE_PROXY_HOST_SUFFIXES = ['wasabisys.com', 'mtgcardbuilder.com', 'wp.com'];
+const TEXTURE_PROXY_HOST_SUFFIXES = [
+  'wasabisys.com',
+  'mtgcardbuilder.com',
+  'wp.com',
+  'wiki.gg',
+  'pinimg.com',
+];
 
 function isTextureProxyHost(hostname: string) {
   return TEXTURE_PROXY_HOST_SUFFIXES.some(

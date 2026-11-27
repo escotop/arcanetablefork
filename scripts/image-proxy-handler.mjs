@@ -8,6 +8,8 @@ const ALLOWED_HOST_SUFFIXES = [
   'google.com',
   'gstatic.com',
   'scryfall.io',
+  'wiki.gg',
+  'pinimg.com',
 ];
 
 export function isAllowedImageHost(hostname) {
