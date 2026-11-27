@@ -50,6 +50,7 @@ export type RemoteDeckRow = {
   counters: Deck['counters'] | null;
   how_it_plays_advice: Deck['howItPlaysAdvice'] | null;
   extra: Record<string, unknown> | null;
+  updated_at?: string;
   deck_cards: RemoteCardRow[];
 };
 

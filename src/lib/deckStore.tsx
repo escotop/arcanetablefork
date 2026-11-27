@@ -1,6 +1,6 @@
 import { createStore, reconcile, SetStoreFunction, unwrap } from 'solid-js/store';
 import { nanoid } from 'nanoid';
-import { createContext, getOwner, onCleanup, onMount, ParentProps, useContext } from 'solid-js';
+import { createContext, onMount, ParentProps, useContext } from 'solid-js';
 import { CardEntry, Deck, DetailedCardEntry, CardSystem } from './constants';
 import { findDeckEntryMatch, getCardKey } from './deckEntryMatch';
 import { hasRequestedPrinting, printingMatchesRequest } from './deckPrinting';
@@ -13,6 +13,7 @@ import {
 } from './deckImportLookup';
 import { applyCustomArtToEntry } from './customCardArt';
 import {
+  flushPendingDeckStore,
   getMemoryDeckStore,
   hydrateDeckStoreFromIndexedDB,
   onDeckScopeChange,
@@ -38,7 +39,13 @@ const defaultDeckStore = {
   systems: {},
 };
 
-export const createDeckStore = () => {
+// One store shared by every screen. Separate copies went stale and, when saved, overwrote
+// newer edits made from another screen.
+let sharedDeckStore: ReturnType<typeof buildDeckStore> | undefined;
+
+export const createDeckStore = () => (sharedDeckStore ??= buildDeckStore());
+
+const buildDeckStore = () => {
   const [store, setStore] = createStore<DeckStore>(defaultDeckStore);
 
   let deckStore = getDeckStore();
@@ -49,14 +56,14 @@ export const createDeckStore = () => {
 
   const flushDeckStore = () => {
     if (!latestRaw) return;
-    persistDeckStore(latestRaw);
+    const raw = latestRaw;
+    latestRaw = undefined;
+    persistDeckStore(raw);
   };
 
   rememberDeckStoreInMemory(deckStore);
   hydrateDeckStoreFromIndexedDB(loaded => {
-    setStore(loaded);
-    rememberDeckStoreInMemory(loaded);
-    latestRaw = loaded;
+    setStore(reconcile(structuredClone(loaded)));
   });
 
   if (typeof window !== 'undefined') {
@@ -64,7 +71,7 @@ export const createDeckStore = () => {
   }
 
   // Login / logout swaps which account's decks are shown.
-  const stopScopeListener = onDeckScopeChange({
+  onDeckScopeChange({
     flush: () => {
       if (!persistTimer) return;
       clearTimeout(persistTimer);
@@ -78,12 +85,6 @@ export const createDeckStore = () => {
       setStore(reconcile(structuredClone(next)));
     },
   });
-  if (getOwner()) {
-    onCleanup(() => {
-      stopScopeListener();
-      if (typeof window !== 'undefined') window.removeEventListener('beforeunload', flushDeckStore);
-    });
-  }
 
   const updateStore: typeof setStore = (...update: any[]) => {
     (setStore as any)(...update);
@@ -195,6 +196,7 @@ export function getDeckStore(): DeckStore {
 
 /** Mark a deck as just used so deck lists show it first. */
 export function markDeckUsed(deckId: string) {
+  flushPendingDeckStore();
   const store = getDeckStore();
   const deck = store.decks[deckId];
   if (!deck) return;

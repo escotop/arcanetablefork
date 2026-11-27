@@ -33,6 +33,8 @@ type ScopeListener = {
 
 let idbPromise: Promise<IDBDatabase | null> | undefined;
 let memoryDeckStore: PersistedDeckStore | undefined;
+/** Bumped on every save or replace, so a late IndexedDB read can't undo them. */
+let storeVersion = 0;
 const hydratedScopes = new Set<string>();
 const scopeListeners = new Set<ScopeListener>();
 const persistListeners = new Set<(scope: DeckScope, store: PersistedDeckStore) => void>();
@@ -154,6 +156,7 @@ export function persistDeckStore(rawStore: PersistedDeckStore, options?: { quiet
   const store = serializeDeckStoreForPersistence(rawStore);
   const scope = currentScope;
   memoryDeckStore = store;
+  storeVersion++;
   writeScopeStore(scope, store, options?.quiet);
   for (const listener of persistListeners) listener(scope, store);
 }
@@ -163,10 +166,12 @@ export function hydrateDeckStoreFromIndexedDB(onLoaded: (store: PersistedDeckSto
   if (hydratedScopes.has(key) || typeof window === 'undefined') return;
   hydratedScopes.add(key);
   const scope = currentScope;
+  const version = storeVersion;
 
   void (async () => {
     const fromIdb = await readDeckStoreFromIndexedDB(scope);
-    if (!fromIdb || scope !== currentScope) return;
+    // Anything saved or synced meanwhile is newer than this copy.
+    if (!fromIdb || scope !== currentScope || version !== storeVersion) return;
     memoryDeckStore = serializeDeckStoreForPersistence(fromIdb);
     onLoaded(memoryDeckStore);
   })();
@@ -209,10 +214,11 @@ export async function switchDeckScope(
 
   let store = loadStore();
   replaceInListeners(store);
+  const version = storeVersion;
 
   const fromIdb = await readDeckStoreFromIndexedDB(scope);
   hydratedScopes.add(recordKey(scope));
-  if (fromIdb && scope === currentScope) {
+  if (fromIdb && scope === currentScope && version === storeVersion) {
     store = serializeDeckStoreForPersistence(fromIdb);
     memoryDeckStore = store;
     replaceInListeners(store);
@@ -229,7 +235,13 @@ export function replaceCurrentDeckStore(store: PersistedDeckStore) {
 
 function replaceInListeners(store: PersistedDeckStore) {
   memoryDeckStore = store;
+  storeVersion++;
   for (const listener of scopeListeners) listener.replace(store);
+}
+
+/** Saves edits still waiting in the debounce, so the stored decks are current. */
+export function flushPendingDeckStore() {
+  for (const listener of scopeListeners) listener.flush();
 }
 
 export function onDeckScopeChange(listener: ScopeListener) {
