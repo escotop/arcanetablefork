@@ -1,3 +1,4 @@
+import { createSignal } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import { toast } from 'solid-sonner';
 import type { MpcfillCardBackProduct } from './mpcfill/client';
@@ -22,6 +23,8 @@ type State = {
 const [state, setState] = createStore<State>({});
 const loading = new Map<AssetKind, Promise<void>>();
 let account: string | null = null;
+/** Lets readers retry once the account is known (they may ask before sign-in resolves). */
+const [accountVersion, setAccountVersion] = createSignal(0);
 
 /** Call when the signed-in user changes; drops cached favorites of the previous user. */
 export function setAssetFavoritesAccount(uid: string | null) {
@@ -29,10 +32,12 @@ export function setAssetFavoritesAccount(uid: string | null) {
   account = uid;
   loading.clear();
   setState({ playmat: undefined, card_back: undefined });
+  setAccountVersion(version => version + 1);
 }
 
 /** Favorites of a kind (reactive). Loads them the first time they're asked for. */
 export function assetFavorites<K extends AssetKind>(kind: K): AssetTypes[K][] {
+  accountVersion();
   const list = state[kind] as Favorite<K>[] | undefined;
   if (list === undefined) void loadFavorites(kind);
   return (list ?? []).map(fav => fav.item);

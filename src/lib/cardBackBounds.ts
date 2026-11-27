@@ -1,3 +1,5 @@
+import { PRINT_PDF_IMAGE_DPI } from './deckPrintLayout';
+
 /**
  * Some card backs (e.g. Hearthstone's) come with wide transparent margins around the
  * card. These helpers find the visible card so it can fill the whole card face.
@@ -57,7 +59,15 @@ export function findImageTrimBounds(
   }
 }
 
-export type PrintQuality = { width: number; height: number; dpi: number; level: 'high' | 'medium' | 'low' };
+export type PrintQuality = {
+  width: number;
+  height: number;
+  /** DPI the image ends up with in the PDF: its own, capped at the PDF's raster DPI. */
+  dpi: number;
+  /** The image has at least as many pixels as the PDF uses. */
+  atMax: boolean;
+  level: 'high' | 'medium' | 'low';
+};
 
 /** Effective DPI of an image printed at the given card size (worst of both sides). */
 export function describePrintQuality(
@@ -66,7 +76,10 @@ export function describePrintQuality(
   cardWidthMm: number,
   cardHeightMm: number,
 ): PrintQuality {
-  const dpi = Math.round(Math.min(width / (cardWidthMm / 25.4), height / (cardHeightMm / 25.4)));
+  const sourceDpi = Math.round(
+    Math.min(width / (cardWidthMm / 25.4), height / (cardHeightMm / 25.4)),
+  );
+  const dpi = Math.min(sourceDpi, PRINT_PDF_IMAGE_DPI);
   const level = dpi >= 280 ? 'high' : dpi >= 200 ? 'medium' : 'low';
-  return { width, height, dpi, level };
+  return { width, height, dpi, atMax: sourceDpi >= PRINT_PDF_IMAGE_DPI, level };
 }

@@ -43,6 +43,9 @@ test('Hearthstone card backs search Spanish and English names and paginate', () 
 test('describePrintQuality rates the effective DPI at card size', () => {
   // Hearthstone back after trimming, on a 63x88 mm card.
   expect(describePrintQuality(403, 598, 63, 88)).toMatchObject({ dpi: 162, level: 'low' });
-  expect(describePrintQuality(745, 1040, 63, 88)).toMatchObject({ dpi: 300, level: 'high' });
+  expect(describePrintQuality(745, 1040, 63, 88)).toMatchObject({ dpi: 300, atMax: true });
+  // Bigger images don't print sharper: the PDF is rasterized at 300 DPI.
+  expect(describePrintQuality(1032, 1529, 63, 88)).toMatchObject({ dpi: 300, atMax: true, level: 'high' });
+  expect(describePrintQuality(403, 598, 63, 88)).toMatchObject({ atMax: false });
   expect(describePrintQuality(600, 840, 63, 88)).toMatchObject({ level: 'medium' });
 });

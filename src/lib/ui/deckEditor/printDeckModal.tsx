@@ -102,8 +102,10 @@ const PrintDeckModal: Component<Props> = props => {
     if (state === 'error') return 'Quality unknown (image did not load)';
     const quality = cardBackPrintQuality();
     if (!quality) return 'Checking quality…';
-    const label = { high: 'high', medium: 'medium', low: 'low — may look soft' }[quality.level];
-    return `${quality.width}×${quality.height} px · ~${quality.dpi} DPI (${label})`;
+    const label = quality.atMax
+      ? 'max — PDF is 300 DPI'
+      : { high: 'high', medium: 'medium', low: 'low — may look soft' }[quality.level];
+    return `${quality.width}×${quality.height} px · ${quality.atMax ? '' : '~'}${quality.dpi} DPI (${label})`;
   };
   const [tokenCopiesOpen, setTokenCopiesOpen] = createSignal(false);
   /** Copies to print per token key (default 1 each). */

@@ -4,15 +4,9 @@ import ChevronsLeftIcon from 'lucide-solid/icons/chevrons-left';
 import ChevronsRightIcon from 'lucide-solid/icons/chevrons-right';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import SearchIcon from 'lucide-solid/icons/search';
-import {
-  Component,
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  onCleanup,
-  Show,
-} from 'solid-js';
+import XIcon from 'lucide-solid/icons/x';
+import ZoomInIcon from 'lucide-solid/icons/zoom-in';
+import { Component, createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import { scrollTarget, setScrollTarget } from '../globals';
 import { toast } from 'solid-sonner';
 import { cn } from '~/lib/cnUtil';
@@ -96,6 +90,13 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
   const [searchInput, setSearchInput] = createSignal('');
   const [searchQuery, setSearchQuery] = createSignal('');
   const [source, setSource] = createSignal<CardBackSource>('mpcfill');
+  /** Card back shown full size over the grid. */
+  const [zoomed, setZoomed] = createSignal<MpcfillCardBackProduct>();
+  const [fullLoaded, setFullLoaded] = createSignal(false);
+  createEffect(() => {
+    zoomed();
+    setFullLoaded(false);
+  });
 
   const isSearching = () => searchQuery().trim().length > 0;
 
@@ -149,6 +150,7 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
     if (!props.open) return;
     setSearchInput('');
     setSearchQuery('');
+    setZoomed();
     setSource(props.selected?.id.startsWith('hearthstone-') ? 'hearthstone' : 'mpcfill');
     setLastPage(1);
     setHasNextPage(false);
@@ -175,7 +177,7 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
     setScrollTarget();
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented || loading()) return;
+      if (event.defaultPrevented || loading() || zoomed()) return;
       const target = event.target;
       if (
         target instanceof HTMLInputElement ||
@@ -238,13 +240,19 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
         portalClass={props.stackClass}
         overlayClass={props.stackClass}
         class={cn(
-          'flex h-[90vh] w-[96vw] max-w-[min(96vw,1400px)] flex-col gap-4 overflow-hidden',
+          'flex h-[96vh] w-[96vw] max-w-[min(96vw,1400px)] flex-col gap-3 overflow-hidden p-4 sm:p-5',
           props.stackClass,
         )}
-        onWheel={stopWheelPropagation}>
-        <DialogHeader>
+        onWheel={stopWheelPropagation}
+        onEscapeKeyDown={(event: KeyboardEvent) => {
+          // Escape closes the full-size view first, not the whole picker.
+          if (!zoomed()) return;
+          event.preventDefault();
+          setZoomed();
+        }}>
+        <DialogHeader class='space-y-1 pr-8'>
           <DialogTitle>Elegir reverso de carta</DialogTitle>
-          <DialogDescription>
+          <DialogDescription class='truncate text-xs'>
             <Show
               when={source() === 'hearthstone'}
               fallback={
@@ -273,38 +281,40 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
           </DialogDescription>
         </DialogHeader>
 
-        <div class='flex gap-2' role='tablist' aria-label='Origen de los reversos'>
-          <For each={SOURCES}>
-            {item => (
-              <Button
-                type='button'
-                role='tab'
-                size='sm'
-                variant={source() === item.id ? 'default' : 'outline'}
-                aria-selected={source() === item.id}
-                onClick={() => setSource(item.id)}>
-                {item.label}
-              </Button>
-            )}
-          </For>
-        </div>
-
-        <TextField class='w-full'>
-          <div class='relative'>
-            <SearchIcon
-              class='pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground'
-              aria-hidden='true'
-            />
-            <TextFieldInput
-              type='search'
-              class='pl-9'
-              placeholder='Buscar por nombre…'
-              value={searchInput()}
-              onInput={event => setSearchInput(event.currentTarget.value)}
-              aria-label='Buscar reverso por nombre'
-            />
+        <div class='flex flex-col gap-2 sm:flex-row sm:items-center'>
+          <div class='flex shrink-0 gap-2' role='tablist' aria-label='Origen de los reversos'>
+            <For each={SOURCES}>
+              {item => (
+                <Button
+                  type='button'
+                  role='tab'
+                  size='sm'
+                  variant={source() === item.id ? 'default' : 'outline'}
+                  aria-selected={source() === item.id}
+                  onClick={() => setSource(item.id)}>
+                  {item.label}
+                </Button>
+              )}
+            </For>
           </div>
-        </TextField>
+
+          <TextField class='w-full sm:flex-1'>
+            <div class='relative'>
+              <SearchIcon
+                class='pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground'
+                aria-hidden='true'
+              />
+              <TextFieldInput
+                type='search'
+                class='pl-9'
+                placeholder='Buscar por nombre…'
+                value={searchInput()}
+                onInput={event => setSearchInput(event.currentTarget.value)}
+                aria-label='Buscar reverso por nombre'
+              />
+            </div>
+          </TextField>
+        </div>
 
         <Show
           when={!loading()}
@@ -323,7 +333,7 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
                   {isSearching() ? 'Ningún reverso coincide con la búsqueda.' : 'Sin resultados.'}
                 </p>
               }>
-              <ul class='grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'>
+              <ul class='grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7'>
                 <For each={visibleProducts()}>
                   {product => (
                     <li class='relative'>
@@ -349,6 +359,17 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
                           </span>
                         </Show>
                       </button>
+                      <button
+                        type='button'
+                        class='absolute left-2 top-2 z-10 flex size-8 items-center justify-center rounded-full bg-black/55 text-white shadow-md transition-colors hover:bg-black/75'
+                        aria-label='Ver reverso a pantalla completa'
+                        title='Ver a pantalla completa'
+                        onClick={event => {
+                          event.stopPropagation();
+                          setZoomed(product);
+                        }}>
+                        <ZoomInIcon class='size-4' />
+                      </button>
                       <Show when={canFavorite()}>
                         <FavoriteButton
                           class='right-2 top-2'
@@ -366,8 +387,10 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
           </div>
         </Show>
 
-        <DialogFooter class='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-center'>
-          <nav class='flex flex-wrap items-center justify-center gap-1' aria-label='Paginación del catálogo'>
+        <DialogFooter class='flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-center'>
+          <nav
+            class='flex flex-wrap items-center justify-center gap-1'
+            aria-label='Paginación del catálogo'>
             <Button
               type='button'
               variant='outline'
@@ -427,6 +450,59 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
             </Button>
           </nav>
         </DialogFooter>
+        <Show when={zoomed()} keyed>
+          {product => (
+            <div
+              class='absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/95 p-4 backdrop-blur-sm'
+              role='dialog'
+              aria-label={product.title}
+              onClick={() => setZoomed()}>
+              <button
+                type='button'
+                class='absolute right-3 top-3 flex size-9 items-center justify-center rounded-full bg-black/55 text-white hover:bg-black/75'
+                aria-label='Cerrar vista completa'
+                onClick={() => setZoomed()}>
+                <XIcon class='size-5' />
+              </button>
+              <div class='relative flex min-h-0 w-full flex-1 items-center justify-center'>
+                {/* The preview shows at once and is swapped for the full image when it loads. */}
+                <Show when={!fullLoaded()}>
+                  <img
+                    src={mpcfillCardBackImageUrl(product.previewUrl)}
+                    alt=''
+                    class='h-full max-w-full object-contain blur-[1px]'
+                  />
+                  <LoaderIcon class='absolute size-8 animate-spin text-white drop-shadow' />
+                </Show>
+                <img
+                  src={mpcfillCardBackImageUrl(product.imageUrl)}
+                  alt={product.title}
+                  class='max-h-full max-w-full object-contain'
+                  classList={{ hidden: !fullLoaded() }}
+                  onLoad={() => setFullLoaded(true)}
+                  onError={() => setFullLoaded(true)}
+                  onClick={event => event.stopPropagation()}
+                />
+              </div>
+              <div class='flex shrink-0 flex-wrap items-center justify-center gap-3'>
+                <span class='text-sm font-medium'>{product.title}</span>
+                <Show when={product.sourceName}>
+                  <span class='text-xs text-muted-foreground'>{product.sourceName}</span>
+                </Show>
+                <Button
+                  type='button'
+                  size='sm'
+                  onClick={event => {
+                    event.stopPropagation();
+                    setZoomed();
+                    selectProduct(product);
+                  }}>
+                  Elegir este reverso
+                </Button>
+              </div>
+            </div>
+          )}
+        </Show>
       </DialogContent>
     </Dialog>
   );

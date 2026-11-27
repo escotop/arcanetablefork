@@ -1,4 +1,5 @@
-import { createStore, produce } from 'solid-js/store';
+import { createSignal } from 'solid-js';
+import { createStore, produce, reconcile } from 'solid-js/store';
 import { toast } from 'solid-sonner';
 import type { CustomCardArtOption } from './customCardArt';
 import type { CardPrintingOption } from './deck';
@@ -20,6 +21,8 @@ type State = {
 const [state, setState] = createStore<State>({ byCard: {} });
 const loading = new Map<string, Promise<void>>();
 let account: string | null = null;
+/** Lets readers retry once the account is known (they may ask before sign-in resolves). */
+const [accountVersion, setAccountVersion] = createSignal(0);
 
 export function cardFavoriteKey(cardName: string) {
   return cardName.trim().toLowerCase();
@@ -42,11 +45,13 @@ export function setCardFavoritesAccount(uid: string | null) {
   if (uid === account) return;
   account = uid;
   loading.clear();
-  setState('byCard', {});
+  setState('byCard', reconcile({}));
+  setAccountVersion(version => version + 1);
 }
 
 /** Favorites for a card (reactive). Loads them the first time they're asked for. */
 export function cardFavorites(cardName: string): CardFavorite[] {
+  accountVersion();
   const key = cardFavoriteKey(cardName);
   const list = state.byCard[key];
   if (list === undefined) void loadCardFavorites(key);
