@@ -7,6 +7,7 @@ import {
 } from 'three';
 import { isOpponentPrivateHandCard, loadCardTextures } from './card';
 import { findImageTrimBounds } from './cardBackBounds';
+import { cardBackImageUrl } from './customCardBacks';
 import type { PlayArea } from './playArea';
 import {
   cardBackTexture,
@@ -61,7 +62,7 @@ function cardBackApplyKey(back?: SavedCardBack) {
 
 export function cardBackTextureUrlFromSaved(back?: SavedCardBack): string {
   if (back?.imageUrl) {
-    return `/image-proxy?uri=${encodeURIComponent(back.imageUrl)}`;
+    return cardBackImageUrl(back.imageUrl, back.id);
   }
   return cardSystem.cardBack ?? DEFAULT_CARD_BACK;
 }

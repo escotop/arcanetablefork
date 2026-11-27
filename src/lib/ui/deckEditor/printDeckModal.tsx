@@ -41,7 +41,7 @@ import LoaderIcon from 'lucide-solid/icons/loader-circle';
 import type { SavedCardBack } from '~/lib/savedCardBack';
 import CardBackPickerModal from '~/lib/ui/cardBackPickerModal';
 import { describePrintQuality, findImageTrimBounds } from '~/lib/cardBackBounds';
-import { mpcfillCardBackImageUrl } from '~/lib/mpcfill/client';
+import { cardBackImageUrl } from '~/lib/customCardBacks';
 import TokenCopiesModal from './tokenCopiesModal';
 import { getTokenKey } from '~/lib/deckTokens';
 
@@ -87,7 +87,7 @@ const PrintDeckModal: Component<Props> = props => {
       );
     };
     image.onerror = () => !cancelled && setCardBackQuality('error');
-    image.src = mpcfillCardBackImageUrl(back.imageUrl);
+    image.src = cardBackImageUrl(back.imageUrl, back.id);
   });
 
   const cardBackPrintQuality = createMemo(() => {

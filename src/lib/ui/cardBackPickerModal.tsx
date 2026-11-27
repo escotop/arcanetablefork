@@ -3,6 +3,8 @@ import ChevronRightIcon from 'lucide-solid/icons/chevron-right';
 import ChevronsLeftIcon from 'lucide-solid/icons/chevrons-left';
 import ChevronsRightIcon from 'lucide-solid/icons/chevrons-right';
 import LoaderIcon from 'lucide-solid/icons/loader-circle';
+import PlusIcon from 'lucide-solid/icons/plus';
+import Trash2Icon from 'lucide-solid/icons/trash-2';
 import SearchIcon from 'lucide-solid/icons/search';
 import XIcon from 'lucide-solid/icons/x';
 import ZoomInIcon from 'lucide-solid/icons/zoom-in';
@@ -23,14 +25,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import {
-  exploreMpcfillCardbacks,
-  MPCFILL_EXPLORE_URL,
-  mpcfillCardBackImageUrl,
-} from '../mpcfill/client';
+import { exploreMpcfillCardbacks, MPCFILL_EXPLORE_URL } from '../mpcfill/client';
 import type { MpcfillCardBackProduct } from '../mpcfill/client';
 import { HEARTHSTONE_CARD_BACKS_URL, searchHearthstoneCardBacks } from '../hearthstoneCardBacks';
 import type { SavedCardBack } from '../savedCardBack';
+import {
+  addCustomCardBack,
+  cardBackImageUrl,
+  createCustomCardBack,
+  customCardBacks,
+  isCustomCardBackId,
+  parseCardBackUrl,
+  removeCustomCardBack,
+} from '../customCardBacks';
 
 export interface CardBackPickerModalProps {
   open: boolean;
@@ -69,16 +76,34 @@ function buildPaginationNumbers(current: number, lastPage: number): number[] {
 
 const SEARCH_DEBOUNCE_MS = 300;
 
-type CardBackSource = 'mpcfill' | 'hearthstone';
+type CardBackSource = 'mpcfill' | 'hearthstone' | 'custom';
 
 const SOURCES: { id: CardBackSource; label: string }[] = [
   { id: 'mpcfill', label: 'MPC Autofill' },
   { id: 'hearthstone', label: 'Hearthstone' },
+  { id: 'custom', label: 'Custom' },
 ];
+
+function sourceOfCardBack(id: string | number | undefined): CardBackSource {
+  if (String(id ?? '').startsWith('hearthstone-')) return 'hearthstone';
+  return isCustomCardBackId(id) ? 'custom' : 'mpcfill';
+}
 
 function loadSourcePage(source: CardBackSource, query: string, page: number) {
   if (source === 'hearthstone') return Promise.resolve(searchHearthstoneCardBacks(query, page));
+  // Custom backs are all on one page, built from the saved list (see visibleProducts).
+  if (source === 'custom') return Promise.resolve({ products: [], hasNext: false, lastPage: 1 });
   return exploreMpcfillCardbacks(query, page);
+}
+
+/** Loads an image to check the URL works before saving it. */
+function checkImageLoads(src: string) {
+  return new Promise<boolean>(resolve => {
+    const image = new Image();
+    image.onload = () => resolve(true);
+    image.onerror = () => resolve(false);
+    image.src = src;
+  });
 }
 
 const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
@@ -93,6 +118,11 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
   /** Card back shown full size over the grid. */
   const [zoomed, setZoomed] = createSignal<MpcfillCardBackProduct>();
   const [fullLoaded, setFullLoaded] = createSignal(false);
+  /** Form to add a custom card back by URL. */
+  const [adding, setAdding] = createSignal(false);
+  const [customUrl, setCustomUrl] = createSignal('');
+  const [customName, setCustomName] = createSignal('');
+  const [checkingCustom, setCheckingCustom] = createSignal(false);
   createEffect(() => {
     zoomed();
     setFullLoaded(false);
@@ -106,14 +136,24 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
   const favorites = createMemo(() => {
     if (!canFavorite()) return [];
     const query = searchQuery().trim().toLowerCase();
-    const hearthstone = source() === 'hearthstone';
     return assetFavorites('card_back').filter(
       item =>
-        String(item.id).startsWith('hearthstone-') === hearthstone &&
+        sourceOfCardBack(item.id) === source() &&
         (!query || item.title.toLowerCase().includes(query)),
     );
   });
+  /** Custom backs saved in this browser. */
+  const localCustomBacks = createMemo(() => {
+    if (source() !== 'custom') return [];
+    const query = searchQuery().trim().toLowerCase();
+    return customCardBacks().filter(item => !query || item.title.toLowerCase().includes(query));
+  });
   const visibleProducts = createMemo(() => {
+    if (source() === 'custom') {
+      const favs = favorites();
+      const favIds = new Set(favs.map(item => String(item.id)));
+      return [...favs, ...localCustomBacks().filter(item => !favIds.has(String(item.id)))];
+    }
     if (page() !== 1) return products();
     const favs = favorites();
     const favIds = new Set(favs.map(item => String(item.id)));
@@ -151,7 +191,8 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
     setSearchInput('');
     setSearchQuery('');
     setZoomed();
-    setSource(props.selected?.id.startsWith('hearthstone-') ? 'hearthstone' : 'mpcfill');
+    setAdding(false);
+    setSource(sourceOfCardBack(props.selected?.id));
     setLastPage(1);
     setHasNextPage(false);
   });
@@ -234,6 +275,40 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
     toast.success('Reverso guardado');
   }
 
+  async function submitCustomCardBack(event: Event) {
+    event.preventDefault();
+    if (checkingCustom()) return;
+    const url = parseCardBackUrl(customUrl());
+    if (!url) {
+      toast.error('Introduce una URL de imagen válida (http o https)');
+      return;
+    }
+    const back = createCustomCardBack(url, customName());
+    setCheckingCustom(true);
+    const loads = await checkImageLoads(cardBackImageUrl(back.imageUrl, back.id));
+    setCheckingCustom(false);
+    if (!loads) {
+      toast.error('No se pudo cargar la imagen de esa URL');
+      return;
+    }
+    addCustomCardBack(back);
+    // Signed in: also keep it in the account, so it's there on other devices.
+    if (canFavorite() && !isAssetFavorite('card_back', back.id)) {
+      void toggleAssetFavorite('card_back', back);
+    }
+    setCustomUrl('');
+    setCustomName('');
+    setAdding(false);
+    setSearchInput('');
+    setSource('custom');
+    toast.success('Reverso custom añadido');
+  }
+
+  function deleteCustomCardBack(back: MpcfillCardBackProduct) {
+    removeCustomCardBack(String(back.id));
+    if (isAssetFavorite('card_back', back.id)) void toggleAssetFavorite('card_back', back);
+  }
+
   return (
     <Dialog open={props.open} onOpenChange={handleOpenChange}>
       <DialogContent
@@ -254,29 +329,40 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
           <DialogTitle>Elegir reverso de carta</DialogTitle>
           <DialogDescription class='truncate text-xs'>
             <Show
-              when={source() === 'hearthstone'}
+              when={source() !== 'custom'}
               fallback={
                 <>
-                  Catálogo de{' '}
-                  <a
-                    href={MPCFILL_EXPLORE_URL}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    class='underline'>
-                    MPC Autofill
-                  </a>{' '}
-                  (tipo Cardback).
+                  Reversos añadidos por URL.{' '}
+                  {canFavorite()
+                    ? 'Se guardan en tu cuenta.'
+                    : 'Se guardan en este navegador; inicia sesión para tenerlos en todos tus dispositivos.'}
                 </>
               }>
-              Reversos de{' '}
-              <a
-                href={HEARTHSTONE_CARD_BACKS_URL}
-                target='_blank'
-                rel='noopener noreferrer'
-                class='underline'>
-                Hearthstone Wiki
-              </a>
-              . Resolución media (≈400×600): bien en mesa, algo blandos al imprimir.
+              <Show
+                when={source() === 'hearthstone'}
+                fallback={
+                  <>
+                    Catálogo de{' '}
+                    <a
+                      href={MPCFILL_EXPLORE_URL}
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      class='underline'>
+                      MPC Autofill
+                    </a>{' '}
+                    (tipo Cardback).
+                  </>
+                }>
+                Reversos de{' '}
+                <a
+                  href={HEARTHSTONE_CARD_BACKS_URL}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  class='underline'>
+                  Hearthstone Wiki
+                </a>
+                . Resolución media (≈400×600): bien en mesa, algo blandos al imprimir.
+              </Show>
             </Show>
           </DialogDescription>
         </DialogHeader>
@@ -296,6 +382,17 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
                 </Button>
               )}
             </For>
+            <Button
+              type='button'
+              size='sm'
+              variant={adding() ? 'default' : 'outline'}
+              class='px-2'
+              aria-label='Añadir reverso custom por URL'
+              title='Añadir reverso custom por URL'
+              aria-expanded={adding()}
+              onClick={() => setAdding(value => !value)}>
+              <PlusIcon class='size-4' />
+            </Button>
           </div>
 
           <TextField class='w-full sm:flex-1'>
@@ -316,6 +413,42 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
           </TextField>
         </div>
 
+        <Show when={adding()}>
+          <form
+            class='flex flex-col gap-2 rounded-md border border-input p-3 sm:flex-row sm:items-center'
+            onSubmit={event => void submitCustomCardBack(event)}>
+            <TextField class='w-full sm:flex-[2]'>
+              <TextFieldInput
+                type='url'
+                placeholder='URL de la imagen (https://…)'
+                value={customUrl()}
+                onInput={event => setCustomUrl(event.currentTarget.value)}
+                aria-label='URL de la imagen del reverso'
+                autofocus
+              />
+            </TextField>
+            <TextField class='w-full sm:flex-1'>
+              <TextFieldInput
+                type='text'
+                placeholder='Nombre (opcional)'
+                value={customName()}
+                onInput={event => setCustomName(event.currentTarget.value)}
+                aria-label='Nombre del reverso'
+              />
+            </TextField>
+            <div class='flex shrink-0 gap-2'>
+              <Button type='submit' size='sm' disabled={checkingCustom() || !customUrl().trim()}>
+                <Show when={checkingCustom()} fallback='Añadir'>
+                  <LoaderIcon class='size-4 animate-spin' />
+                </Show>
+              </Button>
+              <Button type='button' size='sm' variant='outline' onClick={() => setAdding(false)}>
+                Cancelar
+              </Button>
+            </div>
+          </form>
+        </Show>
+
         <Show
           when={!loading()}
           fallback={
@@ -330,7 +463,11 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
               when={visibleProducts().length > 0}
               fallback={
                 <p class='py-8 text-center text-sm text-muted-foreground'>
-                  {isSearching() ? 'Ningún reverso coincide con la búsqueda.' : 'Sin resultados.'}
+                  {isSearching()
+                    ? 'Ningún reverso coincide con la búsqueda.'
+                    : source() === 'custom'
+                      ? 'Aún no hay reversos custom. Pulsa + para añadir uno por URL.'
+                      : 'Sin resultados.'}
                 </p>
               }>
               <ul class='grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7'>
@@ -346,7 +483,7 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
                         onClick={() => selectProduct(product)}>
                         <div class='aspect-[5/7] w-full bg-muted'>
                           <img
-                            src={mpcfillCardBackImageUrl(product.previewUrl)}
+                            src={cardBackImageUrl(product.previewUrl, String(product.id))}
                             alt=''
                             loading='lazy'
                             class='h-full w-full object-contain'
@@ -378,6 +515,19 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
                           removeLabel='Quitar reverso de favoritos'
                           onToggle={() => void toggleAssetFavorite('card_back', product)}
                         />
+                      </Show>
+                      <Show when={isCustomCardBackId(product.id)}>
+                        <button
+                          type='button'
+                          class='absolute right-2 top-12 z-10 flex size-8 items-center justify-center rounded-full bg-black/55 text-white shadow-md transition-colors hover:bg-destructive'
+                          aria-label='Borrar reverso custom'
+                          title='Borrar reverso custom'
+                          onClick={event => {
+                            event.stopPropagation();
+                            deleteCustomCardBack(product);
+                          }}>
+                          <Trash2Icon class='size-4' />
+                        </button>
                       </Show>
                     </li>
                   )}
@@ -468,14 +618,14 @@ const CardBackPickerModal: Component<CardBackPickerModalProps> = props => {
                 {/* The preview shows at once and is swapped for the full image when it loads. */}
                 <Show when={!fullLoaded()}>
                   <img
-                    src={mpcfillCardBackImageUrl(product.previewUrl)}
+                    src={cardBackImageUrl(product.previewUrl, String(product.id))}
                     alt=''
                     class='h-full max-w-full object-contain blur-[1px]'
                   />
                   <LoaderIcon class='absolute size-8 animate-spin text-white drop-shadow' />
                 </Show>
                 <img
-                  src={mpcfillCardBackImageUrl(product.imageUrl)}
+                  src={cardBackImageUrl(product.imageUrl, String(product.id))}
                   alt={product.title}
                   class='max-h-full max-w-full object-contain'
                   classList={{ hidden: !fullLoaded() }}
