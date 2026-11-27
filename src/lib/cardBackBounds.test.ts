@@ -25,10 +25,12 @@ test('findTrimBounds leaves full-bleed images alone', () => {
 
 test('Hearthstone card backs search Spanish and English names and paginate', () => {
   const first = searchHearthstoneCardBacks('', 1);
-  // Classic has a sharper copy; backs without one use the wiki image.
+  // HD backs come first (Classic leads them); the rest use the wiki image.
   expect(first.products[0]).toMatchObject({ id: 'hearthstone-0', title: 'Clásico' });
-  expect(first.products[0].imageUrl).toMatch(/^https:\/\/i\.pinimg\.com\/originals\//);
-  expect(first.products[1]).toMatchObject({
+  const hd = first.products.filter(p => p.imageUrl.startsWith('https://i.pinimg.com/originals/'));
+  expect(hd).toHaveLength(22);
+  expect(first.products.slice(0, 22)).toEqual(hd);
+  expect(first.products[22]).toMatchObject({
     id: 'hearthstone-158',
     imageUrl: 'https://hearthstone.wiki.gg/images/CardBack158.png',
   });

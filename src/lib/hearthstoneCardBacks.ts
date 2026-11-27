@@ -28,6 +28,11 @@ function toProduct(back: HearthstoneCardBack): MpcfillCardBackProduct {
   };
 }
 
+/** Sharp (HD) backs first; otherwise the list keeps its category order. */
+const SORTED_CARD_BACKS = [...(cardBacks as HearthstoneCardBack[])].sort(
+  (a, b) => Number(!!b.hqUrl) - Number(!!a.hqUrl),
+);
+
 function normalize(text: string) {
   return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
@@ -35,7 +40,7 @@ function normalize(text: string) {
 /** One page of card backs matching the query (Spanish or English name, or category). */
 export function searchHearthstoneCardBacks(query: string, page: number) {
   const terms = normalize(query).split(/\s+/).filter(Boolean);
-  const matches = (cardBacks as HearthstoneCardBack[]).filter(back => {
+  const matches = SORTED_CARD_BACKS.filter(back => {
     const haystack = normalize(`${back.nameEs ?? ''} ${back.name} ${back.category}`);
     return terms.every(term => haystack.includes(term));
   });
